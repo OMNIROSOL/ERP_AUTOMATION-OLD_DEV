@@ -12,8 +12,6 @@ const SalesHistoryView = () => {
     const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
     const [sortColumn, setSortColumn] = useState<string>('date');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-    const [pageSize, setPageSize] = useState(50);
-    const [currentPage, setCurrentPage] = useState(1);
     const [isBatchOpsOpen, setIsBatchOpsOpen] = useState(false);
     const batchOpsRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -177,11 +175,7 @@ const SalesHistoryView = () => {
         });
     }, [allHistory, searchQuery, typeFilter, statusFilter, sortColumn, sortDirection]);
 
-    const totalPages = Math.ceil(filteredHistory.length / pageSize);
-    const paginatedData = useMemo(() => {
-        const start = (currentPage - 1) * pageSize;
-        return filteredHistory.slice(start, start + pageSize);
-    }, [filteredHistory, currentPage, pageSize]);
+    const paginatedData = filteredHistory;
 
     const handleCopyToClipboard = () => {
         const header = "Date\tReference\tCustomer\tType\tAmount\tStatus";
@@ -293,40 +287,40 @@ const SalesHistoryView = () => {
                 </div>
             </div>
 
-            <div className="w-full mb-8 overflow-x-auto rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 bg-white">
+            <div className="w-full mb-8 overflow-visible rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 bg-white">
                 <table className="w-full text-left border-collapse">
-                    <thead className="z-20">
-                        <tr className="border-b border-slate-200">
-                            <th className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-24 border-b border-slate-200/50">Actions</th>
-                            <th onClick={() => handleSort('date')} className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer group hover:bg-slate-100 transition-colors border-b border-slate-200/50">
-                                <div className="flex items-center gap-2">Date <SortIcon column="date" /></div>
+                    <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200">
+                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-24">Actions</th>
+                            <th onClick={() => handleSort('date')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
+                                Date
                             </th>
-                            <th className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200/50">
+                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                 Type
                             </th>
-                            <th onClick={() => handleSort('reference')} className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer group hover:bg-slate-100 transition-colors border-b border-slate-200/50">
-                                <div className="flex items-center gap-2">Reference <SortIcon column="reference" /></div>
+                            <th onClick={() => handleSort('reference')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
+                                Reference
                             </th>
-                            <th onClick={() => handleSort('customer')} className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer group hover:bg-slate-100 transition-colors border-b border-slate-200/50">
-                                <div className="flex items-center gap-2">Customer <SortIcon column="customer" /></div>
+                            <th onClick={() => handleSort('customer')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
+                                Customer
                             </th>
-                            <th onClick={() => handleSort('amount')} className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer group hover:bg-slate-100 transition-colors border-b border-slate-200/50 text-right">
-                                <div className="flex items-center justify-end gap-2">Amount <SortIcon column="amount" /></div>
+                            <th onClick={() => handleSort('amount')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right cursor-pointer hover:bg-slate-100 transition-colors">
+                                Amount
                             </th>
-                            <th className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center border-b border-slate-200/50">
+                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
                                 Status
                             </th>
-                            <th onClick={() => handleSort('timestamp')} className="sticky top-[-1rem] lg:top-[-2rem] z-10 bg-slate-50/95 backdrop-blur-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer group hover:bg-slate-100 transition-colors border-b border-slate-200/50">
-                                <div className="flex items-center gap-2">Timestamp <SortIcon column="timestamp" /></div>
+                            <th onClick={() => handleSort('timestamp')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors">
+                                Timestamp
                             </th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {paginatedData.length > 0 ? (
                             paginatedData.map((item) => (
-                                <tr key={`${item.type}-${item.id}`} className="group bg-white hover:bg-[#F7F9FC] transition-colors duration-150">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center justify-center gap-4">
+                                <tr key={`${item.type}-${item.id}`} className="hover:bg-slate-50/50 transition-colors duration-150">
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex justify-center gap-4">
                                             <button
                                                 onClick={() => {
                                                     let route = '';
@@ -343,22 +337,52 @@ const SalesHistoryView = () => {
                                                 <Eye size={14} />
                                             </button>
 
-                                            <button
-                                                onClick={() => {
-                                                    let editRoute = '';
-                                                    if (item.type === 'Quote') editRoute = `/sales-quotes/edit/${item.id}`;
-                                                    else if (item.type === 'Order') editRoute = `/sales-orders/edit/${item.id}`;
-                                                    else if (item.type === 'Invoiced') editRoute = `/sales-invoices/edit/${item.id}`;
-                                                    if (editRoute) navigate(editRoute);
-                                                }}
-                                                className="text-slate-400 hover:text-blue-600 transition-colors hover:scale-110 active:scale-95"
-                                                title="Edit"
-                                            >
-                                                <Edit size={14} />
-                                            </button>
+                                            <div className="relative">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setOpenDropdownId(openDropdownId === `${item.type}-${item.id}` ? null : `${item.type}-${item.id}`);
+                                                    }}
+                                                    className="text-slate-400 hover:text-blue-600 transition-colors hover:scale-110 active:scale-95"
+                                                    title="Copy/Convert Document"
+                                                >
+                                                    <Copy size={14} />
+                                                </button>
+
+                                                {openDropdownId === `${item.type}-${item.id}` && (
+                                                    <div className="absolute left-0 top-full mt-2 w-56 bg-white border border-slate-200 shadow-xl rounded-xl py-2 z-[100] animate-in fade-in zoom-in duration-200" ref={dropdownRef}>
+                                                        <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
+                                                            Copy/Convert To
+                                                        </div>
+                                                        {[
+                                                            { label: 'Sales Quote', path: '/sales-quotes/new' },
+                                                            { label: 'Sales Order', path: '/sales-orders/new' },
+                                                            { label: 'Sales Invoice', path: '/sales-invoices/new' },
+                                                            { label: 'Delivery Note', path: '/delivery-notes/new' },
+                                                            { label: 'Credit Note', path: '/credit-notes/new' },
+                                                            { label: 'Purchase Quote', path: '/purchase-quotes/new' },
+                                                            { label: 'Purchase Order', path: '/purchase-orders/new' },
+                                                            { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
+                                                            { label: 'Goods Receipt', path: '/goods-receipts/new' },
+                                                            { label: 'Debit Note', path: '/debit-notes/new' }
+                                                        ].map(target => (
+                                                            <button
+                                                                key={target.label}
+                                                                onClick={() => {
+                                                                    setOpenDropdownId(null);
+                                                                    navigate(`${target.path}?copyFrom=${item.id}`);
+                                                                }}
+                                                                className="w-full text-left px-4 py-2 text-[12px] text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-2"
+                                                            >
+                                                                New {target.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-[13px] font-medium text-slate-800 tracking-normal">{item.date}</td>
+                                    <td className="px-6 py-4 text-[13px] font-medium text-slate-700 tracking-normal">{item.date}</td>
                                     <td className="px-6 py-4 text-left">
                                         <span className={cn(
                                             "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border inline-block",
@@ -372,24 +396,12 @@ const SalesHistoryView = () => {
                                             {item.type}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100/50">
-                                                <FileText size={14} />
-                                            </div>
-                                            <span className="font-medium text-[13px] text-slate-900 tracking-tight">{item.reference}</span>
-                                        </div>
-                                    </td>
+                                    <td className="px-6 py-4 text-[13px] font-medium text-slate-900">{item.reference}</td>
                                     <td className="px-6 py-4">
                                         <span className="font-medium text-[13px] text-slate-600">{item.customer}</span>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <div className="text-right">
-                                            <span className="text-[10px] text-slate-400 font-bold mr-1">ZMW</span>
-                                            <span className="font-black text-[13px] text-slate-900">
-                                                {item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                            </span>
-                                        </div>
+                                    <td className="px-6 py-4 text-right font-black text-[13px] text-slate-900 whitespace-nowrap">
+                                        {item.amount > 0 ? `ZMW ${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         {(() => {
@@ -401,7 +413,7 @@ const SalesHistoryView = () => {
                                                             ds === 'Unpaid' || ds === 'Active' || ds === 'Ordered' || ds === 'Pending' || ds === 'To Deliver' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                                                 'bg-slate-100 text-slate-600 border-slate-200';
                                             return (
-                                                <span className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border whitespace-nowrap", color)}>
+                                                <span className={cn("px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border whitespace-nowrap", color)}>
                                                     {ds}
                                                 </span>
                                             );
@@ -423,61 +435,16 @@ const SalesHistoryView = () => {
                 </table>
             </div>
 
-            {/* Management Card - Standard Style */}
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-6 rounded-[24px] border border-slate-200 shadow-sm mt-4 ml-0 mr-auto max-w-[1200px]">
-                <div className="flex flex-col items-center space-y-2">
-                    <div className="flex items-center space-x-2 text-[12px] text-slate-500 font-medium whitespace-nowrap">
-                        <button
-                            onClick={() => setCurrentPage(1)}
-                            disabled={currentPage === 1}
-                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
-                        >
-                            <ChevronsLeft size={16} />
-                        </button>
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                            disabled={currentPage === 1}
-                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
-                        >
-                            <ChevronLeft size={16} />
-                        </button>
-                        <span className="mx-2 text-slate-700">Page {currentPage} of {totalPages || 1}</span>
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                            disabled={currentPage === totalPages || totalPages === 0}
-                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
-                        >
-                            <ChevronRight size={16} />
-                        </button>
-                        <button
-                            onClick={() => setCurrentPage(totalPages)}
-                            disabled={currentPage === totalPages || totalPages === 0}
-                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
-                        >
-                            <ChevronsRight size={16} />
-                        </button>
-                    </div>
-
-                    <div className="flex items-center space-x-4">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Show per page:</span>
-                        <div className="flex items-center gap-4">
-                            {[25, 50, 100, 250].map(size => (
-                                <button
-                                    key={size}
-                                    onClick={() => { setPageSize(size); setCurrentPage(1); }}
-                                    className={`text-[10px] font-black transition-all ${pageSize === size ? 'text-indigo-600 underline underline-offset-4 decoration-2' : 'text-slate-400 hover:text-slate-600'}`}
-                                >
-                                    {size}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+            <div className="flex items-center justify-between bg-white p-6 rounded-xl border border-slate-200 shadow-sm mt-4">
+                <div className="flex flex-col items-start space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Transaction Summary</span>
+                    <span className="text-[12px] font-medium text-slate-600 tracking-tight">Showing {filteredHistory.length} records in a single list</span>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleCopyToClipboard}
-                        className="px-4 py-2 bg-slate-50 text-[11px] font-black text-slate-500 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-200/50 uppercase tracking-widest flex items-center gap-2 shadow-sm"
+                        className="px-4 py-2 bg-slate-50 text-[11px] font-black text-slate-500 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-200/50 uppercase tracking-widest flex items-center gap-2 shadow-sm"
                     >
                         <Copy size={12} /> Export Data
                     </button>

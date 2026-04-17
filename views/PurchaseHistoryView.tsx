@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockPurchaseOrders, mockPurchaseInvoices, mockGoodsReceivedNotes, getPurchaseInvoices } from '../mockData';
-import { Eye, Edit, Copy, FileText, Search, MoreVertical, ChevronDown, Filter, Trash2, X, ChevronUp, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Calendar, Printer, ShoppingCart } from 'lucide-react';
+import { getPurchaseQuotes, getPurchaseOrders, getPurchaseInvoices, getGoodsReceivedNotes, getDebitNotes } from '../mockData';
+import { Eye, Edit, Copy, FileText, Search, MoreVertical, ChevronDown, Filter, Trash2, X, ChevronUp, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Calendar, Printer, ShoppingCart, Quote } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 const PurchaseHistoryView = () => {
@@ -9,28 +9,63 @@ const PurchaseHistoryView = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
+    const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
     const [sortColumn, setSortColumn] = useState<string>('date');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-    const [pageSize, setPageSize] = useState(50);
-    const [currentPage, setCurrentPage] = useState(1);
+    const dropdownRef = useRef<HTMLDivElement>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     useEffect(() => {
         const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
         window.addEventListener('storage', handleRefresh);
-        return () => window.removeEventListener('storage', handleRefresh);
+        window.addEventListener('purchase_quotes_updated', handleRefresh);
+        window.addEventListener('purchase_orders_updated', handleRefresh);
+        window.addEventListener('purchase_invoices_updated', handleRefresh);
+        window.addEventListener('grn_updated', handleRefresh);
+        window.addEventListener('debit_notes_updated', handleRefresh);
+        
+        return () => {
+            window.removeEventListener('storage', handleRefresh);
+            window.removeEventListener('purchase_quotes_updated', handleRefresh);
+            window.removeEventListener('purchase_orders_updated', handleRefresh);
+            window.removeEventListener('purchase_invoices_updated', handleRefresh);
+            window.removeEventListener('grn_updated', handleRefresh);
+            window.removeEventListener('debit_notes_updated', handleRefresh);
+        };
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setOpenDropdownId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
     const allHistory = useMemo(() => {
         const history: any[] = [];
+        getPurchaseQuotes().forEach(q => {
+            history.push({
+                id: q.id,
+                date: q.issueDate,
+                supplier: q.supplier,
+                amount: q.amount,
+                type: 'Purchase Quote',
+                reference: q.reference || '—',
+                status: q.status,
+                timestamp: q.timestamp || '—'
+            });
+        });
         
-        mockPurchaseOrders.forEach(o => {
+        getPurchaseOrders().forEach(o => {
             history.push({
                 id: o.id,
                 date: o.orderDate,
                 supplier: o.supplier,
                 amount: o.amount,
-                type: 'Order',
+                type: 'Purchase Order',
                 reference: o.reference || '—',
                 status: o.status,
                 timestamp: o.timestamp || '—'
@@ -52,7 +87,7 @@ const PurchaseHistoryView = () => {
             });
         });
 
-        mockGoodsReceivedNotes.forEach(g => {
+        getGoodsReceivedNotes().forEach(g => {
             history.push({
                 id: g.id,
                 date: g.receivedDate,
@@ -62,6 +97,19 @@ const PurchaseHistoryView = () => {
                 reference: g.reference || '—',
                 status: g.status,
                 timestamp: g.timestamp || '—'
+            });
+        });
+
+        getDebitNotes().forEach(d => {
+            history.push({
+                id: d.id,
+                date: d.issueDate,
+                supplier: d.supplier,
+                amount: d.amount,
+                type: 'Debit Note',
+                reference: d.reference || '—',
+                status: d.status,
+                timestamp: d.timestamp || '—'
             });
         });
 
@@ -107,8 +155,7 @@ const PurchaseHistoryView = () => {
         });
     }, [allHistory, searchQuery, typeFilter, statusFilter, sortColumn, sortDirection]);
 
-    const totalPages = Math.ceil(filteredHistory.length / pageSize) || 1;
-    const paginatedData = filteredHistory.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const paginatedData = filteredHistory;
 
     const handleSort = (column: string) => {
         if (sortColumn === column) {
@@ -117,6 +164,30 @@ const PurchaseHistoryView = () => {
             setSortColumn(column);
             setSortDirection('asc');
         }
+    };
+
+    const handleCopyToClipboard = () => {
+        const header = "Date\tReference\tSupplier\tType\tAmount\tStatus";
+        const rows = filteredHistory.map(item =>
+            `${item.date}\t${item.reference || ''}\t${item.supplier}\t${item.type}\t${item.amount}\t${getComputedStatus(item)}`
+        ).join('\n');
+        const fullText = `${header}\n${rows}`;
+
+        const textArea = document.createElement("textarea");
+        textArea.value = fullText;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            alert('Data copied to clipboard');
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy', err);
+        }
+        document.body.removeChild(textArea);
     };
 
     return (
@@ -128,7 +199,7 @@ const PurchaseHistoryView = () => {
                         <span className="text-gray-400">Procurement Operations</span>
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">Purchase History</h1>
-                    <p className="text-gray-500 text-sm">Unified lifecycle tracking for purchase orders and invoices</p>
+                    <p className="text-gray-500 text-sm">Unified lifecycle tracking for purchase quotes, orders, and invoices</p>
                 </div>
             </div>
 
@@ -152,9 +223,11 @@ const PurchaseHistoryView = () => {
                             className="bg-white border border-gray-300 text-[11px] font-black uppercase tracking-wider rounded-md px-4 py-2 shadow-sm"
                         >
                             <option value="All">All Types</option>
-                            <option value="Order">Order</option>
+                            <option value="Purchase Quote">Purchase Quote</option>
+                            <option value="Purchase Order">Purchase Order</option>
                             <option value="Invoiced">Invoiced</option>
                             <option value="GRN">GRN</option>
+                            <option value="Debit Note">Debit Note</option>
                         </select>
                         <button onClick={() => { setSearchQuery(''); setTypeFilter('All'); setStatusFilter('All'); }} className="p-2 border border-gray-300 rounded-md text-gray-400 hover:text-red-500 bg-white shadow-sm">
                             <X size={16} />
@@ -168,7 +241,7 @@ const PurchaseHistoryView = () => {
                 </div>
             </div>
 
-            <div className="w-full mb-8 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="w-full mb-8 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
@@ -194,25 +267,81 @@ const PurchaseHistoryView = () => {
                         {paginatedData.map((item) => (
                             <tr key={`${item.type}-${item.id}`} className="hover:bg-slate-50/50 transition-colors">
                                 <td className="px-6 py-4 text-center">
-                                    <div className="flex justify-center gap-2">
-                                        <button className="text-slate-400 hover:text-indigo-600 transition-colors"><Eye size={14} /></button>
-                                        <button className="text-slate-400 hover:text-blue-600 transition-colors"><Edit size={14} /></button>
+                                    <div className="flex justify-center gap-4">
+                                        <button 
+                                            onClick={() => {
+                                                if (item.type === 'Purchase Quote') navigate(`/purchase-quotes/view/${item.id}`);
+                                                else if (item.type === 'Purchase Order') navigate(`/purchase-orders/supplier/${item.supplier}`);
+                                                else if (item.type === 'Invoiced') navigate(`/purchase-invoices/supplier/${item.supplier}`);
+                                                else if (item.type === 'GRN') navigate(`/goods-received-notes/supplier/${item.supplier}`);
+                                            }}
+                                            className="text-slate-400 hover:text-indigo-600 transition-colors"
+                                            title="View Details"
+                                        >
+                                            <Eye size={14} />
+                                        </button>
+                                        <div className="relative">
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setOpenDropdownId(openDropdownId === `${item.type}-${item.id}` ? null : `${item.type}-${item.id}`);
+                                                }}
+                                                className="text-slate-400 hover:text-blue-600 transition-colors"
+                                                title="Copy/Convert Document"
+                                            >
+                                                <Copy size={14} />
+                                            </button>
+
+                                            {openDropdownId === `${item.type}-${item.id}` && (
+                                                <div className="absolute left-0 top-full mt-2 w-56 bg-white border border-slate-200 shadow-xl rounded-xl py-2 z-[100] animate-in fade-in zoom-in duration-200" ref={dropdownRef}>
+                                                    <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">
+                                                        Copy/Convert To
+                                                    </div>
+                                                    {[
+                                                        { label: 'Sales Quote', path: '/sales-quotes/new' },
+                                                        { label: 'Sales Order', path: '/sales-orders/new' },
+                                                        { label: 'Sales Invoice', path: '/sales-invoices/new' },
+                                                        { label: 'Delivery Note', path: '/delivery-notes/new' },
+                                                        { label: 'Credit Note', path: '/credit-notes/new' },
+                                                        { label: 'Purchase Quote', path: '/purchase-quotes/new' },
+                                                        { label: 'Purchase Order', path: '/purchase-orders/new' },
+                                                        { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
+                                                        { label: 'Goods Receipt', path: '/goods-receipts/new' },
+                                                        { label: 'Debit Note', path: '/debit-notes/new' }
+                                                    ].map(target => (
+                                                        <button
+                                                            key={target.label}
+                                                            onClick={() => {
+                                                                setOpenDropdownId(null);
+                                                                navigate(`${target.path}?copyFrom=${item.id}`);
+                                                            }}
+                                                            className="w-full text-left px-4 py-2 text-[12px] text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors flex items-center gap-2"
+                                                        >
+                                                            New {target.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 text-[13px] font-medium text-slate-700">{item.date}</td>
                                 <td className="px-6 py-4">
                                     <span className={cn(
                                         "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border",
-                                        item.type === 'Order' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                        item.type === 'Purchase Quote' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                        item.type === 'Purchase Order' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                         item.type === 'Invoiced' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                        item.type === 'GRN' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                        item.type === 'Debit Note' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                                         'bg-slate-50 text-slate-600 border-slate-100'
                                     )}>
                                         {item.type}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 text-[13px] font-bold text-slate-900">{item.reference}</td>
+                                <td className="px-6 py-4 text-[13px] font-medium text-slate-900">{item.reference}</td>
                                 <td className="px-6 py-4 text-[13px] font-medium text-slate-600">{item.supplier}</td>
-                                <td className="px-6 py-4 text-right font-black text-[13px] text-slate-900">
+                                <td className="px-6 py-4 text-right font-black text-[13px] text-slate-900 whitespace-nowrap">
                                     {item.amount > 0 ? `ZMW ${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}
                                 </td>
                                 <td className="px-6 py-4 text-center">
@@ -233,10 +362,18 @@ const PurchaseHistoryView = () => {
             </div>
 
             <div className="flex items-center justify-between bg-white p-6 rounded-xl border border-slate-200">
-                <div className="flex gap-4 items-center text-sm font-medium text-slate-500">
-                    <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="disabled:opacity-30"><ChevronLeft size={20} /></button>
-                    <span>Page {currentPage} of {totalPages}</span>
-                    <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="disabled:opacity-30"><ChevronRight size={20} /></button>
+                <div className="flex flex-col items-start space-y-1">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Transaction Summary</span>
+                    <span className="text-[12px] font-medium text-slate-600 tracking-tight">Showing {filteredHistory.length} records in a single list</span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleCopyToClipboard}
+                        className="px-4 py-2 bg-slate-50 text-[11px] font-black text-slate-500 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-200/50 uppercase tracking-widest flex items-center gap-2 shadow-sm"
+                    >
+                        <Copy size={12} /> Export Data
+                    </button>
                 </div>
             </div>
         </div>

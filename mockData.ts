@@ -861,15 +861,17 @@ export const getPurchaseOrders = (): PurchaseOrder[] => {
     const saved = localStorage.getItem('purchase_orders_data');
     if (saved) return JSON.parse(saved);
   } catch (e) {}
-  return [
-    {
-      id: 'po-1', orderDate: '10.03.2026', reference: 'PO-5001', supplier: 'ZAMBIA SUGAR PLC', description: 'Monthly Bulk Sugar', currency: 'ZMW', amount: 45000.00, status: 'Ordered', timestamp: '10.03.2026 10:00:00 AM',
-      items: [{ id: 1, item: 'Sugar Bulk 50kg', description: 'Industrial Grade', qty: '100', unitPrice: '450', taxCode: 'VAT 16%' }]
-    }
-  ];
+  return [];
 };
 
 export const mockPurchaseOrders = getPurchaseOrders();
+
+export const savePurchaseOrders = (orders: PurchaseOrder[]) => {
+  localStorage.setItem('purchase_orders_data', JSON.stringify(orders));
+  mockPurchaseOrders.length = 0;
+  mockPurchaseOrders.push(...orders);
+  window.dispatchEvent(new Event('purchase_orders_updated'));
+};
 
 export const getPurchaseQuotes = (): PurchaseQuote[] => {
   try {
@@ -878,18 +880,16 @@ export const getPurchaseQuotes = (): PurchaseQuote[] => {
   } catch (e) {
     console.error('Error loading purchase quotes:', e);
   }
-  return [
-    {
-      id: 'pq-1', issueDate: '15.02.2026', reference: 'PQ-001', supplier: 'ZAMBIA SUGAR PLC', description: 'Bulk Spare Parts Quote', currency: 'ZMW', amount: 12500.00, status: 'Active', billingAddress: 'Industrial Area, Lusaka', expiryDays: '30', timestamp: '15.02.2026 10:00:00 AM',
-      items: [{ id: 1, item: 'General Spare Parts', description: 'Assorted spares', qty: '10', unitPrice: '1250', taxCode: 'VAT 16%' }]
-    }
-  ];
+  return [];
 };
 
 export const mockPurchaseQuotes = getPurchaseQuotes();
 
 export const savePurchaseQuotes = (quotes: PurchaseQuote[]) => {
   localStorage.setItem('purchase_quotes_data', JSON.stringify(quotes));
+  mockPurchaseQuotes.length = 0;
+  mockPurchaseQuotes.push(...quotes);
+  window.dispatchEvent(new Event('purchase_quotes_updated'));
 };
 
 export const getPurchaseInvoices = (): PurchaseInvoice[] => {
@@ -897,15 +897,17 @@ export const getPurchaseInvoices = (): PurchaseInvoice[] => {
     const saved = localStorage.getItem('purchase_invoices_data');
     if (saved) return JSON.parse(saved);
   } catch (e) {}
-  return [
-    {
-      id: 'pi-1', issueDate: '15.03.2026', dueDate: '15.04.2026', reference: 'PI-9001', purchaseOrder: 'PO-5001', supplier: 'ZAMBIA SUGAR PLC', description: 'Bulk Sugar Purchase', currency: 'ZMW', invoiceAmount: 45000.00, balanceDue: 45000.00, status: 'Unpaid', timestamp: '15.03.2026 11:30:00 AM',
-      items: [{ id: 1, item: 'Sugar Bulk 50kg', description: 'Industrial Grade', qty: '100', unitPrice: '450', taxCode: 'VAT 16%' }]
-    }
-  ];
+  return [];
 };
 
 export const mockPurchaseInvoices = getPurchaseInvoices();
+
+export const savePurchaseInvoices = (invoices: PurchaseInvoice[]) => {
+  localStorage.setItem('purchase_invoices_data', JSON.stringify(invoices));
+  mockPurchaseInvoices.length = 0;
+  mockPurchaseInvoices.push(...invoices);
+  window.dispatchEvent(new Event('purchase_invoices_updated'));
+};
 
 export const getDebitNotes = (): DebitNote[] => {
   try {
@@ -917,20 +919,29 @@ export const getDebitNotes = (): DebitNote[] => {
 
 export const mockDebitNotes = getDebitNotes();
 
+export const saveDebitNotes = (notes: DebitNote[]) => {
+  localStorage.setItem('debit_notes_data', JSON.stringify(notes));
+  mockDebitNotes.length = 0;
+  mockDebitNotes.push(...notes);
+  window.dispatchEvent(new Event('debit_notes_updated'));
+};
+
 export const getGoodsReceivedNotes = (): GoodsReceivedNote[] => {
   try {
     const saved = localStorage.getItem('grn_data');
     if (saved) return JSON.parse(saved);
   } catch (e) {}
-  return [
-    {
-      id: 'grn-1', receivedDate: '12.03.2026', reference: 'GRN-001', purchaseOrder: 'PO-5001', supplier: 'ZAMBIA SUGAR PLC', inventoryLocation: 'WAREHOUSE', description: 'Sugar Delivery', status: 'Received', timestamp: '12.03.2026 02:00:00 PM',
-      items: [{ id: 1, item: 'Sugar Bulk 50kg', description: 'Industrial Grade', qty: '100', unitPrice: '450', taxCode: 'VAT 16%' }]
-    }
-  ];
+  return [];
 };
 
 export const mockGoodsReceivedNotes = getGoodsReceivedNotes();
+
+export const saveGoodsReceivedNotes = (grns: GoodsReceivedNote[]) => {
+  localStorage.setItem('grn_data', JSON.stringify(grns));
+  mockGoodsReceivedNotes.length = 0;
+  mockGoodsReceivedNotes.push(...grns);
+  window.dispatchEvent(new Event('grn_updated'));
+};
 
 export const mockWithholdingTaxes: WithholdingTax[] = [
   { id: 'wht-10', name: 'WHT 10%', rate: 10, description: 'Standard Withholding Tax on services' },
