@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getCustomers, mockInvoices, mockSalesQuotes, mockSalesOrders, getDeliveryNotes, mockReceipts } from '../mockData';
+import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockSalesOrders, getDeliveryNotes, mockReceipts } from '../mockData';
 import { Customer } from '../types';
 import { Printer, ChevronLeft } from 'lucide-react';
 
@@ -15,6 +15,7 @@ const BatchPrintView = () => {
     const singleInvoiceId = searchParams.get('invoiceId');
 
     const isCustomers = type === 'customers' || location.pathname.includes('/customers/');
+    const isSuppliers = type === 'suppliers' || location.pathname.includes('/suppliers/');
     const isSalesQuotes = type === 'sales-quotes' || location.pathname.includes('/sales-quotes/');
     const isSalesOrders = type === 'sales-orders' || location.pathname.includes('/sales-orders/');
     const isSalesInvoices = type === 'sales-invoices' || location.pathname.includes('/sales-invoices/');
@@ -22,6 +23,7 @@ const BatchPrintView = () => {
     const isReceipts = type === 'receipts' || location.pathname.includes('/receipts/');
 
     const allCustomers = useMemo(() => getCustomers(), []);
+    const allSuppliers = useMemo(() => getSuppliers(), []);
 
     const items = useMemo(() => {
         // Handle Single-Invoice Detail Reports (Selected Lines)
@@ -112,6 +114,10 @@ const BatchPrintView = () => {
         }
 
         // Default Batch Prints (Documents/Customers)
+        if (isSuppliers) {
+            return allSuppliers.filter(s => selectedIds.includes(s.id));
+        }
+
         if (isCustomers) {
             const allCustomerNamesFromTransactions = [
                 ...mockInvoices.map(i => i.customer),

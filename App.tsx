@@ -103,6 +103,10 @@ import WithholdingTaxView from './views/WithholdingTaxView';
 import RoleManagementView from './views/RoleManagementView';
 import SettingsView from './views/SettingsView';
 import SettingsFootersView from './views/SettingsFootersView';
+import EditSupplierColumnsView from './views/EditSupplierColumnsView';
+import NewSupplierView from './views/NewSupplierView';
+import EditSupplierView from './views/EditSupplierView';
+import ViewSupplierView from './views/ViewSupplierView';
 
 import { mockApprovalRequests } from './mockData';
 import { ApprovalRequest } from './types';
@@ -266,6 +270,11 @@ const App = () => {
 
           {/* Supplier Routes */}
           <Route path="/suppliers" element={<SuppliersView />} />
+          <Route path="/suppliers/new" element={<NewSupplierView />} />
+          <Route path="/suppliers/edit/:id" element={<EditSupplierView />} />
+          <Route path="/suppliers/view/:id" element={<ViewSupplierView />} />
+          <Route path="/suppliers/edit-columns" element={<EditSupplierColumnsView />} />
+          <Route path="/suppliers/print-batch" element={<BatchPrintView />} />
 
           {/* Purchase History Routes */}
           <Route path="/purchase-history" element={<PurchaseHistoryView />} />

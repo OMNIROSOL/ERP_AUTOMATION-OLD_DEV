@@ -510,12 +510,12 @@ const CustomersView = () => {
                                         if (col.id === 'controlAccount' && !val) displayVal = 'Accounts receivable';
                                         if (col.id === 'availableCredit') displayVal = `${symbol} ${(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
                                         if (col.id === 'withholdingTax') displayVal = `${symbol} ${(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-                                        if (col.id === 'timestamp' && !val) {
-                                            const now = new Date();
-                                            displayVal = now.toLocaleString('en-GB', { 
-                                                day: '2-digit', month: '2-digit', year: 'numeric', 
-                                                hour: '2-digit', minute: '2-digit', second: '2-digit', 
-                                                hour12: true 
+                                        if (col.id === 'timestamp') {
+                                            const dateObj = val ? new Date(val) : new Date();
+                                            displayVal = dateObj.toLocaleString('en-GB', {
+                                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                                hour12: true
                                             }).replace(/\//g, '.').replace(',', '').toUpperCase();
                                         }
 

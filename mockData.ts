@@ -836,24 +836,21 @@ export const mockTaxCodes: TaxCode[] = [
 ];
 
 export const getSuppliers = (): Supplier[] => {
-  let persistentSuppliers = [];
   try {
     const saved = localStorage.getItem('suppliers_data');
-    persistentSuppliers = saved ? JSON.parse(saved) : [];
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return Array.isArray(parsed) ? parsed : [];
+    }
   } catch (e) {
     console.error('Error loading suppliers:', e);
   }
+  return [];
+};
 
-  const initialSuppliers: Supplier[] = [
-    { id: 'sup-1', name: 'ZAMBIA SUGAR PLC', code: 'SUP-0001', division: 'MAZABUKA', accountsPayable: 125000.00, status: 'Unpaid', balance: 125000.00, tpin: '1000112233', currency: 'ZMW' },
-    { id: 'sup-2', name: 'INDENI PETROLEUM REFINERY', code: 'SUP-0002', division: 'NDOLA', accountsPayable: 0.00, status: 'Paid', balance: 0.00, tpin: '1000445566', currency: 'ZMW' },
-    { id: 'sup-3', name: 'TOTAL ENERGIES ZAMBIA', code: 'SUP-0003', division: 'LUSAKA', accountsPayable: 4500.00, status: 'Unpaid', balance: 4500.00, tpin: '1000778899', currency: 'ZMW' },
-  ];
-
-  const savedSupplierNames = new Set(persistentSuppliers.map((s: any) => s.name));
-  const filteredInitial = initialSuppliers.filter(s => !savedSupplierNames.has(s.name));
-
-  return [...persistentSuppliers, ...filteredInitial];
+export const saveSuppliers = (suppliers: Supplier[]) => {
+  localStorage.setItem('suppliers_data', JSON.stringify(suppliers));
+  window.dispatchEvent(new Event('suppliers_updated'));
 };
 
 export const mockSuppliers = getSuppliers();

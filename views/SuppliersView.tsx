@@ -6,8 +6,9 @@ import {
     Building2
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getSuppliers, mockPurchaseInvoices, mockPurchaseOrders, mockGoodsReceivedNotes } from '../mockData';
+import { getSuppliers } from '../mockData';
 import { Supplier } from '../types';
+import { cn } from '../utils/cn';
 
 const SuppliersView = () => {
     const navigate = useNavigate();
@@ -49,19 +50,36 @@ const SuppliersView = () => {
         { id: 'name', label: 'Supplier Name', visible: true },
         { id: 'division', label: 'Division', visible: true },
         { id: 'email', label: 'Email address', visible: false },
-        { id: 'billingAddress', label: 'Billing address', visible: false },
+        { id: 'address', label: 'Address', visible: false },
+        { id: 'controlAccount', label: 'Control account', visible: false },
+        { id: 'receipts', label: 'Receipts', visible: false },
+        { id: 'payments', label: 'Payments', visible: false },
+        { id: 'purchaseQuotes', label: 'Purchase Quotes', visible: false },
         { id: 'purchaseOrders', label: 'Purchase Orders', visible: true },
         { id: 'purchaseInvoices', label: 'Purchase Invoices', visible: true },
-        { id: 'goodsReceivedNotes', label: 'GRNs', visible: true },
+        { id: 'debitNotes', label: 'Debit Notes', visible: false },
+        { id: 'goodsReceipts', label: 'Goods Receipts', visible: true },
+        { id: 'qtyToReceive', label: 'Qty to receive', visible: true },
         { id: 'status', label: 'Status', visible: true },
-        { id: 'tpin', label: 'TPIN', visible: true },
-        { id: 'balance', label: 'Accounts Payable', visible: true },
+        { id: 'balance', label: 'Accounts payable', visible: true },
+        { id: 'withholdingTax', label: 'Withholding tax payable', visible: false },
+        { id: 'availableCredit', label: 'Available credit', visible: false },
+        { id: 'timestamp', label: 'Timestamp', visible: false }
     ];
 
     const [columns, setColumns] = useState(() => {
         const saved = localStorage.getItem('supplier_column_settings');
         return saved ? JSON.parse(saved) : defaultColumns;
     });
+
+    useEffect(() => {
+        const handleStorageChange = () => {
+            const saved = localStorage.getItem('supplier_column_settings');
+            if (saved) setColumns(JSON.parse(saved));
+        };
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
 
     const handleSort = (key: string) => {
         let direction: 'asc' | 'desc' = 'asc';
@@ -73,11 +91,11 @@ const SuppliersView = () => {
         const query = searchQuery.toLowerCase();
         let result = suppliers.filter(s => {
             if (showInactive) {
-                if (!s.inactive) return false;
+                if (!s.inactive && s.status !== 'Inactive') return false;
             } else {
-                if (s.inactive) return false;
+                if (s.inactive || s.status === 'Inactive') return false;
             }
-            const searchStr = `${s.name} ${s.code} ${s.division} ${s.status} ${s.tpin}`.toLowerCase();
+            const searchStr = `${s.name} ${s.code || ''} ${s.division || ''} ${s.status || ''} ${s.tpin || ''}`.toLowerCase();
             return searchStr.includes(query);
         });
 
@@ -85,7 +103,7 @@ const SuppliersView = () => {
             result.sort((a: any, b: any) => {
                 let aVal = a[sortConfig.key!] ?? '';
                 let bVal = b[sortConfig.key!] ?? '';
-                if (['balance', 'accountsPayable'].includes(sortConfig.key!)) {
+                if (['balance', 'qtyToReceive', 'paymentTerms', 'availableCredit', 'withholdingTax'].includes(sortConfig.key!)) {
                     aVal = Number(aVal) || 0;
                     bVal = Number(bVal) || 0;
                 } else {
@@ -103,15 +121,57 @@ const SuppliersView = () => {
     const currentSlice = sortedSuppliers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
     const totalPages = Math.ceil(sortedSuppliers.length / pageSize) || 1;
 
-    const totals = useMemo<Record<string, { balance: number }>>(() => {
-        const res: Record<string, { balance: number }> = {};
+    const totals = useMemo<Record<string, { balance: number; withholding: number }>>(() => {
+        const res: Record<string, { balance: number; withholding: number }> = {};
         sortedSuppliers.forEach(s => {
             const curCode = String(s.currency || 'ZMW').split(' ')[0] || 'ZMW';
-            if (!res[curCode]) res[curCode] = { balance: 0 };
+            if (!res[curCode]) res[curCode] = { balance: 0, withholding: 0 };
             res[curCode].balance += Number(s.balance || 0);
+            const wtVal = typeof s.withholdingTax === 'number' ? s.withholdingTax : parseFloat(String(s.withholdingTax || 0).replace(/[^-0-9.]/g, '')) || 0;
+            res[curCode].withholding += wtVal;
         });
         return res;
     }, [sortedSuppliers]);
+
+    const handleBatchPrint = () => {
+        if (selectedSupplierIds.size === 0) return;
+        const ids = Array.from(selectedSupplierIds).join(',');
+        navigate(`/suppliers/print-batch?ids=${ids}`);
+    };
+
+    const handleBatchCopy = () => {
+        if (selectedSupplierIds.size === 0) return;
+        const selectedList = suppliers.filter(s => selectedSupplierIds.has(s.id));
+        const header = columns.filter((col: any) => col.visible).map((col: any) => col.label).join('\t');
+        const rows = selectedList.map((s: any) =>
+            columns.filter((col: any) => col.visible).map((col: any) => s[col.id] || '').join('\t')
+        ).join('\n');
+        
+        const fullText = `${header}\n${rows}`;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(fullText).then(() => {
+                setCopiedNotification(true);
+                setTimeout(() => setCopiedNotification(false), 2000);
+            });
+        }
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedSupplierIds.size === currentSlice.length && currentSlice.length > 0) {
+            setSelectedSupplierIds(new Set());
+        } else {
+            setSelectedSupplierIds(new Set(currentSlice.map(s => s.id)));
+        }
+    };
+
+    const toggleSelectOne = (id: string) => {
+        setSelectedSupplierIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     const handleCopyToClipboard = () => {
         const header = columns.filter((c: any) => c.visible).map((c: any) => c.label).join('\t');
@@ -172,129 +232,254 @@ const SuppliersView = () => {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                         <input
                             type="text"
-                            placeholder="Search by supplier name, TPIN, or division..."
+                            placeholder="Search by supplier name, code, or division..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
+                            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         />
                     </div>
                 </div>
 
-                <div className="flex items-center space-x-8">
+                <div className="flex items-center space-x-8 mr-4">
+                    <div
+                        onClick={() => setShowInactive(!showInactive)}
+                        className="flex items-center space-x-2 cursor-pointer group"
+                    >
+                        <div
+                            className={`w-10 h-5 rounded-full relative transition-all ${showInactive ? 'bg-indigo-600' : 'bg-slate-200'}`}
+                        >
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all shadow-sm ${showInactive ? 'right-0.5' : 'left-0.5'}`}></div>
+                        </div>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-600 transition-colors">Show Inactive</span>
+                    </div>
                     <div className="flex flex-col items-end border-l border-slate-100 pl-8">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Suppliers</span>
-                        <span className="text-[18px] font-bold text-gray-900">{sortedSuppliers.length}</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{showInactive ? 'Inactive Vendors' : 'Active Vendors'}</span>
+                        <span className="text-[18px] font-bold text-gray-900">
+                            {suppliers.filter(s => showInactive ? (s.inactive || s.status === 'Inactive') : (!s.inactive && s.status !== 'Inactive')).length}
+                        </span>
                     </div>
                 </div>
             </div>
 
+            {/* Batch Action Bar */}
+            {isBatchViewMode && (
+                <div className="bg-indigo-600 px-8 py-4 rounded-[24px] flex items-center justify-between shadow-xl shadow-indigo-200/50 animate-in slide-in-from-top-4 duration-500 border border-white/10 backdrop-blur-md">
+                    <div className="flex items-center space-x-8">
+                        <div className="flex flex-col">
+                            <span className="text-white font-black text-[14px] leading-tight tracking-tight">{selectedSupplierIds.size}</span>
+                            <span className="text-indigo-200 font-bold text-[9px] uppercase tracking-widest whitespace-nowrap">Selected</span>
+                        </div>
+                        <div className="h-8 w-px bg-white/20"></div>
+                        <div className="flex items-center space-x-4">
+                            <button
+                                onClick={handleBatchPrint}
+                                disabled={selectedSupplierIds.size === 0}
+                                className="text-white/90 hover:text-white flex items-center space-x-2 text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
+                            >
+                                <Printer size={14} /> <span>Print Dossiers</span>
+                            </button>
+                            <button
+                                onClick={handleBatchCopy}
+                                disabled={selectedSupplierIds.size === 0}
+                                className="text-white/90 hover:text-white flex items-center space-x-2 text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
+                            >
+                                <Copy size={14} /> <span>Copy Details</span>
+                            </button>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => { setIsBatchViewMode(false); setSelectedSupplierIds(new Set()); localStorage.setItem('is_supplier_batch_view_mode', 'false'); }}
+                        className="bg-white text-indigo-600 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white shadow-lg transition-all border border-transparent active:scale-95"
+                    >
+                        Reset Mode
+                    </button>
+                </div>
+            )}
+
             {/* Table Area */}
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-x-auto min-w-full mb-8">
-                <table className="w-full text-left border-collapse">
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm w-fit min-w-full mb-8">
+                <table className="w-full text-left border-collapse min-w-[1600px]">
                     <thead>
-                        <tr className="bg-gray-50/50 border-b border-gray-200">
-                            <th className="px-6 py-4 text-[11px] font-black text-gray-500 uppercase tracking-wider text-center">Actions</th>
-                            {columns.filter((c: any) => c.visible).map((col: any) => (
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                            {isBatchViewMode && (
+                                <th className="sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedSupplierIds.size === currentSlice.length && currentSlice.length > 0}
+                                        onChange={toggleSelectAll}
+                                        className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all hover:scale-110"
+                                    />
+                                </th>
+                            )}
+                            <th className="sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
+                            {columns.filter((c: any) => c.visible || c.id === 'name').map((col: any) => (
                                 <th
                                     key={col.id}
-                                    className="px-6 py-4 text-[11px] font-black text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                                    className={`sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[350px]' : ''} shadow-sm`}
                                     onClick={() => handleSort(col.id)}
                                 >
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center">
                                         {col.label}
-                                        <ChevronDown size={12} className={sortConfig.key === col.id ? 'text-indigo-600' : 'opacity-20'} />
+                                        <ChevronDown size={12} className={`ml-2 transition-all ${sortConfig.key === col.id ? 'opacity-100 text-indigo-600' : 'opacity-20'}`} />
                                     </div>
                                 </th>
                             ))}
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {currentSlice.map((supplier: any) => (
-                            <tr key={supplier.id} className="group hover:bg-indigo-50/30 transition-all duration-200">
-                                <td className="px-6 py-4 text-center">
-                                    <div className="flex items-center justify-center space-x-1">
-                                        <button
-                                            onClick={() => navigate(`/suppliers/view/${supplier.id}`)}
-                                            className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all"
-                                        >
-                                            <Eye size={16} />
-                                        </button>
-                                        <button
-                                            onClick={() => navigate(`/suppliers/edit/${supplier.id}`)}
-                                            className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-100 transition-all"
-                                        >
-                                            <Edit size={16} />
-                                        </button>
-                                    </div>
-                                </td>
-                                {columns.filter((c: any) => c.visible).map((col: any) => {
-                                    const val = supplier[col.id];
-
-                                    if (col.id === 'balance') {
-                                        return (
-                                            <td key={col.id} className="px-6 py-4">
-                                                <span className="text-[13px] font-black text-slate-900">
-                                                    {supplier.currency || 'ZMW'} {Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                </span>
-                                            </td>
-                                        );
-                                    }
-
-                                    if (col.id === 'status') {
-                                        const isPaid = val === 'Paid';
-                                        return (
-                                            <td key={col.id} className="px-6 py-4">
-                                                <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${isPaid ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
-                                                    {val}
-                                                </span>
-                                            </td>
-                                        );
-                                    }
-
-                                    if (['purchaseOrders', 'purchaseInvoices', 'goodsReceivedNotes'].includes(col.id)) {
-                                        let count = 0;
-                                        if (col.id === 'purchaseOrders') count = mockPurchaseOrders.filter(o => o.supplier === supplier.name).length;
-                                        if (col.id === 'purchaseInvoices') count = mockPurchaseInvoices.filter(i => i.supplier === supplier.name).length;
-                                        if (col.id === 'goodsReceivedNotes') count = mockGoodsReceivedNotes.filter(g => g.supplier === supplier.name).length;
-
-                                        return (
-                                            <td key={col.id} className="px-6 py-4">
-                                                <span className={`text-[13px] font-bold ${count > 0 ? 'text-indigo-600 underline' : 'text-slate-300'}`}>
-                                                    {count}
-                                                </span>
-                                            </td>
-                                        );
-                                    }
-
-                                    return (
-                                        <td key={col.id} className="px-6 py-4">
-                                            <span className="text-[13px] font-medium text-slate-600">{val || '—'}</span>
+                    <tbody className="divide-y divide-slate-50">
+                        {currentSlice.length > 0 ? (
+                            currentSlice.map((supplier: any) => (
+                                <tr key={supplier.id} className={`group hover:bg-indigo-50/30 transition-all duration-300 ${selectedSupplierIds.has(supplier.id) ? 'bg-indigo-50/50' : ''}`}>
+                                    {isBatchViewMode && (
+                                        <td className="px-6 py-4 text-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedSupplierIds.has(supplier.id)}
+                                                onChange={() => toggleSelectOne(supplier.id)}
+                                                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all hover:scale-110"
+                                            />
                                         </td>
-                                    );
-                                })}
+                                    )}
+                                    <td className="px-6 py-4 text-center">
+                                        <div className="flex items-center justify-center space-x-1">
+                                            <button
+                                                onClick={() => navigate(`/suppliers/view/${supplier.id}`)}
+                                                className="p-2 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+                                                title="View Details"
+                                            >
+                                                <Eye size={16} />
+                                            </button>
+                                            <button
+                                                onClick={() => navigate(`/suppliers/edit/${supplier.id}`)}
+                                                className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+                                                title="Edit Supplier"
+                                            >
+                                                <Edit size={16} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                    {columns.filter((c: any) => c.visible).map((col: any) => {
+                                        const val = supplier[col.id];
+
+                                        if (col.id === 'balance' || col.id === 'withholdingTax' || col.id === 'availableCredit') {
+                                            const symbol = supplier.currency || 'ZMW';
+                                            return (
+                                                <td key={col.id} className="px-6 py-4">
+                                                    <span className={`text-[12px] font-bold ${col.id === 'balance' ? 'text-slate-900 underline cursor-pointer hover:text-indigo-600' : 'text-slate-600'}`}>
+                                                        {symbol} {(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </td>
+                                            );
+                                        }
+
+                                        if (col.id === 'qtyToReceive') {
+                                            return (
+                                                <td key={col.id} className="px-6 py-4">
+                                                    <span className={`text-[12px] font-semibold ${val > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-300'}`}>
+                                                        {val || '0'}
+                                                    </span>
+                                                </td>
+                                            );
+                                        }
+
+                                        if (col.id === 'status') {
+                                            const isPaid = val === 'Paid';
+                                            return (
+                                                <td key={col.id} className="px-6 py-4">
+                                                    <div className="flex gap-2 items-center">
+                                                        {supplier.inactive && (
+                                                            <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-500 border border-slate-200">
+                                                                Inactive
+                                                            </span>
+                                                        )}
+                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${isPaid ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                                            {val || 'Unpaid'}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            );
+                                        }
+
+                                        if (['purchaseOrders', 'purchaseInvoices', 'goodsReceipts', 'purchaseQuotes', 'debitNotes', 'receipts', 'payments'].includes(col.id)) {
+                                            const count = Number(val) || 0;
+                                            return (
+                                                <td key={col.id} className="px-6 py-4">
+                                                    <span className={`text-[12px] font-semibold ${count > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-300'}`}>
+                                                        {count}
+                                                    </span>
+                                                </td>
+                                            );
+                                        }
+
+                                        if (col.id === 'timestamp') {
+                                            const dateObj = val ? new Date(val) : new Date();
+                                            const displayVal = dateObj.toLocaleString('en-GB', {
+                                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                                hour12: true
+                                            }).replace(/\//g, '.').replace(',', '').toUpperCase();
+                                            return (
+                                                <td key={col.id} className="px-6 py-4">
+                                                    <span className="text-[10px] font-medium text-slate-400 font-sans tracking-tight whitespace-nowrap">{displayVal}</span>
+                                                </td>
+                                            );
+                                        }
+
+                                        if (col.id === 'name') {
+                                            return (
+                                                <td key={col.id} className="px-6 py-4 w-[350px]">
+                                                    <div className="flex flex-col max-w-[350px]">
+                                                        <span className="text-[12px] font-semibold text-slate-900 uppercase tracking-tight truncate" title={val}>{val}</span>
+                                                    </div>
+                                                </td>
+                                            );
+                                        }
+
+                                        return (
+                                            <td key={col.id} className="px-6 py-4 text-[12px] font-medium text-slate-600 whitespace-nowrap">
+                                                {val || '—'}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            ))
+                        ) : (
+                            <tr>
+                                <td colSpan={columns.filter((c: any) => c.visible).length + (isBatchViewMode ? 2 : 1)} className="px-8 py-20 text-center text-slate-400 font-bold">
+                                    No suppliers found matching your criteria.
+                                </td>
                             </tr>
-                        ))}
+                        )}
                     </tbody>
-                    <tfoot className="bg-gray-50/50 border-t border-gray-200">
+                    <tfoot className="bg-[#f8fafc]/80 border-t-2 border-slate-200">
                         <tr>
+                            {isBatchViewMode && <td className="px-6 py-4"></td>}
                             <td className="px-6 py-4"></td>
                             {columns.filter((c: any) => c.visible).map((col: any) => {
-                                if (col.id === 'balance') {
+                                if (col.id === 'balance' || col.id === 'withholdingTax') {
+                                    const key = col.id === 'balance' ? 'balance' : 'withholding';
+                                    const activeCurs = Object.keys(totals).filter(cur => totals[cur][key] !== 0);
                                     return (
-                                        <td key={`total-${col.id}`} className="px-6 py-4">
+                                        <td key={`total-${col.id}`} className="px-6 py-3 whitespace-nowrap">
                                             <div className="flex flex-col gap-1">
-                                                {(Object.entries(totals) as [string, { balance: number }][]).map(([cur, t]) => (
-                                                    <div key={cur} className="flex items-center gap-2">
-                                                        <span className="text-[10px] font-black text-slate-400">{cur}</span>
-                                                        <span className="text-[13px] font-black text-slate-900">{t.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                {activeCurs.length > 0 ? activeCurs.map(cur => (
+                                                    <div key={cur} className="flex items-center gap-1.5 justify-start">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{cur}</span>
+                                                        <span className={cn("text-[12px] font-black tracking-tight", col.id === 'balance' ? 'text-indigo-600' : 'text-slate-600')}>
+                                                            {totals[cur][key].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </span>
                                                     </div>
-                                                ))}
+                                                )) : (
+                                                    <span className="text-[12px] font-black text-slate-300">0.00</span>
+                                                )}
                                             </div>
                                         </td>
                                     );
                                 }
                                 if (col.id === 'name') {
-                                    return <td key={`total-${col.id}`} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Grand Totals</td>;
+                                    return (
+                                        <td key={`total-${col.id}`} className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Totals:</td>
+                                    );
                                 }
                                 return <td key={`total-${col.id}`} className="px-6 py-4"></td>;
                             })}
@@ -304,32 +489,93 @@ const SuppliersView = () => {
             </div>
 
             {/* Pagination & Export */}
-            <div className="flex items-center justify-between pb-20">
-                <div className="flex items-center gap-4 text-sm font-medium text-slate-500">
-                    <button
-                        onClick={() => setCurrentPage(1)}
-                        disabled={currentPage === 1}
-                        className="p-2 rounded-lg hover:bg-slate-100 disabled:opacity-30"
-                    >
-                        <ChevronLeft size={20} />
-                    </button>
-                    <span>Page {currentPage} of {totalPages}</span>
-                    <button
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                        className="p-2 rounded-lg hover:bg-slate-100 disabled:opacity-30"
-                    >
-                        <ChevronRight size={20} />
-                    </button>
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
+                <div className="flex flex-col items-center space-y-2">
+                    <div className="flex items-center space-x-2 text-[12px] text-slate-500 font-medium whitespace-nowrap">
+                        <button
+                            onClick={() => { setCurrentPage(1); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === 1}
+                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
+                        >
+                            <ChevronsLeft size={16} />
+                        </button>
+                        <button
+                            onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === 1}
+                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <span>Page {currentPage} of {totalPages || 1}</span>
+                        <button
+                            onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                        <button
+                            onClick={() => { setCurrentPage(totalPages); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
+                        >
+                            <ChevronsRight size={16} />
+                        </button>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Show per page:</span>
+                        {[50, 100, 250, 500].map(size => (
+                            <button
+                                key={size}
+                                onClick={() => {
+                                    setPageSize(size);
+                                    setCurrentPage(1);
+                                    document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className={`text-[10px] font-black transition-all ${pageSize === size ? 'text-indigo-600 underline underline-offset-4 decoration-2' : 'text-slate-400 hover:text-slate-600'}`}
+                            >
+                                {size}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
-                <div className="flex gap-4">
-                    <button
-                        onClick={handleCopyToClipboard}
-                        className="px-6 py-2 bg-white border border-gray-300 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2"
-                    >
-                        <Copy size={14} /> Copy to Clipboard
+                <div className="flex items-center gap-3">
+                    <button onClick={handleCopyToClipboard} className="px-6 py-3 bg-slate-50 text-[11px] font-black text-slate-500 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-200/50 uppercase tracking-widest flex items-center gap-2">
+                        <Copy size={12} /> Export Data
                     </button>
+                    <div className="relative" ref={batchOpsRef}>
+                        <button
+                            onClick={() => setIsBatchOpsOpen(!isBatchOpsOpen)}
+                            className="px-4 py-2 bg-indigo-600 text-[11px] font-bold text-white rounded-md hover:bg-indigo-700 transition-all uppercase tracking-wider flex items-center shadow-sm"
+                        >
+                            Management {isBatchOpsOpen ? <ChevronDown size={14} className="ml-2" /> : <ChevronUp size={14} className="ml-2" />}
+                        </button>
+                        {isBatchOpsOpen && (
+                            <div className="absolute bottom-full right-0 mb-2 w-56 bg-white border border-gray-200 shadow-xl rounded-md py-1 z-50 overflow-hidden text-left">
+                                <button
+                                    onClick={() => {
+                                        navigate('/suppliers/edit-columns');
+                                        setIsBatchOpsOpen(false);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-[12px] font-medium text-gray-700 hover:bg-gray-100 transition-colors capitalize"
+                                >
+                                    Column Settings
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setIsBatchOpsOpen(false);
+                                        setIsBatchViewMode(true);
+                                        localStorage.setItem('is_supplier_batch_view_mode', 'true');
+                                        document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-[12px] font-medium text-gray-700 hover:bg-gray-100 transition-colors border-t border-gray-100"
+                                >
+                                    Enable Batch Actions
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
