@@ -421,3 +421,21 @@ export interface GoodsReceivedNote {
   items?: QuoteItem[];
   timestamp?: string;
 }
+
+export interface PurchaseQuote {
+  id: string;
+  issueDate: string;
+  reference: string;
+  supplier: string;
+  description: string;
+  currency: string;
+  amount: number;
+  status: 'Active' | 'Expired' | 'Accepted' | 'Pending Approval' | 'Rejected' | 'Inactive';
+  billingAddress?: string;
+  expiryDays?: string;
+  timestamp?: string;
+  items?: QuoteItem[];
+  customTitle?: string;
+  footer?: string;
+  options?: DocumentOptions;
+}

@@ -19,6 +19,7 @@ import {
   PurchaseInvoice,
   DebitNote,
   GoodsReceivedNote,
+  PurchaseQuote,
   AppUser,
   UserRole,
   TaxCode,
@@ -870,6 +871,27 @@ export const getPurchaseOrders = (): PurchaseOrder[] => {
 
 export const mockPurchaseOrders = getPurchaseOrders();
 
+export const getPurchaseQuotes = (): PurchaseQuote[] => {
+  try {
+    const saved = localStorage.getItem('purchase_quotes_data');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error('Error loading purchase quotes:', e);
+  }
+  return [
+    {
+      id: 'pq-1', issueDate: '15.02.2026', reference: 'PQ-001', supplier: 'ZAMBIA SUGAR PLC', description: 'Bulk Spare Parts Quote', currency: 'ZMW', amount: 12500.00, status: 'Active', billingAddress: 'Industrial Area, Lusaka', expiryDays: '30', timestamp: '15.02.2026 10:00:00 AM',
+      items: [{ id: 1, item: 'General Spare Parts', description: 'Assorted spares', qty: '10', unitPrice: '1250', taxCode: 'VAT 16%' }]
+    }
+  ];
+};
+
+export const mockPurchaseQuotes = getPurchaseQuotes();
+
+export const savePurchaseQuotes = (quotes: PurchaseQuote[]) => {
+  localStorage.setItem('purchase_quotes_data', JSON.stringify(quotes));
+};
+
 export const getPurchaseInvoices = (): PurchaseInvoice[] => {
   try {
     const saved = localStorage.getItem('purchase_invoices_data');
@@ -957,7 +979,8 @@ export const SCREENS = [
   { id: 'user-permissions', name: 'User Permissions' },
   { id: 'role-management', name: 'Role Management' },
   { id: 'tax-codes', name: 'Tax Codes' },
-  { id: 'withholding-taxes', name: 'Withholding Taxes' }
+  { id: 'withholding-taxes', name: 'Withholding Taxes' },
+  { id: 'purchase-quotes', name: 'Purchase Quotes' }
 ];
 
 export const initialRoleDefinitions: RoleDefinition[] = [

@@ -168,7 +168,7 @@ const EditSupplierView = () => {
                     <div className="space-y-8 pt-12 border-t border-slate-50">
                         <div className="flex items-center space-x-4">
                             <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500">
-                                <TrendingUp size={20} />
+                                <CreditCard size={20} />
                             </div>
                             <h2 className="text-lg font-black text-slate-800 tracking-tight">Financial Parameters</h2>
                         </div>

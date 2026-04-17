@@ -82,6 +82,9 @@ import PurchaseOrdersView from './views/PurchaseOrdersView';
 import PurchaseInvoicesView from './views/PurchaseInvoicesView';
 import GoodsReceivedNotesView from './views/GoodsReceivedNotesView';
 import DebitNotesView from './views/DebitNotesView';
+import PurchaseQuotesView from './views/PurchaseQuotesView';
+import EditPurchaseQuoteView from './views/EditPurchaseQuoteView';
+import ViewPurchaseQuoteView from './views/ViewPurchaseQuoteView';
 
 // Inventory Imports
 import InventoryItemsView from './views/InventoryItemsView';
@@ -278,6 +281,13 @@ const App = () => {
 
           {/* Purchase History Routes */}
           <Route path="/purchase-history" element={<PurchaseHistoryView />} />
+
+          {/* Purchase Quotes Routes */}
+          <Route path="/purchase-quotes" element={<PurchaseQuotesView />} />
+          <Route path="/purchase-quotes/supplier/:supplierName" element={<PurchaseQuotesView />} />
+          <Route path="/purchase-quotes/new" element={<EditPurchaseQuoteView />} />
+          <Route path="/purchase-quotes/edit/:id" element={<EditPurchaseQuoteView />} />
+          <Route path="/purchase-quotes/view/:id" element={<ViewPurchaseQuoteView />} />
 
           {/* Purchase Orders Routes */}
           <Route path="/purchase-orders" element={<PurchaseOrdersView />} />

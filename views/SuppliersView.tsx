@@ -146,7 +146,7 @@ const SuppliersView = () => {
         const rows = selectedList.map((s: any) =>
             columns.filter((col: any) => col.visible).map((col: any) => s[col.id] || '').join('\t')
         ).join('\n');
-        
+
         const fullText = `${header}\n${rows}`;
         if (navigator.clipboard) {
             navigator.clipboard.writeText(fullText).then(() => {
@@ -311,16 +311,16 @@ const SuppliersView = () => {
                                     />
                                 </th>
                             )}
-                            <th className="sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
+                            <th className="sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
                             {columns.filter((c: any) => c.visible || c.id === 'name').map((col: any) => (
                                 <th
                                     key={col.id}
-                                    className={`sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[350px]' : ''} shadow-sm`}
+                                    className={`sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[280px]' : ''} shadow-sm`}
                                     onClick={() => handleSort(col.id)}
                                 >
                                     <div className="flex items-center">
                                         {col.label}
-                                        <ChevronDown size={12} className={`ml-2 transition-all ${sortConfig.key === col.id ? 'opacity-100 text-indigo-600' : 'opacity-20'}`} />
+                                        <ChevronDown size={10} className={`ml-2 transition-all ${sortConfig.key === col.id ? 'opacity-100 text-indigo-600' : 'opacity-20'}`} />
                                     </div>
                                 </th>
                             ))}
@@ -365,7 +365,7 @@ const SuppliersView = () => {
                                             const symbol = supplier.currency || 'ZMW';
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span className={`text-[12px] font-bold ${col.id === 'balance' ? 'text-slate-900 underline cursor-pointer hover:text-indigo-600' : 'text-slate-600'}`}>
+                                                    <span className={`text-[12px] font-medium ${col.id === 'balance' ? 'text-slate-900 underline cursor-pointer hover:text-indigo-600' : 'text-slate-600'}`}>
                                                         {symbol} {(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                     </span>
                                                 </td>
@@ -375,7 +375,7 @@ const SuppliersView = () => {
                                         if (col.id === 'qtyToReceive') {
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span className={`text-[12px] font-semibold ${val > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-300'}`}>
+                                                    <span className={`text-sm font-bold ${val > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-400'}`}>
                                                         {val || '0'}
                                                     </span>
                                                 </td>
@@ -404,7 +404,7 @@ const SuppliersView = () => {
                                             const count = Number(val) || 0;
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span className={`text-[12px] font-semibold ${count > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-300'}`}>
+                                                    <span className={`text-sm font-bold ${count > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-400'}`}>
                                                         {count}
                                                     </span>
                                                 </td>
@@ -413,23 +413,24 @@ const SuppliersView = () => {
 
                                         if (col.id === 'timestamp') {
                                             const dateObj = val ? new Date(val) : new Date();
-                                            const displayVal = dateObj.toLocaleString('en-GB', {
-                                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                                hour: '2-digit', minute: '2-digit', second: '2-digit',
-                                                hour12: true
-                                            }).replace(/\//g, '.').replace(',', '').toUpperCase();
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span className="text-[10px] font-medium text-slate-400 font-sans tracking-tight whitespace-nowrap">{displayVal}</span>
+                                                    <span className="text-[10px] font-medium text-slate-400 font-sans tracking-tight whitespace-nowrap">
+                                                        {dateObj.toLocaleString('en-GB', {
+                                                            day: '2-digit', month: '2-digit', year: 'numeric',
+                                                            hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                                            hour12: true
+                                                        }).replace(/\//g, '.').replace(',', '').toUpperCase()}
+                                                    </span>
                                                 </td>
                                             );
                                         }
 
                                         if (col.id === 'name') {
                                             return (
-                                                <td key={col.id} className="px-6 py-4 w-[350px]">
-                                                    <div className="flex flex-col max-w-[350px]">
-                                                        <span className="text-[12px] font-semibold text-slate-900 uppercase tracking-tight truncate" title={val}>{val}</span>
+                                                <td key={col.id} className="px-6 py-4 w-[280px]">
+                                                    <div className="flex flex-col max-w-[280px]">
+                                                        <span className="text-[12px] font-medium text-slate-800 uppercase tracking-tight truncate" title={val}>{val}</span>
                                                     </div>
                                                 </td>
                                             );
@@ -464,13 +465,16 @@ const SuppliersView = () => {
                                             <div className="flex flex-col gap-1">
                                                 {activeCurs.length > 0 ? activeCurs.map(cur => (
                                                     <div key={cur} className="flex items-center gap-1.5 justify-start">
-                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{cur}</span>
-                                                        <span className={cn("text-[12px] font-black tracking-tight", col.id === 'balance' ? 'text-indigo-600' : 'text-slate-600')}>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight">{cur}</span>
+                                                        <span className={cn("text-[13px] font-black tracking-tight", col.id === 'balance' ? 'text-indigo-600' : 'text-slate-600')}>
                                                             {totals[cur][key].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                         </span>
                                                     </div>
                                                 )) : (
-                                                    <span className="text-[12px] font-black text-slate-300">0.00</span>
+                                                    <div className="flex items-center gap-1.5 justify-start">
+                                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-tight">ZMW</span>
+                                                        <span className="text-[13px] font-black text-slate-300 tracking-tight">0.00</span>
+                                                    </div>
                                                 )}
                                             </div>
                                         </td>
@@ -569,9 +573,10 @@ const SuppliersView = () => {
                                         localStorage.setItem('is_supplier_batch_view_mode', 'true');
                                         document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
                                     }}
-                                    className="w-full text-left px-4 py-2 text-[12px] font-medium text-gray-700 hover:bg-gray-100 transition-colors border-t border-gray-100"
+                                    className="w-full text-left px-4 py-2 text-[12px] font-medium text-gray-700 hover:bg-gray-100 transition-colors border-t border-gray-100 flex items-center justify-between"
                                 >
-                                    Enable Batch Actions
+                                    <span>Batch Print & Operations</span>
+                                    <Printer size={12} className="text-slate-400" />
                                 </button>
                             </div>
                         )}

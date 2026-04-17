@@ -88,7 +88,7 @@ const CustomersView = () => {
     }, []);
 
     const toggleColumnVisibility = (id: string) => {
-        const newColumns = columns.map((col: any) => 
+        const newColumns = columns.map((col: any) =>
             col.id === id ? { ...col, visible: !col.visible } : col
         );
         setColumns(newColumns);
@@ -171,7 +171,7 @@ const CustomersView = () => {
         const rows = selectedList.map((c: any) =>
             columns.filter((col: any) => col.visible).map((col: any) => c[col.id] || '').join('\t')
         ).join('\n');
-        
+
         const fullText = `${header}\n${rows}`;
         if (navigator.clipboard) {
             navigator.clipboard.writeText(fullText).then(() => {
@@ -313,14 +313,14 @@ const CustomersView = () => {
                         </div>
                         <div className="h-8 w-px bg-white/20"></div>
                         <div className="flex items-center space-x-4">
-                            <button 
+                            <button
                                 onClick={handleBatchPrint}
                                 disabled={selectedCustomerIds.size === 0}
                                 className="text-white/90 hover:text-white flex items-center space-x-2 text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
                             >
                                 <Printer size={14} /> <span>Print Dossiers</span>
                             </button>
-                            <button 
+                            <button
                                 onClick={handleBatchCopy}
                                 disabled={selectedCustomerIds.size === 0}
                                 className="text-white/90 hover:text-white flex items-center space-x-2 text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
@@ -329,7 +329,7 @@ const CustomersView = () => {
                             </button>
                         </div>
                     </div>
-                    <button 
+                    <button
                         onClick={() => { setIsBatchViewMode(false); setSelectedCustomerIds(new Set()); }}
                         className="bg-white text-indigo-600 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest hover:bg-white shadow-lg transition-all border border-transparent active:scale-95"
                     >
@@ -345,24 +345,24 @@ const CustomersView = () => {
                         <tr className="bg-gray-50 border-b border-gray-200">
                             {isBatchViewMode && (
                                 <th className="sticky top-[-32px] z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-center">
-                                    <input 
-                                        type="checkbox" 
+                                    <input
+                                        type="checkbox"
                                         checked={selectedCustomerIds.size === currentSlice.length && currentSlice.length > 0}
                                         onChange={toggleSelectAll}
                                         className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all hover:scale-110"
                                     />
                                 </th>
                             )}
-                            <th className="sticky top-[-32px] z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
+                             <th className="sticky top-[-32px] z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
                             {columns.filter((c: any) => c.visible || c.id === 'name').map((col: any) => (
                                 <th
                                     key={col.id}
-                                    className={`sticky top-[-32px] z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[350px]' : ''} shadow-sm`}
+                                    className={`sticky top-[-32px] z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[280px]' : ''} shadow-sm`}
                                     onClick={() => handleSort(col.id)}
                                 >
                                     <div className="flex items-center">
                                         {col.label}
-                                        <i className={`fas fa-sort ml-2 opacity-30 text-[8px] ${sortConfig.key === col.id ? 'opacity-100 text-blue-500' : ''}`}></i>
+                                        <ChevronDown size={10} className={`ml-2 transition-all ${sortConfig.key === col.id ? 'opacity-100 text-indigo-600' : 'opacity-20'}`} />
                                     </div>
                                 </th>
                             ))}
@@ -373,8 +373,8 @@ const CustomersView = () => {
                             <tr key={customer.id} className={`group hover:bg-slate-50/80 transition-all duration-300 ${selectedCustomerIds.has(customer.id) ? 'bg-indigo-50/50' : ''}`}>
                                 {isBatchViewMode && (
                                     <td className="px-6 py-4 text-center">
-                                        <input 
-                                            type="checkbox" 
+                                        <input
+                                            type="checkbox"
                                             checked={selectedCustomerIds.has(customer.id)}
                                             onChange={() => toggleSelectOne(customer.id)}
                                             className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all hover:scale-110"
@@ -408,7 +408,7 @@ const CustomersView = () => {
                                                 <td key={col.id} className="px-6 py-4">
                                                     <Link
                                                         to={`/customers/qty-to-deliver/${customer.id}`}
-                                                        className={`text-[12px] font-semibold hover:underline transition-all ${val !== 0 ? 'text-blue-600' : 'text-slate-300'}`}
+                                                        className={`text-[12px] font-medium hover:underline transition-all ${val !== 0 ? 'text-blue-600' : 'text-slate-300'}`}
                                                     >
                                                         {val || '0'}
                                                     </Link>
@@ -429,7 +429,7 @@ const CustomersView = () => {
                                         }
                                         return (
                                             <td key={col.id} className="px-6 py-4">
-                                                <span className={`text-[12px] font-semibold ${val > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+                                                <span className={`text-[12px] font-medium ${val > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
                                                     {customer.currency?.split(' ')[0] || 'ZMW'} {parseFloat(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                 </span>
                                             </td>
@@ -489,7 +489,7 @@ const CustomersView = () => {
                                                 <td key={col.id} className="px-6 py-4">
                                                     <Link
                                                         to={`${basePath}/customer/${encodeURIComponent(customer.name)}`}
-                                                        className="text-[12px] font-semibold text-blue-600 hover:underline transition-all"
+                                                        className="text-[12px] font-medium text-blue-600 hover:underline transition-all"
                                                     >
                                                         {count}
                                                     </Link>
@@ -523,9 +523,9 @@ const CustomersView = () => {
                                             <td key={col.id} className="px-6 py-4">
                                                 <span className={cn(
                                                     "whitespace-nowrap",
-                                                    col.id === 'timestamp' 
-                                                        ? "text-[10px] font-medium text-slate-400 font-sans tracking-tight" 
-                                                        : "text-[12px] font-semibold text-slate-500"
+                                                    col.id === 'timestamp'
+                                                        ? "text-[10px] font-medium text-slate-400 font-sans tracking-tight"
+                                                        : "text-[12px] font-medium text-slate-500"
                                                 )}>
                                                     {displayVal}
                                                 </span>
@@ -535,9 +535,9 @@ const CustomersView = () => {
 
                                     if (col.id === 'name') {
                                         return (
-                                            <td key={col.id} className="px-6 py-4 w-[350px]">
-                                                <div className="flex flex-col max-w-[350px]">
-                                                    <span className="text-[12px] font-semibold text-slate-900 uppercase tracking-tight truncate" title={val}>{val}</span>
+                                            <td key={col.id} className="px-6 py-4 w-[280px]">
+                                                <div className="flex flex-col max-w-[280px]">
+                                                    <span className="text-[12px] font-medium text-slate-800 uppercase tracking-tight truncate" title={val}>{val}</span>
                                                 </div>
                                             </td>
                                         );
@@ -545,7 +545,7 @@ const CustomersView = () => {
 
                                     return (
                                         <td key={col.id} className="px-6 py-4">
-                                            <span className="text-[12px] font-semibold text-slate-500 whitespace-nowrap">{val || '—'}</span>
+                                            <span className="text-[12px] font-medium text-slate-500 whitespace-nowrap">{val || '—'}</span>
                                         </td>
                                     );
                                 })}
@@ -563,8 +563,8 @@ const CustomersView = () => {
                                     const key = col.id === 'balance' ? 'balance' : 'withholding';
                                     const activeCurs = Object.keys(totals).filter(cur => totals[cur][key] !== 0);
                                     return (
-                                        <td 
-                                            key={`total-${col.id}`} 
+                                        <td
+                                            key={`total-${col.id}`}
                                             className={`px-6 py-3 whitespace-nowrap ${col.id === 'balance' ? 'cursor-pointer hover:bg-indigo-50/50 transition-colors' : ''}`}
                                             onClick={() => col.id === 'balance' && navigate('/reports/customer-transactions')}
                                             title={col.id === 'balance' ? 'View All Customer Transactions' : ''}
@@ -600,14 +600,14 @@ const CustomersView = () => {
             <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
                 <div className="flex flex-col items-center space-y-2">
                     <div className="flex items-center space-x-2 text-[12px] text-slate-500 font-medium whitespace-nowrap">
-                        <button 
+                        <button
                             onClick={() => setCurrentPage(1)}
                             disabled={currentPage === 1}
                             className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
                         >
                             <ChevronsLeft size={16} />
                         </button>
-                        <button 
+                        <button
                             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                             disabled={currentPage === 1}
                             className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
@@ -615,14 +615,14 @@ const CustomersView = () => {
                             <ChevronLeft size={16} />
                         </button>
                         <span>Page {currentPage} of {totalPages || 1}</span>
-                        <button 
+                        <button
                             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                             disabled={currentPage === totalPages || totalPages === 0}
                             className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
                         >
                             <ChevronRight size={16} />
                         </button>
-                        <button 
+                        <button
                             onClick={() => setCurrentPage(totalPages)}
                             disabled={currentPage === totalPages || totalPages === 0}
                             className="p-1 rounded-md hover:bg-slate-100 disabled:opacity-30 transition-all active:scale-90"
@@ -633,11 +633,11 @@ const CustomersView = () => {
                     <div className="flex items-center space-x-4">
                         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Show per page:</span>
                         {[50, 100, 250, 500].map(size => (
-                            <button 
+                            <button
                                 key={size}
-                                onClick={() => { 
-                                    setPageSize(size); 
-                                    setCurrentPage(1); 
+                                onClick={() => {
+                                    setPageSize(size);
+                                    setCurrentPage(1);
                                     document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
                                 className={`text-[10px] font-black transition-all ${pageSize === size ? 'text-indigo-600 underline underline-offset-4 decoration-2' : 'text-slate-400 hover:text-slate-600'}`}
@@ -661,21 +661,21 @@ const CustomersView = () => {
                         </button>
                         {isBatchOpsOpen && (
                             <div className="absolute bottom-full right-0 mb-2 w-56 bg-white border border-gray-200 shadow-xl rounded-md py-1 z-50 overflow-hidden text-left">
-                                <button 
+                                <button
                                     onClick={() => {
                                         navigate('/customers/edit-columns');
                                         setIsBatchOpsOpen(false);
-                                    }} 
+                                    }}
                                     className="w-full text-left px-4 py-2 text-[12px] font-medium text-gray-700 hover:bg-gray-100 transition-colors capitalize"
                                 >
                                     Column Settings
                                 </button>
-                                <button 
-                                    onClick={() => { 
-                                        setIsBatchOpsOpen(false); 
-                                        setIsBatchViewMode(true); 
+                                <button
+                                    onClick={() => {
+                                        setIsBatchOpsOpen(false);
+                                        setIsBatchViewMode(true);
                                         document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' });
-                                    }} 
+                                    }}
                                     className="w-full text-left px-4 py-2 text-[12px] font-medium text-gray-700 hover:bg-gray-100 transition-colors border-t border-gray-100"
                                 >
                                     Enable Batch Actions

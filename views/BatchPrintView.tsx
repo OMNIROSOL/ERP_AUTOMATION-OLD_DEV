@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockSalesOrders, getDeliveryNotes, mockReceipts } from '../mockData';
+import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockPurchaseQuotes, mockSalesOrders, getDeliveryNotes, mockReceipts } from '../mockData';
 import { Customer } from '../types';
 import { Printer, ChevronLeft } from 'lucide-react';
 
@@ -21,6 +21,7 @@ const BatchPrintView = () => {
     const isSalesInvoices = type === 'sales-invoices' || location.pathname.includes('/sales-invoices/');
     const isDeliveryNotes = type === 'delivery-notes' || location.pathname.includes('/delivery-notes/');
     const isReceipts = type === 'receipts' || location.pathname.includes('/receipts/');
+    const isPurchaseQuotes = type === 'purchase-quotes' || location.pathname.includes('/purchase-quotes/');
 
     const allCustomers = useMemo(() => getCustomers(), []);
     const allSuppliers = useMemo(() => getSuppliers(), []);
@@ -168,8 +169,12 @@ const BatchPrintView = () => {
             return mockReceipts.filter(r => selectedIds.includes(r.id));
         }
 
+        if (isPurchaseQuotes) {
+            return mockPurchaseQuotes.filter(q => selectedIds.includes(q.id));
+        }
+
         return [];
-    }, [allCustomers, selectedIds, isCustomers, isSalesQuotes, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
+    }, [allCustomers, selectedIds, isCustomers, isSalesQuotes, isPurchaseQuotes, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
 
     useEffect(() => {
         if (items.length > 0) {
@@ -368,6 +373,7 @@ const BatchPrintView = () => {
 
                     const isInvoice = 'issueDate' in item && 'balanceDue' in item;
                     const isQuote = 'issueDate' in item && 'reference' in item && !isInvoice;
+                    const isPurchaseQuote = 'issueDate' in item && 'reference' in item && 'supplier' in item;
                     const isOrder = 'orderDate' in item && 'reference' in item;
                     const isDeliveryNote = 'deliveryDate' in item && 'orderNumber' in item;
                     const isReceipt = 'paidByContact' in item && 'paymentMethod' in item;
@@ -379,7 +385,7 @@ const BatchPrintView = () => {
                         const hasOptions = !!item.options;
                         const documentTitle = (hasOptions && item.options.customTitle && item.options.customTitleValue)
                             ? item.options.customTitleValue
-                            : (item.customTitle || (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order')))));
+                            : (item.customTitle || (isPurchaseQuote ? 'Purchase Quote' : (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order'))))));
 
                         const subTitle = isQuote ? 'OFFICIAL PROPOSAL' : (isInvoice ? 'TAX INVOICE' : (isDeliveryNote ? 'PROOF OF DELIVERY' : (isReceipt ? 'PAYMENT CONFIRMATION' : 'CONFIRMED ORDER')));
 
@@ -408,9 +414,9 @@ const BatchPrintView = () => {
                                         <div className="grid grid-cols-2 gap-12 items-start">
                                             {/* Billed To */}
                                             <div>
-                                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Billed To</h3>
-                                                <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{item.customer}</p>
-                                                <p className="text-slate-500 text-[11px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">{item.billingAddress || 'No billing address provided'}</p>
+                                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">{isPurchaseQuote ? 'Supplier' : 'Billed To'}</h3>
+                                                <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{isPurchaseQuote ? item.supplier : item.customer}</p>
+                                                <p className="text-slate-500 text-[11px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">{item.billingAddress || (isPurchaseQuote ? 'No address provided' : 'No billing address provided')}</p>
                                             </div>
 
                                             {/* Order Details */}
