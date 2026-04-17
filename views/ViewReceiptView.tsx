@@ -1,0 +1,247 @@
+import React, { useRef, useState, useEffect } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+    FolderOpen, ChevronRight, Edit, Printer, FileText, Mail,
+    ChevronsLeft, ChevronLeft, ChevronRight as ChevronRightIcon,
+    ChevronsRight, ChevronDown
+} from 'lucide-react';
+import { mockReceipts } from '../mockData';
+
+const ViewReceiptView = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const pdfRef = useRef<HTMLDivElement>(null);
+    const [isCopyToOpen, setIsCopyToOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const receiptIndex = mockReceipts.findIndex(r => r.id === id || r.reference === id);
+    const receipt = mockReceipts[receiptIndex];
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsCopyToOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleNext = () => {
+        if (receiptIndex < mockReceipts.length - 1) {
+            navigate(`/receipts/view/${mockReceipts[receiptIndex + 1].id}`);
+        }
+    };
+    const handlePrev = () => {
+        if (receiptIndex > 0) {
+            navigate(`/receipts/view/${mockReceipts[receiptIndex - 1].id}`);
+        }
+    };
+    const handleFirst = () => navigate(`/receipts/view/${mockReceipts[0].id}`);
+    const handleLast = () => navigate(`/receipts/view/${mockReceipts[mockReceipts.length - 1].id}`);
+
+    if (!receipt) {
+        return (
+            <div className="p-8 text-center text-gray-500">
+                <p>Receipt not found.</p>
+                <button onClick={() => navigate('/receipts')} className="mt-4 text-blue-500 hover:underline">Return to list</button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-[#f3f4f6] min-h-full flex flex-col font-sans">
+            {/* Breadcrumb */}
+            <div className="bg-white px-6 py-2 border-b border-gray-200 flex items-center text-[11px] font-bold text-gray-500 uppercase tracking-widest space-x-1.5 select-none no-print shadow-sm">
+                <FolderOpen size={14} className="text-blue-500" />
+                <ChevronRight size={10} className="opacity-30" />
+                <Link to="/receipts" className="text-blue-500 hover:text-blue-700 transition-colors">Receipts</Link>
+                <ChevronRight size={10} className="opacity-30" />
+                <span className="text-slate-400">View</span>
+            </div>
+
+            {/* Toolbar */}
+            <div className="bg-slate-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between no-print shadow-sm">
+                <div className="flex items-center space-x-4">
+                    <span className="text-[13px] font-black text-slate-400 uppercase tracking-widest mr-2">Receipt</span>
+                    <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm overflow-visible relative group">
+                        <button
+                            onClick={() => navigate(`/receipts/edit/${receipt.id}`)}
+                            className="px-5 py-2 text-[12px] font-bold text-slate-700 hover:bg-slate-50 border-r border-slate-200 transition-all flex items-center gap-2"
+                        >
+                            <Edit size={14} className="text-blue-500" /> Edit
+                        </button>
+                        <div className="relative" ref={dropdownRef}>
+                            <button
+                                onClick={() => setIsCopyToOpen(!isCopyToOpen)}
+                                className={`px-5 py-2 text-[12px] font-bold text-slate-700 hover:bg-slate-50 flex items-center h-full transition-all group ${isCopyToOpen ? 'bg-slate-50' : ''}`}
+                            >
+                                <ChevronDown size={14} className={`mr-2 text-slate-400 transition-transform duration-300 ${isCopyToOpen ? 'rotate-180 text-blue-500' : ''}`} />
+                                Copy to
+                            </button>
+                            {isCopyToOpen && (
+                                <div className="absolute left-0 mt-2 w-56 bg-white border border-slate-200 shadow-2xl rounded-xl py-2 z-50 animate-in fade-in slide-in-from-top-2">
+                                    <div className="px-4 py-2 border-b border-slate-50 mb-1">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Actions</span>
+                                    </div>
+                                    <button disabled className="w-full text-left px-4 py-2.5 text-[12px] text-slate-300 cursor-not-allowed font-medium italic">New Payment (Incoming)</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="w-[1px] h-8 bg-slate-200 mx-2"></div>
+                    <div className="flex space-x-2">
+                        <button onClick={() => window.print()} className="bg-white border border-slate-200 px-5 py-2 text-[12px] font-bold text-slate-700 rounded-lg shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2">
+                            <Printer size={14} className="text-slate-400" /> Print
+                        </button>
+                        <button 
+                            onClick={async () => {
+                                if (!pdfRef.current) return;
+                                const html2canvas = (await import('html2canvas')).default;
+                                const jsPDF = (await import('jspdf')).jsPDF;
+                                
+                                const element = pdfRef.current;
+                                const originalStyle = element.getAttribute('style') || '';
+                                element.style.maxWidth = 'none';
+                                element.style.width = '850px';
+                                
+                                const canvas = await html2canvas(element, {
+                                    scale: 2,
+                                    useCORS: true,
+                                    backgroundColor: '#ffffff'
+                                });
+                                
+                                element.setAttribute('style', originalStyle);
+                                
+                                const imgData = canvas.toDataURL('image/png');
+                                const pdf = new jsPDF('p', 'mm', 'a4');
+                                const imgProps = pdf.getImageProperties(imgData);
+                                const pdfWidth = pdf.internal.pageSize.getWidth();
+                                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                                
+                                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                                pdf.save(`${receipt.reference || 'Receipt'}.pdf`);
+                            }} 
+                            className="bg-white border border-slate-200 px-5 py-2 text-[12px] font-bold text-slate-700 rounded-lg shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2"
+                        >
+                            <FileText size={14} className="text-slate-400" /> PDF
+                        </button>
+                        <button className="bg-white border border-slate-200 px-5 py-2 text-[12px] font-bold text-slate-700 rounded-lg shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2">
+                            <Mail size={14} className="text-slate-400" /> Email
+                        </button>
+                    </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                    <div className="flex bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                        <button onClick={handleFirst} disabled={receiptIndex === 0} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 border-r border-slate-200 disabled:opacity-20 transition-all"><ChevronsLeft size={16} /></button>
+                        <button onClick={handlePrev} disabled={receiptIndex === 0} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 disabled:opacity-20 transition-all"><ChevronLeft size={16} /></button>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-400 tracking-widest">{receiptIndex + 1} / {mockReceipts.length}</span>
+                    <div className="flex bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                        <button onClick={handleNext} disabled={receiptIndex === mockReceipts.length - 1} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 border-r border-slate-200 disabled:opacity-20 transition-all"><ChevronRightIcon size={16} /></button>
+                        <button onClick={handleLast} disabled={receiptIndex === mockReceipts.length - 1} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 disabled:opacity-20 transition-all"><ChevronsRight size={16} /></button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Document */}
+            <div className="flex-1 p-6 flex justify-center overflow-auto bg-[#f3f4f6]">
+                <div className="bg-white shadow-xl p-12 w-full max-w-[850px] min-h-[1100px] relative font-sans text-gray-900 border border-gray-200" ref={pdfRef}>
+                    <div className="flex justify-between items-start gap-12 mb-10 pb-10 border-b border-gray-100">
+                        <div className="flex-1">
+                            {/* Header Section */}
+                            <div className="mb-6">
+                                <div className="flex justify-between items-start mb-1">
+                                    <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">{receipt.customTitle || 'Receipt'}</h1>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {receipt.reference}</p>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-emerald-100 text-emerald-700">{receipt.status}</span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-12 items-start">
+                                {/* Paid By */}
+                                <div>
+                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Paid By</h3>
+                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{receipt.paidByContact}</p>
+                                    {receipt.paidByOptional && <p className="text-gray-500 italic">{receipt.paidByOptional}</p>}
+                                    <div className="mt-4">
+                                        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Received In</h4>
+                                        <p className="text-sm font-semibold">{receipt.receivedInAccount}</p>
+                                    </div>
+                                </div>
+
+                                {/* Receipt Details */}
+                                <div className="border-l border-gray-100 pl-12">
+                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Details</h3>
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-gray-500">Date:</span>
+                                            <span className="font-semibold">{receipt.date}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-gray-500">Reference:</span>
+                                            <span className="font-semibold">{receipt.reference}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-gray-500">Currency:</span>
+                                            <span className="font-semibold">{receipt.currency}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Company Logo - Large and Span across Header+Details */}
+                        <div className="w-[180px] shrink-0 pt-2">
+                            <img src="/logo.png" alt="Company Logo" className="w-full object-contain" />
+                        </div>
+                    </div>
+
+                    <div className="mb-10 p-4 bg-gray-50 rounded border border-gray-100">
+                        <p className="text-[13px] text-gray-600 italic">Description: {receipt.description}</p>
+                    </div>
+
+                    <table className="w-full border-collapse border border-gray-300 text-[13px]">
+                        <thead>
+                            <tr className="bg-gray-100">
+                                <th className="border border-gray-300 p-2 text-left font-bold w-[40%]">Account</th>
+                                <th className="border border-gray-300 p-2 text-left font-bold">Description</th>
+                                <th className="border border-gray-300 p-2 text-right font-bold w-[15%]">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {receipt.items?.map((item: any, idx: number) => (
+                                <tr key={item.id || idx}>
+                                    <td className="border border-gray-300 p-2">{item.account}</td>
+                                    <td className="border border-gray-300 p-2">{item.description}</td>
+                                    <td className="border border-gray-300 p-2 text-right">{parseFloat(item.amount || item.unitPrice).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                </tr>
+                            )) || (
+                                    <tr>
+                                        <td className="border border-gray-300 p-2" colSpan={2}>General Payment</td>
+                                        <td className="border border-gray-300 p-2 text-right font-bold">{receipt.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    </tr>
+                                )}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colSpan={2} className="border border-gray-300 p-2 text-right font-bold uppercase bg-gray-50">Total {receipt.currency}</td>
+                                <td className="border border-gray-300 p-2 text-right font-bold bg-gray-50">{receipt.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    {receipt.footers && (
+                        <div className="mt-12 pt-8 border-t border-gray-200">
+                            <p className="text-[12px] text-gray-500 whitespace-pre-wrap">{receipt.footers}</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default ViewReceiptView;

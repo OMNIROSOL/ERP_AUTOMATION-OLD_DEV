@@ -1,0 +1,472 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { mockSalesQuotes, getCustomers } from '../mockData';
+import { SalesQuote, Customer } from '../types';
+import {
+    Printer,
+    FileText,
+    Mail,
+    Edit,
+    ChevronRight,
+    ChevronLeft,
+    Download,
+    Copy,
+    Clock,
+    User,
+    MapPin,
+    Calendar,
+    Hash
+} from 'lucide-react';
+import Badge from '../components/shared/Badge';
+import { cn } from '../utils/cn';
+
+const ViewSalesQuoteView = () => {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const [isCopyToOpen, setIsCopyToOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const pdfRef = useRef<HTMLDivElement>(null);
+
+    const allCustomers = useMemo(() => getCustomers(), []);
+    const quoteIndex = mockSalesQuotes.findIndex(q => q.id === id);
+    const quote = mockSalesQuotes[quoteIndex];
+
+    const customerData = useMemo(() => {
+        if (!quote) return null;
+        return allCustomers.find(c => c.name === quote.customer);
+    }, [quote, allCustomers]);
+
+    const customerEmail = customerData?.email || (quote ? `${quote.customer.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
+
+    const expiryDate = useMemo(() => {
+        if (!quote || !quote.issueDate || !quote.expiryDays) return 'N/A';
+        try {
+            const parts = quote.issueDate.split('.');
+            if (parts.length !== 3) return 'N/A';
+            const date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            date.setDate(date.getDate() + parseInt(quote.expiryDays));
+            return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+        } catch (e) {
+            return 'N/A';
+        }
+    }, [quote]);
+
+    const totals = useMemo(() => {
+        if (!quote) return { subtotal: 0, tax: 0, total: 0 };
+        const isTaxInclusive = quote.options?.amountsAreTaxInclusive || false;
+
+        if (!quote.items || quote.items.length === 0) {
+            const total = quote.amount;
+            const tax = isTaxInclusive ? total * 0.16 / 1.16 : total * 0.16;
+            const subtotal = isTaxInclusive ? total - tax : total;
+            return { subtotal, tax, total: isTaxInclusive ? total : total + tax };
+        }
+
+        let subtotal = 0;
+        let tax = 0;
+        quote.items.forEach(item => {
+            const qty = parseFloat(item.qty) || 0;
+            const price = parseFloat(item.unitPrice) || 0;
+            const discount = parseFloat(item.discount) || 0;
+
+            let lineTotal = qty * price;
+            if (quote.options?.columnDiscount) {
+                if (quote.options?.columnDiscountType === 'Percentage') {
+                    lineTotal = lineTotal * (1 - discount / 100);
+                } else {
+                    lineTotal = lineTotal - discount;
+                }
+            }
+
+            if (isTaxInclusive) {
+                const lineTax = lineTotal * 0.16 / 1.16;
+                tax += lineTax;
+                subtotal += (lineTotal - lineTax);
+            } else {
+                subtotal += lineTotal;
+                tax += lineTotal * 0.16;
+            }
+        });
+        let total = subtotal + tax;
+        let withholdingTaxAmount = 0;
+        if (quote.options?.withholdingTax) {
+            const val = parseFloat(quote.options.withholdingTaxValue) || 0;
+            if (quote.options.withholdingTaxType === 'Rate') {
+                withholdingTaxAmount = subtotal * (val / 100);
+            } else {
+                withholdingTaxAmount = val;
+            }
+            total -= withholdingTaxAmount;
+        }
+
+        return { subtotal, tax, total, withholdingTaxAmount };
+    }, [quote]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsCopyToOpen(false);
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    if (!quote) return <div className="p-8 text-center text-slate-500 font-black uppercase tracking-widest">Quote not found.</div>;
+
+    const statusStyles: Record<string, string> = {
+        'Active': 'bg-emerald-500 text-white',
+        'Accepted': 'bg-blue-500 text-white',
+        'Rejected': 'bg-rose-500 text-white',
+        'Inactive': 'bg-slate-500 text-white',
+    };
+
+    return (
+        <div className="min-h-screen bg-[#f3f4f6]/50 flex flex-col font-sans">
+            {/* Compact Action Toolbar - Matching Customer View */}
+            <div className="bg-[#f8fafc] border-b border-gray-300 px-6 py-3 flex items-center justify-between sticky top-0 z-50 no-print">
+                <div className="flex items-center space-x-3">
+                    <button
+                        onClick={() => navigate('/sales-quotes')}
+                        className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
+                    >
+                        <ChevronLeft size={14} /> Back
+                    </button>
+
+                    <button
+                        onClick={() => navigate(`/sales-quotes/edit/${quote.id}`)}
+                        className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
+                    >
+                        <Edit size={14} className="text-blue-600" /> Edit
+                    </button>
+
+                    <div className="relative" ref={dropdownRef}>
+                        <button
+                            onClick={() => setIsCopyToOpen(!isCopyToOpen)}
+                            className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
+                        >
+                            <Copy size={14} /> Copy To
+                        </button>
+                        {isCopyToOpen && (
+                            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 shadow-xl rounded py-1 z-[100]">
+                                {[
+                                    { label: 'Sales Quote', path: '/sales-quotes/new' },
+                                    { label: 'Purchase Quote', path: '/purchase-quotes/new' },
+                                    { label: 'Sales Order', path: '/sales-orders/new' },
+                                    { label: 'Sales Invoice', path: '/sales-invoices/new' },
+                                    { label: 'Delivery Note', path: '/delivery-notes/new' },
+                                    { label: 'Credit Note', path: '/credit-notes/new' },
+                                    { label: 'Purchase Order', path: '/purchase-orders/new' },
+                                    { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
+                                    { label: 'Goods Receipt', path: '/goods-receipts/new' },
+                                    { label: 'Debit Note', path: '/debit-notes/new' }
+                                ].map(item => (
+                                    <button
+                                        key={item.label}
+                                        onClick={() => { setIsCopyToOpen(false); navigate(`${item.path}?copyFrom=${quote.id}`); }}
+                                        className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                                    >
+                                        New {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="w-[1px] h-6 bg-gray-200 mx-3"></div>
+
+                    <div className="flex space-x-2">
+                        <button onClick={() => window.print()} className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
+                            <Printer size={14} /> Print
+                        </button>
+                        <button 
+                            onClick={async () => {
+                                if (!pdfRef.current) return;
+                                const html2canvas = (await import('html2canvas')).default;
+                                const jsPDF = (await import('jspdf')).jsPDF;
+                                
+                                const element = pdfRef.current;
+                                const originalStyle = element.getAttribute('style') || '';
+                                element.style.maxWidth = 'none';
+                                element.style.width = '850px';
+                                
+                                const canvas = await html2canvas(element, {
+                                    scale: 2,
+                                    useCORS: true,
+                                    backgroundColor: '#ffffff'
+                                });
+                                
+                                element.setAttribute('style', originalStyle);
+                                
+                                const imgData = canvas.toDataURL('image/png');
+                                const pdf = new jsPDF('p', 'mm', 'a4');
+                                const imgProps = pdf.getImageProperties(imgData);
+                                const pdfWidth = pdf.internal.pageSize.getWidth();
+                                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                                
+                                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                                pdf.save(`${quote.reference || 'Quote'}.pdf`);
+                            }} 
+                            className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
+                        >
+                            <Download size={14} /> PDF
+                        </button>
+                        <button
+                            onClick={() => {
+                                const emailTo = customerEmail || '';
+                                const subject = encodeURIComponent(`Sales Quotation: ${quote.reference}`);
+                                const body = encodeURIComponent(`Dear ${quote.customer},\n\nPlease find attached our sales quotation ${quote.reference} for your review.\n\nThank you for your business.`);
+                                const mailtoUrl = `mailto:${emailTo}?subject=${subject}&body=${body}`;
+
+                                const link = document.createElement('a');
+                                link.href = mailtoUrl;
+                                link.click();
+                            }}
+                            className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
+                        >
+                            <Mail size={14} /> Email
+                        </button>
+                    </div>
+                </div>
+
+
+                <div className="flex items-center space-x-2">
+                    <div className="flex bg-white border border-gray-300 rounded shadow-sm">
+                        <button
+                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[0].id}`)}
+                            disabled={quoteIndex <= 0}
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
+                        >
+                            <ChevronLeft size={14} /> <ChevronLeft size={14} className="-ml-2" />
+                        </button>
+                        <button
+                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[Math.max(0, quoteIndex - 1)].id}`)}
+                            disabled={quoteIndex <= 0}
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
+                        >
+                            <ChevronLeft size={14} />
+                        </button>
+                    </div>
+                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">{quoteIndex + 1} / {mockSalesQuotes.length}</span>
+                    <div className="flex bg-white border border-gray-300 rounded shadow-sm">
+                        <button
+                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[Math.min(mockSalesQuotes.length - 1, quoteIndex + 1)].id}`)}
+                            disabled={quoteIndex === mockSalesQuotes.length - 1}
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
+                        >
+                            <ChevronRight size={14} />
+                        </button>
+                        <button
+                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[mockSalesQuotes.length - 1].id}`)}
+                            disabled={quoteIndex === mockSalesQuotes.length - 1}
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
+                        >
+                            <ChevronRight size={14} /> <ChevronRight size={14} className="-ml-2" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex-1 p-6 flex justify-start overflow-auto print:p-0">
+                <div className="print-container bg-white shadow-xl p-12 w-[850px] max-w-full text-[13px] text-gray-800 relative" ref={pdfRef}>
+                    <style>{`
+                        @media print {
+                            @page { margin: 10mm; size: auto; }
+                            html, body, #root, #root > div, main { 
+                                background: white !important; 
+                                padding: 0 !important; 
+                                -webkit-print-color-adjust: exact !important; 
+                                print-color-adjust: exact !important;
+                                font-family: sans-serif !important; 
+                                height: auto !important; 
+                                min-height: none !important; 
+                                overflow: visible !important; 
+                                display: block !important; 
+                            }
+                            .no-print, nav, aside, header, .nav-bar, .side-bar, button, .breadcrumb-bar { display: none !important; }
+                            .print-container { 
+                                border: none !important; 
+                                box-shadow: none !important; 
+                                max-width: none !important; 
+                                width: 100% !important; 
+                                position: static !important;
+                                padding: 48px !important;
+                                background: white !important;
+                                margin: 0 !important;
+                            }
+                            .print-bg-slate-50 {
+                                background-color: #f8fafc !important;
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                            }
+                        }
+                    `}</style>
+
+                    <div className="flex justify-between items-start gap-12 mb-10 pb-10 border-b border-gray-100">
+                        <div className="flex-1">
+                            {/* Header Section */}
+                            <div className="mb-6">
+                                <div className="flex justify-between items-start mb-1">
+                                    <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">
+                                        {(quote.options?.customTitle && quote.options?.customTitleValue) ? quote.options.customTitleValue : (quote.customTitle || 'Sales Quotation')}
+                                    </h1>
+                                </div>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {quote.reference}</p>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-12 items-start">
+                                {/* Billed To */}
+                                <div>
+                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Billed To</h3>
+                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{quote.customer}</p>
+                                    <div className="text-gray-500 space-y-1">
+                                        <p className="whitespace-pre-wrap">{customerData?.billingAddress || quote.billingAddress || '-'}</p>
+                                        {customerEmail && <p className="text-blue-600 lowercase">{customerEmail}</p>}
+                                    </div>
+                                </div>
+
+                                {/* Quote Details */}
+                                <div className="border-l border-gray-100 pl-12">
+                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Quote Details</h3>
+                                    <div className="space-y-3">
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Issue Date:</span>
+                                            <span className="font-semibold">{quote.issueDate}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Expiry Date:</span>
+                                            <span className="font-semibold">{expiryDate}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Currency:</span>
+                                            <span className="font-semibold">{quote.currency}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Company Logo - Large and Span across Header+Details */}
+                        <div className="w-[180px] shrink-0 pt-2">
+                            <img src="/logo.png" alt="Company Logo" className="w-full object-contain" />
+                        </div>
+                    </div>
+
+                    {/* Items Table */}
+                    <div className="mb-14">
+                        <table className="w-full text-left">
+                            <thead className="bg-[#f8fafc] border-y border-gray-200 overflow-hidden text-right print-bg-slate-50">
+                                <tr>
+                                    {quote.options?.columnLineNumber !== false && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>}
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Item</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Qty</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Unit Price</th>
+                                    {quote.options?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Disc</th>}
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {quote.items && quote.items.length > 0 ? quote.items.map((item, idx) => (
+                                    <tr key={idx}>
+                                        {quote.options?.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
+                                        <td className="px-4 py-4">
+                                            <p className="font-semibold text-slate-900">{item.item || '-'}</p>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <p className="text-gray-500">{item.description || '-'}</p>
+                                        </td>
+                                        <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
+                                        <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        {quote.options?.columnDiscount && (
+                                            <td className="px-4 py-4 text-right font-medium text-rose-500">
+                                                {item.discount ? (quote.options?.columnDiscountType === 'Percentage' ? `${item.discount}%` : parseFloat(item.discount).toLocaleString()) : '-'}
+                                            </td>
+                                        )}
+                                        <td className="px-4 py-4 text-right font-semibold">
+                                            {(() => {
+                                                const qty = parseFloat(item.qty) || 0;
+                                                const price = parseFloat(item.unitPrice) || 0;
+                                                const discount = parseFloat(item.discount) || 0;
+                                                let total = qty * price;
+                                                if (quote.options?.columnDiscount) {
+                                                    if (quote.options?.columnDiscountType === 'Percentage') total *= (1 - discount / 100);
+                                                    else total -= discount;
+                                                }
+                                                return total.toLocaleString(undefined, { minimumFractionDigits: 2 });
+                                            })()}
+                                        </td>
+                                    </tr>
+                                )) : (
+                                    <tr>
+                                        <td className="px-4 py-5 text-slate-400 font-medium text-[12px]">1</td>
+                                        <td className="px-4 py-5 font-semibold text-slate-900">General Item</td>
+                                        <td className="px-4 py-5 font-medium text-slate-500">{quote.description || '-'}</td>
+                                        <td className="px-4 py-5 text-right font-medium">1</td>
+                                        <td className="px-4 py-5 text-right font-medium">{(parseFloat(quote.amount as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        <td className="px-4 py-5 text-right font-semibold">{(parseFloat(quote.amount as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Bottom Area: Totals */}
+                    <div className="flex justify-end mt-12">
+
+                        {/* Summary Section */}
+                        {!quote.options?.hideTotalAmount && (
+                            <div className="w-80 space-y-3">
+                                <div className="flex justify-between items-center text-gray-500">
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">{quote.options?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
+                                    <span className="font-semibold">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-gray-500">
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">Sales Tax (16%)</span>
+                                    <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                                {quote.options?.withholdingTax && (
+                                    <div className="flex justify-between items-center text-rose-500">
+                                        <span className="text-[11px] font-bold uppercase tracking-widest text-rose-400">Withholding Tax ({quote.options.withholdingTaxType === 'Rate' ? `${quote.options.withholdingTaxValue}%` : 'Amount'})</span>
+                                        <span className="font-semibold">-{totals.withholdingTaxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2 print-bg-slate-50">
+                                    <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-900">Total</span>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{quote.currency?.split(' ')[0]}</p>
+                                        <p className="text-2xl font-bold text-slate-900 tracking-tighter">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footers Section */}
+                    <div className="mt-12 space-y-12">
+                        {((quote.options?.footers && quote.options?.footerValue) || quote.footer) && (
+                            <div className="pt-8 border-t border-gray-100">
+                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Terms & Conditions</p>
+                                <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">
+                                    {(quote.options?.footers && quote.options?.footerValue) ? quote.options.footerValue : quote.footer}
+                                </p>
+                            </div>
+                        )}
+
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-[#f3f4f6] px-8 py-4 border-t border-gray-200 flex justify-end no-print">
+                <div className="flex space-x-2">
+                    <button onClick={() => navigate(`/sales-quotes/print-batch?ids=${quote.id}`)} className="bg-white border border-gray-300 px-6 py-2 text-[11px] font-bold text-gray-700 rounded-md shadow-sm hover:bg-gray-50 transition uppercase tracking-widest flex items-center gap-2">
+                        <Printer size={14} /> Print
+                    </button>
+                    <button onClick={() => navigate(`/sales-quotes/edit/${quote.id}`)} className="bg-blue-600 text-white px-6 py-2 text-[11px] font-bold rounded-md shadow-md hover:bg-blue-700 transition uppercase tracking-widest flex items-center gap-2">
+                        <Edit size={14} /> Edit Quote
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default ViewSalesQuoteView;
