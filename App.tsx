@@ -14,6 +14,9 @@ import CreditNotesView from './views/CreditNotesView';
 import EditCreditNoteColumnsView from './views/EditCreditNoteColumnsView';
 import ViewCreditNoteView from './views/ViewCreditNoteView';
 import NewPurchaseInvoiceView from './views/NewPurchaseInvoiceView';
+import ViewPurchaseInvoiceView from './views/ViewPurchaseInvoiceView';
+import NewPurchaseOrderView from './views/NewPurchaseOrderView';
+import ViewPurchaseOrderView from './views/ViewPurchaseOrderView';
 import NewGoodsReceiptView from './views/NewGoodsReceiptView';
 import NewDebitNoteView from './views/NewDebitNoteView';
 import EditSalesQuoteView from './views/EditSalesQuoteView';
@@ -289,14 +292,18 @@ const App = () => {
           <Route path="/purchase-quotes/edit/:id" element={<EditPurchaseQuoteView />} />
           <Route path="/purchase-quotes/view/:id" element={<ViewPurchaseQuoteView />} />
 
-          {/* Purchase Orders Routes */}
           <Route path="/purchase-orders" element={<PurchaseOrdersView />} />
           <Route path="/purchase-orders/supplier/:supplierName" element={<PurchaseOrdersView />} />
+          <Route path="/purchase-orders/new" element={<NewPurchaseOrderView />} />
+          <Route path="/purchase-orders/edit/:id" element={<NewPurchaseOrderView />} />
+          <Route path="/purchase-orders/view/:id" element={<ViewPurchaseOrderView />} />
 
           {/* Purchase Invoices Routes */}
           <Route path="/purchase-invoices" element={<PurchaseInvoicesView />} />
           <Route path="/purchase-invoices/supplier/:supplierName" element={<PurchaseInvoicesView />} />
           <Route path="/purchase-invoices/new" element={<NewPurchaseInvoiceView />} />
+          <Route path="/purchase-invoices/edit/:id" element={<NewPurchaseInvoiceView />} />
+          <Route path="/purchase-invoices/view/:id" element={<ViewPurchaseInvoiceView />} />
 
           {/* Goods Received Notes Routes */}
           <Route path="/goods-received-notes" element={<GoodsReceivedNotesView />} />

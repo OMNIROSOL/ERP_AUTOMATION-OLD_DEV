@@ -35,9 +35,24 @@ const SuppliersView = () => {
 
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     useEffect(() => {
-        const handleFocus = () => setRefreshTrigger(prev => prev + 1);
-        window.addEventListener('focus', handleFocus);
-        return () => window.removeEventListener('focus', handleFocus);
+        const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
+        window.addEventListener('focus', handleRefresh);
+        window.addEventListener('storage', handleRefresh);
+        window.addEventListener('purchase_quotes_updated', handleRefresh);
+        window.addEventListener('purchase_orders_updated', handleRefresh);
+        window.addEventListener('purchase_invoices_updated', handleRefresh);
+        window.addEventListener('debit_notes_updated', handleRefresh);
+        window.addEventListener('grn_updated', handleRefresh);
+        
+        return () => {
+            window.removeEventListener('focus', handleRefresh);
+            window.removeEventListener('storage', handleRefresh);
+            window.removeEventListener('purchase_quotes_updated', handleRefresh);
+            window.removeEventListener('purchase_orders_updated', handleRefresh);
+            window.removeEventListener('purchase_invoices_updated', handleRefresh);
+            window.removeEventListener('debit_notes_updated', handleRefresh);
+            window.removeEventListener('grn_updated', handleRefresh);
+        };
     }, []);
 
     useEffect(() => {
@@ -69,7 +84,13 @@ const SuppliersView = () => {
 
     const [columns, setColumns] = useState(() => {
         const saved = localStorage.getItem('supplier_column_settings');
-        return saved ? JSON.parse(saved) : defaultColumns;
+        if (!saved) return defaultColumns;
+        const parsed = JSON.parse(saved);
+        // Merge to ensure new columns like purchaseQuotes are included if missing in saved settings
+        return defaultColumns.map(def => {
+            const existing = parsed.find((p: any) => p.id === def.id);
+            return existing ? { ...def, visible: existing.visible } : def;
+        });
     });
 
     useEffect(() => {
@@ -402,9 +423,25 @@ const SuppliersView = () => {
 
                                         if (['purchaseOrders', 'purchaseInvoices', 'goodsReceipts', 'purchaseQuotes', 'debitNotes', 'receipts', 'payments'].includes(col.id)) {
                                             const count = Number(val) || 0;
+                                            const getRoute = (id: string) => {
+                                                const mapping: Record<string, string> = {
+                                                    'purchaseQuotes': '/purchase-quotes',
+                                                    'purchaseOrders': '/purchase-orders',
+                                                    'purchaseInvoices': '/purchase-invoices',
+                                                    'debitNotes': '/debit-notes',
+                                                    'goodsReceipts': '/goods-received-notes',
+                                                    'receipts': '/receipts',
+                                                    'payments': '/payments'
+                                                };
+                                                return mapping[id] || '/purchase-history';
+                                            };
+
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span className={`text-sm font-bold ${count > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-400'}`}>
+                                                    <span 
+                                                        onClick={() => count > 0 && navigate(`${getRoute(col.id)}/supplier/${supplier.name}`)}
+                                                        className={`text-sm font-bold ${count > 0 ? 'text-indigo-600 underline cursor-pointer hover:text-indigo-800' : 'text-slate-400'}`}
+                                                    >
                                                         {count}
                                                     </span>
                                                 </td>
@@ -438,7 +475,7 @@ const SuppliersView = () => {
 
                                         return (
                                             <td key={col.id} className="px-6 py-4 text-[12px] font-medium text-slate-600 whitespace-nowrap">
-                                                {val || '—'}
+                                                {col.id === 'address' ? (supplier.billingAddress || (supplier as any).address || '—') : (val || '—')}
                                             </td>
                                         );
                                     })}

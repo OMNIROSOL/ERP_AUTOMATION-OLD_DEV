@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
 import {
+    mockPurchaseQuotes,
     mockPurchaseOrders,
-    mockPurchaseInvoices,
+    mockInvoices,
     mockInventory,
     getSuppliers,
-    savePurchaseInvoices,
+    savePurchaseOrders,
     getFooters
 } from '../mockData';
-import { PurchaseInvoice } from '../types';
+import { PurchaseOrder } from '../types';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -17,22 +18,38 @@ import {
     FileText,
     ChevronRight,
     CheckCircle2,
+    History,
+    UserPlus,
+    Clock,
+    DollarSign,
     Plus,
     Trash2,
     Copy,
+    Info,
     User,
+    MapPin,
     X,
     Search,
+    MoreVertical,
+    Settings,
     AlertTriangle,
     Package,
+    ArrowLeft,
     Calendar,
+    Layers,
+    Calculator,
     Save,
+    Send,
+    Loader2,
     ChevronDown,
     ChevronUp,
     Hash,
-    Briefcase
+    Briefcase,
+    Image as ImageIcon
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/shared/Tooltip";
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, readOnly }: any) => (
     <div className="space-y-2">
@@ -82,52 +99,52 @@ const TextareaField = ({ label, value, onChange, placeholder, rows = 3 }: any) =
     </div>
 );
 
-const NewPurchaseInvoiceView = () => {
+const NewPurchaseOrderView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
     const isEditing = Boolean(id);
 
     const [issueDate, setIssueDate] = useState('');
-    const [dueDate, setDueDate] = useState('');
     const [supplier, setSupplier] = useState('');
     const [currency, setCurrency] = useState('ZMW');
     const [billingAddress, setBillingAddress] = useState('');
     const [description, setDescription] = useState('');
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
+    const [status, setStatus] = useState('Ordered');
     const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [showOptionsArea, setShowOptionsArea] = useState(false);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         columnLineNumber: true,
         customTitle: false,
-        customTitleValue: 'Purchase Invoice',
+        customTitleValue: 'Purchase Order',
         footers: false,
         footerValue: 'Terms & Conditions apply.'
     });
 
     const getNextReference = () => {
-        const refs = mockPurchaseInvoices
-            .map(i => i.reference)
-            .filter(ref => ref && ref.startsWith('PI-'))
+        const refs = mockPurchaseOrders
+            .map(o => o.reference)
+            .filter(ref => ref && ref.startsWith('PO-'))
             .map(ref => parseInt(ref.split('-')[1]) || 0);
 
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1001;
-        return `PI-${nextNum.toString().padStart(4, '0')}`;
+        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1005;
+        return `PO-${nextNum.toString().padStart(4, '0')}`;
     };
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
         const copyFromId = searchParams.get('copyFrom');
         if (id || copyFromId) {
-            const invoiceId = id || copyFromId;
-            const sourceInvoice = mockPurchaseInvoices.find(i => i.id === invoiceId);
-            const sourceOrder = !sourceInvoice ? mockPurchaseOrders.find(o => o.id === invoiceId) : null;
-            const doc = sourceInvoice || sourceOrder;
+            const orderId = id || copyFromId;
+            const sourceOrder = mockPurchaseOrders.find(o => o.id === orderId);
+            const sourceQuote = !sourceOrder ? mockPurchaseQuotes.find(q => q.id === orderId) : null;
+            const doc = sourceOrder || sourceQuote;
 
             if (doc) {
                 setIssueDate(new Date().toISOString().split('T')[0]);
-                setDueDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
                 setSupplier(doc.supplier);
                 setCurrency(doc.currency || 'ZMW');
                 setBillingAddress((doc as any).billingAddress || getSuppliers().find(s => s.name === doc.supplier)?.billingAddress || '');
@@ -139,10 +156,22 @@ const NewPurchaseInvoiceView = () => {
                     setUseManualRef(false);
                 }
                 setDescription(doc.description || '');
+                setStatus((doc as any).status || 'Ordered');
                 
+                if (doc.options) {
+                    setOptions({
+                        amountsAreTaxInclusive: doc.options.amountsAreTaxInclusive || false,
+                        columnLineNumber: doc.options.columnLineNumber !== false,
+                        customTitle: doc.options.customTitle || false,
+                        customTitleValue: doc.options.customTitleValue || 'Purchase Order',
+                        footers: doc.options.footers || false,
+                        footerValue: doc.options.footerValue || 'Terms & Conditions apply.'
+                    });
+                }
+
                 const itemsToSet = doc.items && doc.items.length > 0
                     ? doc.items
-                    : [{ id: Date.now(), item: 'General Item', description: doc.description || '', qty: 1, unitPrice: (doc as any).invoiceAmount || (doc as any).amount || 0, discount: '', taxCode: 'No tax' }];
+                    : [{ id: Date.now(), item: 'General Item', description: doc.description || '', qty: 1, unitPrice: (doc as any).amount || 0, discount: '', taxCode: 'No tax' }];
 
                 setItems(itemsToSet.map(i => ({
                     id: i.id || Date.now() + Math.random(),
@@ -156,14 +185,22 @@ const NewPurchaseInvoiceView = () => {
             }
         } else {
             setIssueDate(new Date().toISOString().split('T')[0]);
-            setDueDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
             setSupplier('');
             setCurrency('ZMW');
             setBillingAddress('');
             setReference(getNextReference());
             setUseManualRef(false);
             setDescription('');
+            setStatus('Ordered');
             setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            setOptions({
+                amountsAreTaxInclusive: false,
+                columnLineNumber: true,
+                customTitle: false,
+                customTitleValue: 'Purchase Order',
+                footers: false,
+                footerValue: 'Terms & Conditions apply.'
+            });
         }
     }, [id, location.search]);
 
@@ -190,32 +227,31 @@ const NewPurchaseInvoiceView = () => {
     }, [items, options]);
 
     const handleSave = async () => {
-        const newInvoice: PurchaseInvoice = {
-            id: isEditing ? id! : `PI-${Date.now()}`,
-            issueDate: issueDate.split('-').reverse().join('.'),
-            dueDate: dueDate.split('-').reverse().join('.'),
+        const newOrder: PurchaseOrder = {
+            id: isEditing ? id! : `PO-${Date.now()}`,
+            orderDate: issueDate.split('-').reverse().join('.'),
             reference: reference || getNextReference(),
             supplier: supplier,
             description: description,
             currency: currency,
-            invoiceAmount: calculations.grandTotal,
-            balanceDue: calculations.grandTotal,
-            status: 'Coming due',
+            amount: calculations.grandTotal,
+            status: status,
             billingAddress: billingAddress,
             timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) }))
+            items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) })),
+            options: options
         };
 
         if (isEditing) {
-            const index = mockPurchaseInvoices.findIndex(inv => inv.id === id);
-            if (index !== -1) mockPurchaseInvoices[index] = newInvoice;
+            const index = mockPurchaseOrders.findIndex(o => o.id === id);
+            if (index !== -1) mockPurchaseOrders[index] = newOrder;
         } else {
-            mockPurchaseInvoices.unshift(newInvoice);
+            mockPurchaseOrders.unshift(newOrder);
         }
 
-        savePurchaseInvoices(mockPurchaseInvoices);
+        savePurchaseOrders(mockPurchaseOrders);
         window.dispatchEvent(new Event('storage'));
-        navigate('/purchase-invoices');
+        navigate('/purchase-orders');
     };
 
     return (
@@ -223,14 +259,14 @@ const NewPurchaseInvoiceView = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
-                        <span className="cursor-pointer hover:underline" onClick={() => navigate('/purchase-invoices')}>Purchase Invoices</span>
+                        <span className="cursor-pointer hover:underline" onClick={() => navigate('/purchase-orders')}>Purchase Orders</span>
                         <ChevronRight size={10} className="opacity-50" />
                         <span className="text-slate-400">{isEditing ? 'Edit Existing' : 'Configure New'}</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">{isEditing ? 'Modify Purchase Invoice' : 'New Purchase Invoice'}</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">{isEditing ? 'Modify Purchase Order' : 'New Purchase Order'}</h1>
                 </div>
                 <div className="flex items-center space-x-4">
-                    <button onClick={() => navigate('/purchase-invoices')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-full hover:bg-slate-50 transition-colors shadow-sm text-slate-400">
+                    <button onClick={() => navigate('/purchase-orders')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-full hover:bg-slate-50 transition-colors shadow-sm text-slate-400">
                         <X size={20} />
                     </button>
                 </div>
@@ -244,11 +280,10 @@ const NewPurchaseInvoiceView = () => {
                                 <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-500">
                                     <FileText size={20} />
                                 </div>
-                                <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Details</h2>
+                                <h2 className="text-lg font-black text-slate-800 tracking-tight">Basic Information</h2>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                                <InputField label="Issue Date" type="date" value={issueDate} onChange={(e: any) => setIssueDate(e.target.value)} Icon={Calendar} />
-                                <InputField label="Due Date" type="date" value={dueDate} onChange={(e: any) => setDueDate(e.target.value)} Icon={Calendar} />
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1fr_1fr_1.6fr] gap-8">
+                                <InputField label="Order Date" type="date" value={issueDate} onChange={(e: any) => setIssueDate(e.target.value)} Icon={Calendar} />
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Reference</label>
                                     <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:border-indigo-500 transition-all">
@@ -270,7 +305,7 @@ const NewPurchaseInvoiceView = () => {
                                         />
                                     </div>
                                 </div>
-                                <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="General description..." Icon={Briefcase} />
+                                <InputField label="Overall Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="Main purpose of this order..." Icon={Briefcase} />
                             </div>
                         </div>
 
@@ -279,7 +314,7 @@ const NewPurchaseInvoiceView = () => {
                                 <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500">
                                     <User size={20} />
                                 </div>
-                                <h2 className="text-lg font-black text-slate-800 tracking-tight">Supplier Selection</h2>
+                                <h2 className="text-lg font-black text-slate-800 tracking-tight">Supplier & Logistics</h2>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-6">
@@ -306,7 +341,7 @@ const NewPurchaseInvoiceView = () => {
                                     <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-500">
                                         <Package size={20} />
                                     </div>
-                                    <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Line Items</h2>
+                                    <h2 className="text-lg font-black text-slate-800 tracking-tight">Order Line Items</h2>
                                 </div>
                                 <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
@@ -418,7 +453,7 @@ const NewPurchaseInvoiceView = () => {
                                     </tbody>
                                 </table>
                                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end pr-24">
-                                    <div className="w-full max-sm space-y-2">
+                                    <div className="w-full max-w-sm space-y-2">
                                         <div className="flex justify-end items-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] gap-8">
                                             <span>Subtotal ({currency})</span>
                                             <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">
@@ -431,7 +466,7 @@ const NewPurchaseInvoiceView = () => {
                                         </div>
                                         <div className="flex justify-end items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 mt-4 h-16 gap-x-6">
                                             <div className="flex-1">
-                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payable</p>
+                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payment</p>
                                             </div>
                                             <h2 className="text-xl font-medium text-slate-900 tracking-tight tabular-nums flex items-baseline">
                                                 <span className="text-xs font-medium text-indigo-400 mr-2 uppercase">{currency}</span>
@@ -443,11 +478,82 @@ const NewPurchaseInvoiceView = () => {
                             </div>
                         </div>
 
+                        {/* Options Area */}
+                        <div className="space-y-6 pt-6 border-t border-slate-50 text-left">
+                            <div
+                                onClick={() => setShowOptionsArea(!showOptionsArea)}
+                                className="flex items-center justify-between group cursor-pointer hover:bg-slate-50/50 p-2 -m-2 rounded-2xl transition-all"
+                            >
+                                <div className="flex items-center space-x-4">
+                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500 group-hover:bg-amber-100 transition-colors">
+                                        <Settings size={20} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-black text-slate-800 tracking-tight">Document Options</h2>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{showOptionsArea ? 'Hide configuration' : 'Configure procurement settings'}</p>
+                                    </div>
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-amber-600 group-hover:bg-amber-100/50 transition-all">
+                                    <ChevronDown size={20} className={cn("transition-transform duration-300", showOptionsArea ? "rotate-180" : "")} />
+                                </div>
+                            </div>
+
+                            {showOptionsArea && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-500">
+                                    {([
+                                        ['Tax Inclusive', 'amountsAreTaxInclusive'],
+                                        ['Line Numbers', 'columnLineNumber'],
+                                        ['Custom Title', 'customTitle'],
+                                        ['Footers', 'footers']
+                                    ] as const).map(([label, key]) => (
+                                        <div key={key} className="space-y-3">
+                                            <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
+                                                <div className="relative flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={(options as any)[key]}
+                                                        onChange={(e) => setOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 transition-all cursor-pointer"
+                                                    />
+                                                </div>
+                                                <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight">{label}</span>
+                                            </label>
+                                            {key === 'customTitle' && options.customTitle && (
+                                                <div className="flex items-center space-x-2 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                    <input
+                                                        type="text"
+                                                        value={options.customTitleValue}
+                                                        onChange={(e) => setOptions(prev => ({ ...prev, customTitleValue: e.target.value }))}
+                                                        placeholder="e.g. Purchase Order"
+                                                        className="w-full bg-indigo-50/50 border border-indigo-100/50 rounded-xl px-4 py-2 text-[11px] font-bold text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 placeholder:text-indigo-300/50"
+                                                    />
+                                                </div>
+                                            )}
+                                            {key === 'footers' && options.footers && (
+                                                <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                    <select
+                                                        onChange={(e) => {
+                                                            const footer = getFooters().find(f => f.id === e.target.value);
+                                                            if (footer) setOptions(prev => ({ ...prev, footerValue: footer.content }));
+                                                        }}
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
+                                                    >
+                                                        <option value="">-- Choose template --</option>
+                                                        {getFooters().map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
                         <div className="flex justify-end space-x-4 pt-8">
-                            <Button variant="outline" onClick={() => navigate('/purchase-invoices')} className="rounded-2xl px-8 py-4">Cancel</Button>
+                            <Button variant="outline" onClick={() => navigate('/purchase-orders')} className="rounded-2xl px-8 py-4">Cancel</Button>
                             <Button variant="primary" onClick={handleSave} className="rounded-2xl px-12 py-4 bg-indigo-600 hover:bg-indigo-700 font-bold shadow-lg shadow-indigo-200">
                                 <Save size={18} className="mr-2" />
-                                {isEditing ? 'Update Invoice' : 'Save Invoice'}
+                                {isEditing ? 'Update Order' : 'Save Order'}
                             </Button>
                         </div>
                     </div>
@@ -457,4 +563,4 @@ const NewPurchaseInvoiceView = () => {
     );
 };
 
-export default NewPurchaseInvoiceView;
+export default NewPurchaseOrderView;

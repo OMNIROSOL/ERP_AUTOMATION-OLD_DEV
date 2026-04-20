@@ -84,7 +84,7 @@ const EditSupplierView = () => {
         if (existingSupplier) {
             setName(existingSupplier.name || '');
             setCurrency(existingSupplier.currency || 'ZMW');
-            setAddress(existingSupplier.address || '');
+            setAddress(existingSupplier.billingAddress || (existingSupplier as any).address || '');
             setEmail(existingSupplier.email || '');
             setDivision(existingSupplier.division || 'General');
             setFileName(existingSupplier.documentation || 'No file chosen');
@@ -262,7 +262,7 @@ const EditSupplierView = () => {
                                     name: name || 'Unnamed Supplier',
                                     division: division,
                                     email: email,
-                                    address: address,
+                                    billingAddress: address,
                                     currency: currency,
                                     documentation: fileName !== 'No file chosen' ? fileName : undefined,
                                     inactive: inactive

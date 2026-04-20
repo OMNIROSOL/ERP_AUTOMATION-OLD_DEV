@@ -21,7 +21,7 @@ const PurchaseInvoicesView = () => {
         let result = getPurchaseInvoices();
 
         if (supplierName) {
-            result = result.filter(inv => inv.supplier.toLowerCase() === supplierName.toLowerCase());
+            result = result.filter(inv => (inv.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
         }
 
         const query = searchQuery.toLowerCase();

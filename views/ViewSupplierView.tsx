@@ -206,7 +206,7 @@ const ViewSupplierView = () => {
                                 </div>
                                 <div className="flex mt-3">
                                     <span className="w-32 text-gray-500">Address:</span>
-                                    <span className="font-medium whitespace-pre-wrap">{supplier.address || '-'}</span>
+                                    <span className="font-medium whitespace-pre-wrap">{supplier.billingAddress || (supplier as any).address || '-'}</span>
                                 </div>
                             </div>
                         </div>

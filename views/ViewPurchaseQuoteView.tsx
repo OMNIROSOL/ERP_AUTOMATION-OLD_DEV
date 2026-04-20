@@ -262,6 +262,11 @@ const ViewPurchaseQuoteView = () => {
                                 <div>
                                     <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Supplier</h3>
                                     <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{quote.supplier}</p>
+                                    {quote.billingAddress && (
+                                        <div className="text-[12px] text-slate-500 leading-relaxed whitespace-pre-wrap">
+                                            {quote.billingAddress}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="border-l border-gray-100 pl-12">
                                     <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Quote Info</h3>

@@ -241,7 +241,7 @@ const NewSupplierView = () => {
                                     status: 'Paid',
                                     balance: 0,
                                     email: email,
-                                    address: address,
+                                    billingAddress: address,
                                     currency: currency.split(' ')[0],
                                     purchaseOrders: 0,
                                     purchaseInvoices: 0,

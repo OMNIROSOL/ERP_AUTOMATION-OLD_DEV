@@ -104,9 +104,10 @@ export const getInvoices = (): Invoice[] => {
 export const mockInvoices = getInvoices();
 
 export const saveInvoices = (invoices: Invoice[]) => {
-  localStorage.setItem('invoices_data', JSON.stringify(invoices));
+  const dataToSave = [...invoices];
+  localStorage.setItem('invoices_data', JSON.stringify(dataToSave));
   mockInvoices.length = 0;
-  mockInvoices.push(...invoices);
+  mockInvoices.push(...dataToSave);
   window.dispatchEvent(new Event('invoices_updated'));
 };
 
@@ -176,7 +177,11 @@ export const getSalesQuotes = (): SalesQuote[] => {
 export const mockSalesQuotes = getSalesQuotes();
 
 export const saveSalesQuotes = (quotes: SalesQuote[]) => {
-  localStorage.setItem('sales_quotes_data', JSON.stringify(quotes));
+  const dataToSave = [...quotes];
+  localStorage.setItem('sales_quotes_data', JSON.stringify(dataToSave));
+  mockSalesQuotes.length = 0;
+  mockSalesQuotes.push(...dataToSave);
+  window.dispatchEvent(new Event('sales_quotes_updated'));
 };
 
 export const mockAccounts: Account[] = [
@@ -229,7 +234,7 @@ export const getReceipts = (): Receipt[] => {
   try {
     const saved = localStorage.getItem('receipts_data');
     if (saved) return JSON.parse(saved);
-  } catch (e) {}
+  } catch (e) { }
   return [
     {
       id: '1', date: '21.02.2026', reference: 'REC-1001', paidBy: 'Customer', paidByContact: 'STALLION MOTORS LIMITED NDOLA', description: 'Fuel Payment', receivedIn: 'Account', receivedInAccount: 'CASH AT BANK', amount: 5000.00, currency: 'ZMW', status: 'Completed', timestamp: '21.02.2026 10:30:00 AM',
@@ -836,18 +841,46 @@ export const mockTaxCodes: TaxCode[] = [
   { id: 'tax-exempt', name: 'Exempt', rate: 0, description: 'Non-vatable supplies' }
 ];
 
-export const getSuppliers = (): Supplier[] => {
+export function getSuppliers(): Supplier[] {
+  let list: Supplier[] = [];
   try {
     const saved = localStorage.getItem('suppliers_data');
     if (saved) {
       const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) ? parsed : [];
+      list = Array.isArray(parsed) ? parsed : [];
+    } else {
+      list = [
+        { id: 'sup1', name: 'AUTO SPARES LTD', code: 'SUP001', status: 'Paid', balance: 0, currency: 'ZMW', billingAddress: 'Plot 45, Independence Avenue, Kitwe, Zambia', tpin: '1000123456' },
+        { id: 'sup2', name: 'TRUCK TECH GLOBAL', code: 'SUP002', status: 'Unpaid', balance: 5000, currency: 'USD', billingAddress: 'South Industrial Area, Johannesburg, South Africa', tpin: '999888777' },
+        { id: 'sup3', name: 'LUBRICANTS DIRECT', code: 'SUP003', status: 'Paid', balance: 0, currency: 'ZMW', billingAddress: 'Warehouse 12, Heavy Industrial Area, Ndola', tpin: '1000555666' }
+      ];
     }
   } catch (e) {
     console.error('Error loading suppliers:', e);
+    return [];
   }
-  return [];
-};
+
+  // Fetch all related documents
+  const quotes = getPurchaseQuotes();
+  const orders = getPurchaseOrders();
+  const invoices = getPurchaseInvoices();
+  const debitNotes = getDebitNotes();
+  const grns = getGoodsReceivedNotes();
+
+  return list.map(s => {
+    const sName = (s.name || '').trim().toLowerCase();
+    const supplierQuotes = quotes.filter(q => (q.supplier || '').trim().toLowerCase() === sName);
+    
+    return {
+      ...s,
+      purchaseQuotes: supplierQuotes.filter(q => q.status !== 'Accepted' && q.status !== 'Rejected').length,
+      purchaseOrders: orders.filter(o => (o.supplier || '').trim().toLowerCase() === sName).length,
+      purchaseInvoices: invoices.filter(i => (i.supplier || '').trim().toLowerCase() === sName).length,
+      debitNotes: debitNotes.filter(d => (d.supplier || '').trim().toLowerCase() === sName).length,
+      goodsReceipts: grns.filter(g => (g.supplier || '').trim().toLowerCase() === sName).length
+    };
+  });
+}
 
 export const saveSuppliers = (suppliers: Supplier[]) => {
   localStorage.setItem('suppliers_data', JSON.stringify(suppliers));
@@ -856,24 +889,25 @@ export const saveSuppliers = (suppliers: Supplier[]) => {
 
 export const mockSuppliers = getSuppliers();
 
-export const getPurchaseOrders = (): PurchaseOrder[] => {
+export function getPurchaseOrders(): PurchaseOrder[] {
   try {
     const saved = localStorage.getItem('purchase_orders_data');
     if (saved) return JSON.parse(saved);
-  } catch (e) {}
+  } catch (e) { }
   return [];
-};
+}
 
 export const mockPurchaseOrders = getPurchaseOrders();
 
 export const savePurchaseOrders = (orders: PurchaseOrder[]) => {
-  localStorage.setItem('purchase_orders_data', JSON.stringify(orders));
+  const dataToSave = [...orders];
+  localStorage.setItem('purchase_orders_data', JSON.stringify(dataToSave));
   mockPurchaseOrders.length = 0;
-  mockPurchaseOrders.push(...orders);
+  mockPurchaseOrders.push(...dataToSave);
   window.dispatchEvent(new Event('purchase_orders_updated'));
 };
 
-export const getPurchaseQuotes = (): PurchaseQuote[] => {
+export function getPurchaseQuotes(): PurchaseQuote[] {
   try {
     const saved = localStorage.getItem('purchase_quotes_data');
     if (saved) return JSON.parse(saved);
@@ -881,65 +915,69 @@ export const getPurchaseQuotes = (): PurchaseQuote[] => {
     console.error('Error loading purchase quotes:', e);
   }
   return [];
-};
+}
 
 export const mockPurchaseQuotes = getPurchaseQuotes();
 
 export const savePurchaseQuotes = (quotes: PurchaseQuote[]) => {
-  localStorage.setItem('purchase_quotes_data', JSON.stringify(quotes));
+  const quotesToSave = [...quotes];
+  localStorage.setItem('purchase_quotes_data', JSON.stringify(quotesToSave));
   mockPurchaseQuotes.length = 0;
-  mockPurchaseQuotes.push(...quotes);
+  mockPurchaseQuotes.push(...quotesToSave);
   window.dispatchEvent(new Event('purchase_quotes_updated'));
 };
 
-export const getPurchaseInvoices = (): PurchaseInvoice[] => {
+export function getPurchaseInvoices(): PurchaseInvoice[] {
   try {
     const saved = localStorage.getItem('purchase_invoices_data');
     if (saved) return JSON.parse(saved);
-  } catch (e) {}
+  } catch (e) { }
   return [];
-};
+}
 
 export const mockPurchaseInvoices = getPurchaseInvoices();
 
 export const savePurchaseInvoices = (invoices: PurchaseInvoice[]) => {
-  localStorage.setItem('purchase_invoices_data', JSON.stringify(invoices));
+  const dataToSave = [...invoices];
+  localStorage.setItem('purchase_invoices_data', JSON.stringify(dataToSave));
   mockPurchaseInvoices.length = 0;
-  mockPurchaseInvoices.push(...invoices);
+  mockPurchaseInvoices.push(...dataToSave);
   window.dispatchEvent(new Event('purchase_invoices_updated'));
 };
 
-export const getDebitNotes = (): DebitNote[] => {
+export function getDebitNotes(): DebitNote[] {
   try {
     const saved = localStorage.getItem('debit_notes_data');
     if (saved) return JSON.parse(saved);
-  } catch (e) {}
+  } catch (e) { }
   return [];
-};
+}
 
 export const mockDebitNotes = getDebitNotes();
 
 export const saveDebitNotes = (notes: DebitNote[]) => {
-  localStorage.setItem('debit_notes_data', JSON.stringify(notes));
+  const dataToSave = [...notes];
+  localStorage.setItem('debit_notes_data', JSON.stringify(dataToSave));
   mockDebitNotes.length = 0;
-  mockDebitNotes.push(...notes);
+  mockDebitNotes.push(...dataToSave);
   window.dispatchEvent(new Event('debit_notes_updated'));
 };
 
-export const getGoodsReceivedNotes = (): GoodsReceivedNote[] => {
+export function getGoodsReceivedNotes(): GoodsReceivedNote[] {
   try {
     const saved = localStorage.getItem('grn_data');
     if (saved) return JSON.parse(saved);
-  } catch (e) {}
+  } catch (e) { }
   return [];
-};
+}
 
 export const mockGoodsReceivedNotes = getGoodsReceivedNotes();
 
 export const saveGoodsReceivedNotes = (grns: GoodsReceivedNote[]) => {
-  localStorage.setItem('grn_data', JSON.stringify(grns));
+  const dataToSave = [...grns];
+  localStorage.setItem('grn_data', JSON.stringify(dataToSave));
   mockGoodsReceivedNotes.length = 0;
-  mockGoodsReceivedNotes.push(...grns);
+  mockGoodsReceivedNotes.push(...dataToSave);
   window.dispatchEvent(new Event('grn_updated'));
 };
 
@@ -1048,20 +1086,20 @@ export const getRoleById = (id: string): RoleDefinition | undefined => {
 };
 
 const defaultFooters: DocumentFooter[] = [
-  { 
-    id: 'f1', 
-    name: 'Standard Corporate', 
-    content: 'Thank you for your business.\n\nBank Account: Corporate Bank\nAccount Number: 123456789\nSwift: CORPZMXXX' 
+  {
+    id: 'f1',
+    name: 'Standard Corporate',
+    content: 'Thank you for your business.\n\nBank Account: Corporate Bank\nAccount Number: 123456789\nSwift: CORPZMXXX'
   },
-  { 
-    id: 'f2', 
-    name: 'Cash Payment', 
-    content: 'Received with thanks.\nPlease keep this document for your records.' 
+  {
+    id: 'f2',
+    name: 'Cash Payment',
+    content: 'Received with thanks.\nPlease keep this document for your records.'
   },
-  { 
-    id: 'f3', 
-    name: 'Strict Terms', 
-    content: 'All goods remain the property of the company until paid in full.\nLate payments attract a 5% monthly fee.' 
+  {
+    id: 'f3',
+    name: 'Strict Terms',
+    content: 'All goods remain the property of the company until paid in full.\nLate payments attract a 5% monthly fee.'
   }
 ];
 

@@ -127,7 +127,7 @@ const EditPurchaseQuoteView = () => {
     const [issueDate, setIssueDate] = useState('');
     const [supplier, setSupplier] = useState('');
     const [currency, setCurrency] = useState('ZMW');
-    const [billingAddress, setBillingAddress] = useState('');
+    const [address, setAddress] = useState('');
     const [description, setDescription] = useState('');
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
@@ -174,7 +174,7 @@ const EditPurchaseQuoteView = () => {
                 setIssueDate(quote.issueDate.split('.').reverse().join('-'));
                 setSupplier(quote.supplier);
                 setCurrency(quote.currency);
-                setBillingAddress(quote.billingAddress || '');
+                setAddress(quote.billingAddress || '');
                 if (copyFromId) {
                     setReference(getNextReference());
                     setUseManualRef(false);
@@ -314,8 +314,8 @@ const EditPurchaseQuoteView = () => {
             currency: currency,
             amount: calculations.grandTotal,
             status: status as any,
-            billingAddress: billingAddress,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
+            billingAddress: address,
+            timestamp: new Date().toISOString(),
             items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) })),
             options: options
         };
@@ -383,7 +383,7 @@ const EditPurchaseQuoteView = () => {
                             const selected = getSuppliers().find(s => s.name === e.target.value);
                             if (selected) {
                                 setCurrency(selected.currency || 'ZMW');
-                                setBillingAddress(selected.billingAddress || '');
+                                setAddress(selected.billingAddress || (selected as any).address || '');
                             }
                         }} Icon={User}>
                             <option value="">Select Supplier...</option>
@@ -392,10 +392,10 @@ const EditPurchaseQuoteView = () => {
                         <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="Summary of request..." Icon={Briefcase} />
                     </div>
                     <div className="space-y-2 text-left">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Billing Address</label>
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Address</label>
                         <textarea
-                            value={billingAddress}
-                            onChange={(e) => setBillingAddress(e.target.value)}
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
                             rows={4}
                             placeholder="Supplier address details..."
                             className="w-full bg-slate-50 border border-slate-200 rounded-[24px] px-5 py-4 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none"

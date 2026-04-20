@@ -21,8 +21,8 @@ const PurchaseHistoryView = () => {
         window.addEventListener('purchase_quotes_updated', handleRefresh);
         window.addEventListener('purchase_orders_updated', handleRefresh);
         window.addEventListener('purchase_invoices_updated', handleRefresh);
-        window.addEventListener('grn_updated', handleRefresh);
         window.addEventListener('debit_notes_updated', handleRefresh);
+        window.addEventListener('grn_updated', handleRefresh);
         
         return () => {
             window.removeEventListener('storage', handleRefresh);
@@ -52,7 +52,7 @@ const PurchaseHistoryView = () => {
                 date: q.issueDate,
                 supplier: q.supplier,
                 amount: q.amount,
-                type: 'Purchase Quote',
+                type: 'Quote',
                 reference: q.reference || '—',
                 status: q.status,
                 timestamp: q.timestamp || '—'
@@ -65,7 +65,7 @@ const PurchaseHistoryView = () => {
                 date: o.orderDate,
                 supplier: o.supplier,
                 amount: o.amount,
-                type: 'Purchase Order',
+                type: 'Order',
                 reference: o.reference || '—',
                 status: o.status,
                 timestamp: o.timestamp || '—'
@@ -78,7 +78,7 @@ const PurchaseHistoryView = () => {
                 date: i.issueDate,
                 supplier: i.supplier,
                 amount: i.invoiceAmount,
-                type: 'Invoiced',
+                type: 'Invoice',
                 reference: i.reference || '—',
                 status: i.status,
                 dueDate: i.dueDate,
@@ -117,7 +117,7 @@ const PurchaseHistoryView = () => {
     }, [refreshTrigger]);
 
     const getComputedStatus = (item: any): string => {
-        if (item.type !== 'Invoiced') return item.status || '—';
+        if (item.type !== 'Invoice') return item.status || '—';
         const balance = item.balanceDue ?? item.amount;
         if (balance === 0) return 'Paid in full';
         if (!item.dueDate) return 'Unpaid';
@@ -132,9 +132,10 @@ const PurchaseHistoryView = () => {
     const filteredHistory = useMemo(() => {
         const result = allHistory.filter(item => {
             const itemStatus = getComputedStatus(item);
+            const query = searchQuery.toLowerCase();
             const matchesSearch =
-                item.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.supplier.toLowerCase().includes(searchQuery.toLowerCase());
+                (item.reference || '').toLowerCase().includes(query) ||
+                (item.supplier || '').toLowerCase().includes(query);
             const matchesType = typeFilter === 'All' || item.type === typeFilter;
             const matchesStatus = statusFilter === 'All' || itemStatus === statusFilter;
             return matchesSearch && matchesType && matchesStatus;
@@ -147,6 +148,20 @@ const PurchaseHistoryView = () => {
             if (sortColumn === 'date') {
                 valA = (valA || '').split('.').reverse().join('-');
                 valB = (valB || '').split('.').reverse().join('-');
+            } else if (sortColumn === 'timestamp') {
+                const getSortTime = (ts: string) => {
+                    if (!ts || ts === '—') return 0;
+                    const d = new Date(ts);
+                    if (!isNaN(d.getTime())) return d.getTime();
+                    if (ts.includes('.')) {
+                        const pts = ts.split(' ');
+                        const dpts = pts[0].split('.');
+                        return new Date(`${dpts[2]}-${dpts[1]}-${dpts[0]} ${pts[1]} ${pts[2] || ''}`).getTime() || 0;
+                    }
+                    return 0;
+                };
+                valA = getSortTime(valA);
+                valB = getSortTime(valB);
             }
 
             if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
@@ -222,10 +237,10 @@ const PurchaseHistoryView = () => {
                             onChange={(e) => setTypeFilter(e.target.value)}
                             className="bg-white border border-gray-300 text-[11px] font-black uppercase tracking-wider rounded-md px-4 py-2 shadow-sm"
                         >
-                            <option value="All">All Types</option>
-                            <option value="Purchase Quote">Purchase Quote</option>
-                            <option value="Purchase Order">Purchase Order</option>
-                            <option value="Invoiced">Invoiced</option>
+                             <option value="All">All Types</option>
+                            <option value="Quote">Purchase Quote</option>
+                            <option value="Order">Order</option>
+                            <option value="Invoice">Invoice</option>
                             <option value="GRN">GRN</option>
                             <option value="Debit Note">Debit Note</option>
                         </select>
@@ -260,7 +275,9 @@ const PurchaseHistoryView = () => {
                                 Amount
                             </th>
                             <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
-                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Timestamp</th>
+                            <th onClick={() => handleSort('timestamp')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
+                                Timestamp
+                            </th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -270,10 +287,12 @@ const PurchaseHistoryView = () => {
                                     <div className="flex justify-center gap-4">
                                         <button 
                                             onClick={() => {
-                                                if (item.type === 'Purchase Quote') navigate(`/purchase-quotes/view/${item.id}`);
-                                                else if (item.type === 'Purchase Order') navigate(`/purchase-orders/supplier/${item.supplier}`);
-                                                else if (item.type === 'Invoiced') navigate(`/purchase-invoices/supplier/${item.supplier}`);
-                                                else if (item.type === 'GRN') navigate(`/goods-received-notes/supplier/${item.supplier}`);
+                                                const sName = encodeURIComponent(item.supplier || '');
+                                                if (item.type === 'Quote') navigate(`/purchase-quotes/view/${item.id}`);
+                                                else if (item.type === 'Order') navigate(`/purchase-orders/supplier/${sName}`);
+                                                else if (item.type === 'Invoice') navigate(`/purchase-invoices/supplier/${sName}`);
+                                                else if (item.type === 'GRN') navigate(`/goods-received-notes/supplier/${sName}`);
+                                                else if (item.type === 'Debit Note') navigate(`/debit-notes/supplier/${sName}`);
                                             }}
                                             className="text-slate-400 hover:text-indigo-600 transition-colors"
                                             title="View Details"
@@ -327,11 +346,11 @@ const PurchaseHistoryView = () => {
                                 </td>
                                 <td className="px-6 py-4 text-[13px] font-medium text-slate-700">{item.date}</td>
                                 <td className="px-6 py-4">
-                                    <span className={cn(
+                                     <span className={cn(
                                         "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border",
-                                        item.type === 'Purchase Quote' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                        item.type === 'Purchase Order' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                        item.type === 'Invoiced' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                        item.type === 'Quote' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                        item.type === 'Order' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                        item.type === 'Invoice' ? 'bg-purple-50 text-purple-600 border-purple-100' :
                                         item.type === 'GRN' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                         item.type === 'Debit Note' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                                         'bg-slate-50 text-slate-600 border-slate-100'
@@ -354,7 +373,20 @@ const PurchaseHistoryView = () => {
                                         {getComputedStatus(item)}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 text-[11px] text-slate-400">{item.timestamp}</td>
+                                <td className="px-6 py-4 text-[11px] text-slate-400 font-medium tracking-tight whitespace-nowrap">
+                                    {(() => {
+                                        if (!item.timestamp || item.timestamp === '—') return '—';
+                                        const d = new Date(item.timestamp);
+                                        if (!isNaN(d.getTime())) {
+                                            return d.toLocaleString('en-GB', {
+                                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                                hour12: true
+                                            }).replace(/\//g, '.').replace(',', '').toUpperCase();
+                                        }
+                                        return item.timestamp;
+                                    })()}
+                                </td>
                             </tr>
                         ))}
                     </tbody>

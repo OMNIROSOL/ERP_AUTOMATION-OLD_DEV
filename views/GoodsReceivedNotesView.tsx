@@ -22,7 +22,7 @@ const GoodsReceivedNotesView = () => {
         let result = [...mockGoodsReceivedNotes];
 
         if (supplierName) {
-            result = result.filter(grn => grn.supplier.toLowerCase() === supplierName.toLowerCase());
+            result = result.filter(grn => (grn.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
         }
 
         const query = searchQuery.toLowerCase();

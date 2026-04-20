@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockPurchaseQuotes, mockSalesOrders, getDeliveryNotes, mockReceipts } from '../mockData';
+import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockPurchaseQuotes, mockPurchaseOrders, mockSalesOrders, getDeliveryNotes, mockReceipts } from '../mockData';
 import { Customer } from '../types';
 import { Printer, ChevronLeft } from 'lucide-react';
 
@@ -22,6 +22,7 @@ const BatchPrintView = () => {
     const isDeliveryNotes = type === 'delivery-notes' || location.pathname.includes('/delivery-notes/');
     const isReceipts = type === 'receipts' || location.pathname.includes('/receipts/');
     const isPurchaseQuotes = type === 'purchase-quotes' || location.pathname.includes('/purchase-quotes/');
+    const isPurchaseOrders = type === 'purchase-orders' || location.pathname.includes('/purchase-orders/');
 
     const allCustomers = useMemo(() => getCustomers(), []);
     const allSuppliers = useMemo(() => getSuppliers(), []);
@@ -173,8 +174,12 @@ const BatchPrintView = () => {
             return mockPurchaseQuotes.filter(q => selectedIds.includes(q.id));
         }
 
+        if (isPurchaseOrders) {
+            return mockPurchaseOrders.filter(o => selectedIds.includes(o.id));
+        }
+
         return [];
-    }, [allCustomers, selectedIds, isCustomers, isSalesQuotes, isPurchaseQuotes, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
+    }, [allCustomers, selectedIds, isCustomers, isSalesQuotes, isPurchaseQuotes, isPurchaseOrders, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
 
     useEffect(() => {
         if (items.length > 0) {
@@ -373,19 +378,20 @@ const BatchPrintView = () => {
 
                     const isInvoice = 'issueDate' in item && 'balanceDue' in item;
                     const isQuote = 'issueDate' in item && 'reference' in item && !isInvoice;
-                    const isPurchaseQuote = 'issueDate' in item && 'reference' in item && 'supplier' in item;
-                    const isOrder = 'orderDate' in item && 'reference' in item;
+                    const isPurchaseQuote = isQuote && 'supplier' in item;
+                    const isOrder = 'orderDate' in item && 'reference' in item && !('supplier' in item);
+                    const isPurchaseOrder = 'orderDate' in item && 'reference' in item && 'supplier' in item;
                     const isDeliveryNote = 'deliveryDate' in item && 'orderNumber' in item;
                     const isReceipt = 'paidByContact' in item && 'paymentMethod' in item;
 
-                    if (isQuote || isOrder || isInvoice || isDeliveryNote || isReceipt) {
-                        const dateLabel = isQuote || isInvoice ? 'Issue Date' : (isOrder ? 'Order Date' : (isDeliveryNote ? 'Delivery Date' : 'Receipt Date'));
-                        const dateValue = isQuote || isInvoice ? item.issueDate : (isOrder ? item.orderDate : (isDeliveryNote ? item.deliveryDate : item.date));
+                    if (isQuote || isOrder || isInvoice || isDeliveryNote || isReceipt || isPurchaseOrder) {
+                        const dateLabel = isQuote || isInvoice ? 'Issue Date' : (isOrder || isPurchaseOrder ? 'Order Date' : (isDeliveryNote ? 'Delivery Date' : 'Receipt Date'));
+                        const dateValue = isQuote || isInvoice ? item.issueDate : (isOrder || isPurchaseOrder ? item.orderDate : (isDeliveryNote ? item.deliveryDate : item.date));
 
                         const hasOptions = !!item.options;
                         const documentTitle = (hasOptions && item.options.customTitle && item.options.customTitleValue)
                             ? item.options.customTitleValue
-                            : (item.customTitle || (isPurchaseQuote ? 'Purchase Quote' : (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order'))))));
+                            : (item.customTitle || (isPurchaseQuote ? 'Purchase Quote' : (isPurchaseOrder ? 'Purchase Order' : (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order')))))));
 
                         const subTitle = isQuote ? 'OFFICIAL PROPOSAL' : (isInvoice ? 'TAX INVOICE' : (isDeliveryNote ? 'PROOF OF DELIVERY' : (isReceipt ? 'PAYMENT CONFIRMATION' : 'CONFIRMED ORDER')));
 
@@ -414,10 +420,11 @@ const BatchPrintView = () => {
                                         <div className="grid grid-cols-2 gap-12 items-start">
                                             {/* Billed To */}
                                             <div>
-                                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">{isPurchaseQuote ? 'Supplier' : 'Billed To'}</h3>
-                                                <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{isPurchaseQuote ? item.supplier : item.customer}</p>
-                                                <p className="text-slate-500 text-[11px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">{item.billingAddress || (isPurchaseQuote ? 'No address provided' : 'No billing address provided')}</p>
+                                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">{(isPurchaseQuote || isPurchaseOrder) ? 'Supplier' : 'Billed To'}</h3>
+                                                <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{(isPurchaseQuote || isPurchaseOrder) ? item.supplier : item.customer}</p>
+                                                <p className="text-slate-500 text-[11px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">{item.billingAddress || ((isPurchaseQuote || isPurchaseOrder) ? 'No address provided' : 'No billing address provided')}</p>
                                             </div>
+
 
                                             {/* Order Details */}
                                             <div className="border-l border-gray-100 pl-12">

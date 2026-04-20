@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockPurchaseQuotes, mockPurchaseOrders, savePurchaseQuotes, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
+import { mockPurchaseQuotes, mockPurchaseOrders, savePurchaseQuotes, savePurchaseOrders, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import { PurchaseQuote, ScreenPermission } from '../types';
 import { useEffect } from 'react';
 import Button from '../components/shared/Button';
@@ -35,11 +35,17 @@ const PurchaseQuotesView = () => {
         const handleUserUpdate = () => setCurrentUser(getCurrentUser());
         window.addEventListener('user_sim_updated', handleUserUpdate);
 
+        const handleQuotesUpdate = () => setRefreshTrigger(prev => prev + 1);
+        window.addEventListener('purchase_quotes_updated', handleQuotesUpdate);
+
         const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
         const screenPerm = role?.permissions.find(p => p.screenId === 'purchase-quotes');
         setPerms(screenPerm || null);
 
-        return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
+        return () => {
+            window.removeEventListener('user_sim_updated', handleUserUpdate);
+            window.removeEventListener('purchase_quotes_updated', handleQuotesUpdate);
+        };
     }, [currentUser]);
 
     React.useEffect(() => {
@@ -128,6 +134,7 @@ const PurchaseQuotesView = () => {
                     items: quote.items ? [...quote.items] : []
                 };
                 mockPurchaseOrders.unshift(newOrder);
+                savePurchaseOrders(mockPurchaseOrders);
                 savePurchaseQuotes(mockPurchaseQuotes);
                 navigate('/purchase-orders');
                 return;
@@ -174,15 +181,13 @@ const PurchaseQuotesView = () => {
     };
 
     const filteredData = useMemo(() => {
-        let result = [...mockPurchaseQuotes].filter(q => {
-            if (q.status === 'Accepted' || q.status === 'Rejected') return false;
-            return true;
-        });
-        if (supplierName) {
-            result = result.filter(q => q.supplier.toLowerCase() === supplierName.toLowerCase());
-        }
+        let result = mockPurchaseQuotes.filter(q => q.status !== 'Accepted' && q.status !== 'Rejected');
+
         if (statusFilter !== 'All') {
             result = result.filter(q => q.status === statusFilter);
+        }
+        if (supplierName) {
+            result = result.filter(q => q.supplier.toLowerCase() === supplierName.toLowerCase());
         }
         const query = searchQuery.toLowerCase();
         if (query) {
@@ -202,12 +207,27 @@ const PurchaseQuotesView = () => {
             } else if (sortColumn === 'Amount') {
                 valA = parseFloat(a.amount as any || 0);
                 valB = parseFloat(b.amount as any || 0);
+            } else if (sortColumn === 'Timestamp') {
+                const getSortDate = (ts: string) => {
+                    if (!ts) return 0;
+                    const d = new Date(ts);
+                    if (!isNaN(d.getTime())) return d.getTime();
+                    // Fallback for dotted format DD.MM.YYYY HH:MM:SS AM/PM
+                    const parts = ts.split(' ');
+                    if (parts[0].includes('.')) {
+                        const dateParts = parts[0].split('.');
+                        return new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]} ${parts[1]} ${parts[2] || ''}`).getTime() || 0;
+                    }
+                    return 0;
+                };
+                valA = getSortDate(a.timestamp || '');
+                valB = getSortDate(b.timestamp || '');
             }
             if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [searchQuery, mockPurchaseQuotes, supplierName, statusFilter, sortColumn, sortDirection]);
+    }, [searchQuery, mockPurchaseQuotes, supplierName, statusFilter, sortColumn, sortDirection, refreshTrigger]);
 
     const currencyTotals = useMemo(() => {
         const totals: Record<string, number> = {};
@@ -344,10 +364,10 @@ const PurchaseQuotesView = () => {
                     <div className="flex items-center gap-4">
                         <Badge variant={
                             isExpired ? 'danger' :
-                            displayStatus === 'Active' || displayStatus === 'Accepted' ? 'success' : 
-                            displayStatus === 'Pending Approval' ? 'warning' : 
-                            displayStatus === 'Rejected' ? 'error' : 
-                            'default'
+                                displayStatus === 'Active' || displayStatus === 'Accepted' ? 'success' :
+                                    displayStatus === 'Pending Approval' ? 'warning' :
+                                        displayStatus === 'Rejected' ? 'error' :
+                                            'default'
                         } className="text-[10px]">
                             {displayStatus.toUpperCase()}
                         </Badge>
@@ -378,12 +398,20 @@ const PurchaseQuotesView = () => {
             header: <div className="flex items-center cursor-pointer group hover:text-indigo-600 transition-colors" onClick={() => handleSort('Timestamp')}>Timestamp <SortIcon column="Timestamp" /></div>,
             className: 'whitespace-nowrap',
             accessor: (o: any) => {
-                const dateObj = o.timestamp ? new Date(o.timestamp) : null;
-                const displayVal = dateObj ? dateObj.toLocaleString('en-GB', {
-                    day: '2-digit', month: '2-digit', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit',
-                    hour12: true
-                }).replace(/\//g, '.').replace(',', '').toUpperCase() : '—';
+                let displayVal = '—';
+                if (o.timestamp) {
+                    const dateObj = new Date(o.timestamp);
+                    if (!isNaN(dateObj.getTime())) {
+                        displayVal = dateObj.toLocaleString('en-GB', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            hour: '2-digit', minute: '2-digit', second: '2-digit',
+                            hour12: true
+                        }).replace(/\//g, '.').replace(',', '').toUpperCase();
+                    } else {
+                        // Fallback for old data that might already be a formatted string
+                        displayVal = o.timestamp;
+                    }
+                }
                 return <span className="text-[10px] text-slate-400 font-medium font-sans tracking-tight whitespace-nowrap">{displayVal}</span>;
             }
         }

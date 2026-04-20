@@ -20,7 +20,7 @@ const DebitNotesView = () => {
         let result = [...mockDebitNotes];
 
         if (supplierName) {
-            result = result.filter(dn => dn.supplier.toLowerCase() === supplierName.toLowerCase());
+            result = result.filter(dn => (dn.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
         }
 
         const query = searchQuery.toLowerCase();
