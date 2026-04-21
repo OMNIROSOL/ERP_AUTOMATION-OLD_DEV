@@ -43,7 +43,7 @@ const SuppliersView = () => {
         window.addEventListener('purchase_invoices_updated', handleRefresh);
         window.addEventListener('debit_notes_updated', handleRefresh);
         window.addEventListener('grn_updated', handleRefresh);
-        
+
         return () => {
             window.removeEventListener('focus', handleRefresh);
             window.removeEventListener('storage', handleRefresh);
@@ -63,6 +63,7 @@ const SuppliersView = () => {
 
     const defaultColumns = [
         { id: 'name', label: 'Supplier Name', visible: true },
+        { id: 'code', label: 'Supplier Code', visible: true },
         { id: 'division', label: 'Division', visible: true },
         { id: 'email', label: 'Email address', visible: false },
         { id: 'address', label: 'Address', visible: false },
@@ -147,9 +148,11 @@ const SuppliersView = () => {
         sortedSuppliers.forEach(s => {
             const curCode = String(s.currency || 'ZMW').split(' ')[0] || 'ZMW';
             if (!res[curCode]) res[curCode] = { balance: 0, withholding: 0 };
-            res[curCode].balance += Number(s.balance || 0);
-            const wtVal = typeof s.withholdingTax === 'number' ? s.withholdingTax : parseFloat(String(s.withholdingTax || 0).replace(/[^-0-9.]/g, '')) || 0;
-            res[curCode].withholding += wtVal;
+            
+            const cleanVal = (v: any) => typeof v === 'number' ? v : parseFloat(String(v || 0).replace(/[^-0-9.]/g, '')) || 0;
+            
+            res[curCode].balance += cleanVal(s.balance);
+            res[curCode].withholding += cleanVal(s.withholdingTax);
         });
         return res;
     }, [sortedSuppliers]);
@@ -383,11 +386,12 @@ const SuppliersView = () => {
                                         const val = supplier[col.id];
 
                                         if (col.id === 'balance' || col.id === 'withholdingTax' || col.id === 'availableCredit') {
-                                            const symbol = supplier.currency || 'ZMW';
+                                            const symbol = (supplier.currency || 'ZMW').split(' ')[0];
+                                            const cleanVal = typeof val === 'number' ? val : parseFloat(String(val || 0).replace(/[^-0-9.]/g, '')) || 0;
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
                                                     <span className={`text-[12px] font-medium ${col.id === 'balance' ? 'text-slate-900 underline cursor-pointer hover:text-indigo-600' : 'text-slate-600'}`}>
-                                                        {symbol} {(Number(val) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                        {symbol} {cleanVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                     </span>
                                                 </td>
                                             );
@@ -438,7 +442,7 @@ const SuppliersView = () => {
 
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span 
+                                                    <span
                                                         onClick={() => count > 0 && navigate(`${getRoute(col.id)}/supplier/${supplier.name}`)}
                                                         className={`text-sm font-bold ${count > 0 ? 'text-indigo-600 underline cursor-pointer hover:text-indigo-800' : 'text-slate-400'}`}
                                                     >
@@ -493,37 +497,51 @@ const SuppliersView = () => {
                         <tr>
                             {isBatchViewMode && <td className="px-6 py-4"></td>}
                             <td className="px-6 py-4"></td>
-                            {columns.filter((c: any) => c.visible).map((col: any) => {
-                                if (col.id === 'balance' || col.id === 'withholdingTax') {
-                                    const key = col.id === 'balance' ? 'balance' : 'withholding';
-                                    const activeCurs = Object.keys(totals).filter(cur => totals[cur][key] !== 0);
-                                    return (
-                                        <td key={`total-${col.id}`} className="px-6 py-3 whitespace-nowrap">
-                                            <div className="flex flex-col gap-1">
-                                                {activeCurs.length > 0 ? activeCurs.map(cur => (
-                                                    <div key={cur} className="flex items-center gap-1.5 justify-start">
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-tight">{cur}</span>
-                                                        <span className={cn("text-[13px] font-black tracking-tight", col.id === 'balance' ? 'text-indigo-600' : 'text-slate-600')}>
-                                                            {totals[cur][key].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                        </span>
-                                                    </div>
-                                                )) : (
-                                                    <div className="flex items-center gap-1.5 justify-start">
-                                                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-tight">ZMW</span>
-                                                        <span className="text-[13px] font-black text-slate-300 tracking-tight">0.00</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </td>
-                                    );
-                                }
-                                if (col.id === 'name') {
-                                    return (
-                                        <td key={`total-${col.id}`} className="px-6 py-4 text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Totals:</td>
-                                    );
-                                }
-                                return <td key={`total-${col.id}`} className="px-6 py-4"></td>;
-                            })}
+                            {(() => {
+                                const activeCols = columns.filter((c: any) => c.visible);
+                                const allCurrencies = Array.from(new Set(sortedSuppliers.map(s => String(s.currency || 'ZMW').split(' ')[0] || 'ZMW'))).sort();
+                                
+                                return activeCols.map((col: any) => {
+                                    if (col.id === 'balance' || col.id === 'withholdingTax') {
+                                        const key = col.id === 'balance' ? 'balance' : 'withholding';
+                                        return (
+                                            <td key={`total-${col.id}`} className="px-6 py-4 whitespace-nowrap bg-indigo-50/5">
+                                                <div className="flex flex-col gap-1.5">
+                                                    {allCurrencies.length > 0 ? allCurrencies.map(cur => {
+                                                        const amount = totals[cur]?.[key] || 0;
+                                                        return (
+                                                            <div key={cur} className="flex items-center gap-1.5 group/total">
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight w-7 text-right">{cur}</span>
+                                                                <span className={cn(
+                                                                    "text-[12px] font-black tracking-tight",
+                                                                    amount !== 0 
+                                                                        ? (col.id === 'balance' ? 'text-indigo-600' : 'text-slate-900') 
+                                                                        : 'text-slate-300'
+                                                                )}>
+                                                                    {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    }) : (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-[9px] font-black text-slate-300 uppercase tracking-tight w-7 text-right">ZMW</span>
+                                                            <span className="text-[12px] font-black text-slate-200 tracking-tight">0.00</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        );
+                                    }
+                                    if (col.id === 'name') {
+                                        return (
+                                            <td key={`total-${col.id}`} className="px-6 py-4">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">GRAND TOTALS:</p>
+                                            </td>
+                                        );
+                                    }
+                                    return <td key={`total-${col.id}`} className="px-6 py-4"></td>;
+                                });
+                            })()}
                         </tr>
                     </tfoot>
                 </table>

@@ -451,7 +451,6 @@ const EditPurchaseQuoteView = () => {
                                                                 const newItems = prev.map(i => i.id === item.id ? {
                                                                     ...i,
                                                                     item: val,
-                                                                    unitPrice: invItem ? invItem.purchasePrice.toString() : i.unitPrice,
                                                                     description: invItem ? val : i.description,
                                                                     unit: invItem ? invItem.unit : (i as any).unit
                                                                 } : i);
@@ -508,9 +507,7 @@ const EditPurchaseQuoteView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
                                                         placeholder="0.00"
                                                     />
-                                                    <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
-                                                        Purch: {((mockInventory as any)[item.item]?.purchasePrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                    </div>
+
                                                 </div>
                                             </td>
                                             {options.columnDiscount && (
@@ -585,7 +582,7 @@ const EditPurchaseQuoteView = () => {
 
                     {/* Summary Details */}
                     <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end pr-24">
-                        <div className="w-full max-w-sm space-y-2">
+                        <div className="w-full max-w-xs space-y-2">
                             <div className="flex justify-end items-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] gap-8 text-right">
                                 <span>Subtotal ({currency})</span>
                                 <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">
@@ -604,11 +601,11 @@ const EditPurchaseQuoteView = () => {
                                 </div>
                             )}
                             {!options.hideTotalAmount && (
-                                <div className="flex justify-end items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 mt-4 h-16 gap-x-6">
+                                <div className="flex justify-end items-center bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50 mt-2 h-14 gap-x-6">
                                     <div className="flex-1 text-left">
                                         <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payable</p>
                                     </div>
-                                    <h2 className="text-xl font-medium text-slate-900 tracking-tight tabular-nums flex items-baseline">
+                                    <h2 className="text-xl font-bold text-slate-900 tracking-tight tabular-nums flex items-baseline">
                                         <span className="text-xs font-medium text-indigo-400 mr-2 uppercase">{currency}</span>
                                         {calculations.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </h2>

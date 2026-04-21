@@ -343,9 +343,14 @@ const EditCustomerView = () => {
                                     return;
                                 }
 
+                                const currencyCode = currency.split(' ')[0];
+                                const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`)) 
+                                    ? `${name} - ${currencyCode}` 
+                                    : name;
+
                                 const updatedCustomer: Customer = {
                                     ...existingCustomer,
-                                    name: name || 'Unnamed Customer',
+                                    name: finalName || 'Unnamed Customer',
                                     division: division !== 'Optional' ? division : 'General',
                                     tpin: tpin,
                                     salesPerson: salesPerson,

@@ -88,6 +88,9 @@ import DebitNotesView from './views/DebitNotesView';
 import PurchaseQuotesView from './views/PurchaseQuotesView';
 import EditPurchaseQuoteView from './views/EditPurchaseQuoteView';
 import ViewPurchaseQuoteView from './views/ViewPurchaseQuoteView';
+import EditPurchaseQuoteColumnsView from './views/EditPurchaseQuoteColumnsView';
+import EditPurchaseOrderColumnsView from './views/EditPurchaseOrderColumnsView';
+import EditPurchaseInvoiceColumnsView from './views/EditPurchaseInvoiceColumnsView';
 
 // Inventory Imports
 import InventoryItemsView from './views/InventoryItemsView';
@@ -291,12 +294,14 @@ const App = () => {
           <Route path="/purchase-quotes/new" element={<EditPurchaseQuoteView />} />
           <Route path="/purchase-quotes/edit/:id" element={<EditPurchaseQuoteView />} />
           <Route path="/purchase-quotes/view/:id" element={<ViewPurchaseQuoteView />} />
+          <Route path="/purchase-quotes/edit-columns" element={<EditPurchaseQuoteColumnsView />} />
 
           <Route path="/purchase-orders" element={<PurchaseOrdersView />} />
           <Route path="/purchase-orders/supplier/:supplierName" element={<PurchaseOrdersView />} />
           <Route path="/purchase-orders/new" element={<NewPurchaseOrderView />} />
           <Route path="/purchase-orders/edit/:id" element={<NewPurchaseOrderView />} />
           <Route path="/purchase-orders/view/:id" element={<ViewPurchaseOrderView />} />
+          <Route path="/purchase-orders/edit-columns" element={<EditPurchaseOrderColumnsView />} />
 
           {/* Purchase Invoices Routes */}
           <Route path="/purchase-invoices" element={<PurchaseInvoicesView />} />
@@ -304,6 +309,7 @@ const App = () => {
           <Route path="/purchase-invoices/new" element={<NewPurchaseInvoiceView />} />
           <Route path="/purchase-invoices/edit/:id" element={<NewPurchaseInvoiceView />} />
           <Route path="/purchase-invoices/view/:id" element={<ViewPurchaseInvoiceView />} />
+          <Route path="/purchase-invoices/columns" element={<EditPurchaseInvoiceColumnsView />} />
 
           {/* Goods Received Notes Routes */}
           <Route path="/goods-received-notes" element={<GoodsReceivedNotesView />} />

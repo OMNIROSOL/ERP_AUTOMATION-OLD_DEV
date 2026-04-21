@@ -257,9 +257,14 @@ const EditSupplierView = () => {
                                     return;
                                 }
 
+                                const currencyCode = currency.split(' ')[0];
+                                const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`)) 
+                                    ? `${name} - ${currencyCode}` 
+                                    : name;
+
                                 const updatedSupplier: Supplier = {
                                     ...existingSupplier,
-                                    name: name || 'Unnamed Supplier',
+                                    name: finalName || 'Unnamed Supplier',
                                     division: division,
                                     email: email,
                                     billingAddress: address,

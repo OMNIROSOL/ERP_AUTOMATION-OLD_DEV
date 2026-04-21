@@ -96,7 +96,7 @@ const NewPurchaseInvoiceView = () => {
     const [description, setDescription] = useState('');
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         columnLineNumber: true,
@@ -147,6 +147,7 @@ const NewPurchaseInvoiceView = () => {
                 setItems(itemsToSet.map(i => ({
                     id: i.id || Date.now() + Math.random(),
                     item: i.item || 'Select Item',
+                    account: (i as any).account || 'Inventory',
                     description: i.description || '',
                     qty: i.qty ? i.qty.toString() : '1',
                     unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
@@ -163,7 +164,7 @@ const NewPurchaseInvoiceView = () => {
             setReference(getNextReference());
             setUseManualRef(false);
             setDescription('');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
         }
     }, [id, location.search]);
 
@@ -308,7 +309,7 @@ const NewPurchaseInvoiceView = () => {
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -317,11 +318,13 @@ const NewPurchaseInvoiceView = () => {
                                     <thead>
                                         <tr className="bg-slate-50 border-b border-slate-200">
                                             {options.columnLineNumber && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12 text-center">#</th>}
-                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[200px]">ITEM</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[180px]">ITEM</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[180px]">ACCOUNT</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">QTY</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">UNIT PRICE</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">TAX CODE</th>
+                                            {!options.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">TAX AMOUNT</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">TOTAL</th>
                                             <th className="px-4 py-3 w-10"></th>
                                         </tr>
@@ -332,7 +335,7 @@ const NewPurchaseInvoiceView = () => {
                                             return (
                                                 <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
                                                     {options.columnLineNumber && <td className="px-4 py-4 text-xs font-bold text-slate-400 text-center">{index + 1}</td>}
-                                                    <td className="px-4 py-4">
+                                                    <td className="px-4 py-4 min-w-[180px]">
                                                         <select
                                                             value={item.item}
                                                             onChange={(e) => {
@@ -351,6 +354,25 @@ const NewPurchaseInvoiceView = () => {
                                                             {Object.keys(mockInventory).map(name => (
                                                                 <option key={name} value={name}>{name}</option>
                                                             ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-4 py-4 min-w-[180px]">
+                                                        <select
+                                                            value={(item as any).account}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setItems(prev => prev.map(i => i.id === item.id ? { ...i, account: val } : i));
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-0 text-[11px] font-black text-slate-500 uppercase tracking-widest outline-none appearance-none cursor-pointer hover:text-indigo-600 transition-colors"
+                                                        >
+                                                            <option value="Inventory">Inventory</option>
+                                                            <option value="Cost of Goods Sold">Cost of Goods Sold</option>
+                                                            <option value="Packaging Materials">Packaging Materials</option>
+                                                            <option value="Stationery">Stationery</option>
+                                                            <option value="Office Equipment">Office Equipment</option>
+                                                            <option value="Repair & Maintenance">Repair & Maintenance</option>
+                                                            <option value="Telecommunications">Telecommunications</option>
+                                                            <option value="Fuel & Oil">Fuel & Oil</option>
                                                         </select>
                                                     </td>
                                                     <td className="px-4 py-4">
@@ -401,16 +423,38 @@ const NewPurchaseInvoiceView = () => {
                                                             <option value="VAT 16%">VAT 16%</option>
                                                         </select>
                                                     </td>
+                                                    {!options.amountsAreTaxInclusive && (
+                                                        <td className="px-4 py-4 text-sm font-bold text-slate-400 text-right tabular-nums">
+                                                            {calc?.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                    )}
                                                     <td className="px-4 py-4 text-sm font-bold text-slate-800 text-right tabular-nums">
                                                         {calc?.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <button
-                                                            onClick={() => setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== item.id) : prev)}
-                                                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newItem = { ...item, id: Date.now() + Math.random() };
+                                                                    setItems(prev => {
+                                                                        const newArr = [...prev];
+                                                                        newArr.splice(index + 1, 0, newItem);
+                                                                        return newArr;
+                                                                    });
+                                                                }}
+                                                                className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-100 rounded-md transition-all"
+                                                                title="Duplicate Row"
+                                                            >
+                                                                <Copy size={13} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== item.id) : prev)}
+                                                                className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-all"
+                                                                title="Delete Row"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
@@ -418,7 +462,7 @@ const NewPurchaseInvoiceView = () => {
                                     </tbody>
                                 </table>
                                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end pr-24">
-                                    <div className="w-full max-sm space-y-2">
+                                    <div className="w-full max-w-xs space-y-2">
                                         <div className="flex justify-end items-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] gap-8">
                                             <span>Subtotal ({currency})</span>
                                             <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">
@@ -429,11 +473,11 @@ const NewPurchaseInvoiceView = () => {
                                             <span>Tax Component</span>
                                             <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">{calculations.totalTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </div>
-                                        <div className="flex justify-end items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 mt-4 h-16 gap-x-6">
-                                            <div className="flex-1">
+                                        <div className="flex justify-end items-center bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50 mt-2 h-14 gap-x-6">
+                                            <div className="flex-1 text-left">
                                                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payable</p>
                                             </div>
-                                            <h2 className="text-xl font-medium text-slate-900 tracking-tight tabular-nums flex items-baseline">
+                                            <h2 className="text-xl font-bold text-slate-900 tracking-tight tabular-nums flex items-baseline">
                                                 <span className="text-xs font-medium text-indigo-400 mr-2 uppercase">{currency}</span>
                                                 {calculations.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </h2>

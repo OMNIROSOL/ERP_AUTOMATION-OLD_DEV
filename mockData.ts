@@ -874,7 +874,7 @@ export function getSuppliers(): Supplier[] {
     return {
       ...s,
       purchaseQuotes: supplierQuotes.filter(q => q.status !== 'Accepted' && q.status !== 'Rejected').length,
-      purchaseOrders: orders.filter(o => (o.supplier || '').trim().toLowerCase() === sName).length,
+      purchaseOrders: orders.filter(o => (o.supplier || '').trim().toLowerCase() === sName && o.status !== 'Invoiced' && o.status !== 'Rejected').length,
       purchaseInvoices: invoices.filter(i => (i.supplier || '').trim().toLowerCase() === sName).length,
       debitNotes: debitNotes.filter(d => (d.supplier || '').trim().toLowerCase() === sName).length,
       goodsReceipts: grns.filter(g => (g.supplier || '').trim().toLowerCase() === sName).length

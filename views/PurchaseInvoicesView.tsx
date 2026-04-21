@@ -6,6 +6,7 @@ import { getPurchaseInvoices, getCurrentUser } from '../mockData';
 import { ScreenPermission } from '../types';
 import DataTable from '../components/shared/DataTable';
 import Badge from '../components/shared/Badge';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const PurchaseInvoicesView = () => {
     const navigate = useNavigate();
@@ -16,6 +17,41 @@ const PurchaseInvoicesView = () => {
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [pageSize, setPageSize] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
+    const [isManagementOpen, setIsManagementOpen] = useState(false);
+    const managementRef = useRef<HTMLDivElement>(null);
+
+    const [columnVisibility, setColumnVisibility] = useState({
+        'Actions': true,
+        'Issue date': true,
+        'Reference': true,
+        'Supplier': true,
+        'Amount': true,
+        'Balance due': true,
+        'Status': true
+    });
+
+    useEffect(() => {
+        const saved = localStorage.getItem('purchase_invoice_column_visibility');
+        if (saved) setColumnVisibility(JSON.parse(saved));
+
+        const handleStorage = () => {
+            const updated = localStorage.getItem('purchase_invoice_column_visibility');
+            if (updated) setColumnVisibility(JSON.parse(updated));
+        };
+
+        window.addEventListener('storage', handleStorage);
+        return () => window.removeEventListener('storage', handleStorage);
+    }, []);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (managementRef.current && !managementRef.current.contains(event.target as Node)) {
+                setIsManagementOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const filteredData = useMemo(() => {
         let result = getPurchaseInvoices();
@@ -106,7 +142,7 @@ const PurchaseInvoicesView = () => {
                 </Badge>
             )
         }
-    ];
+    ].filter(col => (columnVisibility as any)[col.id] !== false);
 
     return (
         <div className="p-8 space-y-6 max-w-[1400px] animate-in fade-in duration-500">
@@ -150,7 +186,7 @@ const PurchaseInvoicesView = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden no-print">
                 <DataTable
                     data={displayData}
                     columns={columns as any}
@@ -159,11 +195,102 @@ const PurchaseInvoicesView = () => {
                 />
             </div>
 
-            <div className="flex items-center justify-between bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                 <div className="flex gap-4 items-center text-sm font-medium text-slate-500">
-                    <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="disabled:opacity-30"><ChevronLeft size={20} /></button>
-                    <span>Page {currentPage} of {totalPages}</span>
-                    <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="disabled:opacity-30"><ChevronRight size={20} /></button>
+            <div className="flex flex-col md:flex-row items-center justify-between bg-white px-8 py-6 rounded-[32px] border border-slate-100 shadow-sm gap-8 mt-8">
+                <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2 text-slate-300">
+                        <button 
+                            onClick={() => { setCurrentPage(1); }} 
+                            disabled={currentPage === 1} 
+                            className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
+                        >
+                            <ChevronsLeft size={16} />
+                        </button>
+                        <button 
+                            onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); }} 
+                            disabled={currentPage === 1} 
+                            className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <span className="text-[12px] font-medium text-slate-500 mx-2 tracking-tight">Page {currentPage} of {totalPages}</span>
+                        <button 
+                            onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); }} 
+                            disabled={currentPage === totalPages} 
+                            className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                        <button 
+                            onClick={() => { setCurrentPage(totalPages); }} 
+                            disabled={currentPage === totalPages} 
+                            className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
+                        >
+                            <ChevronsRight size={16} />
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-6">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Show per page:</span>
+                        <div className="flex items-center gap-4">
+                            {[50, 100, 250, 500].map(size => (
+                                <button
+                                    key={size}
+                                    onClick={() => { setPageSize(size); setCurrentPage(1); }}
+                                    className={cn(
+                                        "text-[11px] font-black transition-all relative py-1",
+                                        pageSize === size ? "text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                                    )}
+                                >
+                                    {size}
+                                    {pageSize === size && <motion.div layoutId="activePageSize" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                    <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
+                        <Copy size={14} /> <span>Export Data</span>
+                    </button>
+
+                    <div className="relative" ref={managementRef}>
+                        <button
+                            onClick={() => setIsManagementOpen(!isManagementOpen)}
+                            className={cn(
+                                "flex items-center gap-2 px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-widest transition-all shadow-lg",
+                                isManagementOpen ? "bg-slate-800 text-white" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200"
+                            )}
+                        >
+                            <span>Management</span>
+                            <ChevronUp size={14} className={cn("transition-transform duration-300", isManagementOpen ? "" : "rotate-180")} />
+                        </button>
+
+                        <AnimatePresence>
+                            {isManagementOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    className="absolute bottom-full right-0 mb-4 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-[100]"
+                                >
+                                    <div className="p-3 mb-2 border-b border-slate-50">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Purchase Invoice Portal</p>
+                                    </div>
+                                    <button
+                                        onClick={() => { setIsManagementOpen(false); navigate('/purchase-invoices/columns'); }}
+                                        className="w-full flex items-center gap-3 p-3 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all group"
+                                    >
+                                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors text-slate-400 group-hover:text-indigo-600">
+                                            <ArrowUpDown size={14} />
+                                        </div>
+                                        <span className="text-[11px] font-black uppercase tracking-wider text-left flex-1">Column Setting</span>
+                                        <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
                 </div>
             </div>
         </div>
