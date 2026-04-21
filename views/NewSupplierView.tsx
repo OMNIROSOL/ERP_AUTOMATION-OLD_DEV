@@ -233,9 +233,14 @@ const NewSupplierView = () => {
                                 }, 0) + 1;
                                 const newCode = `SUP-${nextNumber.toString().padStart(4, '0')}`;
 
+                                const currencyCode = currency.split(' ')[0];
+                                const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`)) 
+                                    ? `${name} - ${currencyCode}` 
+                                    : name;
+
                                 const newSupplier: Supplier = {
                                     id: `sup-gen-${Date.now()}`,
-                                    name: name || 'Unnamed Supplier',
+                                    name: finalName || 'Unnamed Supplier',
                                     code: newCode,
                                     division: division,
                                     status: 'Paid',

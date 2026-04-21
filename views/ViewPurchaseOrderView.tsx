@@ -41,15 +41,20 @@ const ViewPurchaseOrderView = () => {
     const supplierEmail = supplierData?.email || (order ? `${order.supplier.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
 
     const totals = useMemo(() => {
-        let subtotal = 0;
-        let tax = 0;
+        if (!order) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0 };
         const isTaxInclusive = order.options?.amountsAreTaxInclusive || false;
 
         if (order.items && order.items.length > 0) {
             order.items.forEach((item: any) => {
                 const qty = parseFloat(item.qty as any) || 0;
                 const price = parseFloat(item.unitPrice as any) || 0;
-                const lineTotal = qty * price;
+                const discountValue = parseFloat(item.discount || '0') || 0;
+                
+                let lineTotal = qty * price;
+                if (order.options?.columnDiscount) {
+                    if (order.options?.columnDiscountType === 'Percentage') lineTotal *= (1 - (discountValue / 100));
+                    else lineTotal = Math.max(0, lineTotal - discountValue);
+                }
 
                 if (isTaxInclusive) {
                     const lineTax = lineTotal - (lineTotal / 1.16);
@@ -70,7 +75,15 @@ const ViewPurchaseOrderView = () => {
                 tax = grandTotal * 0.16;
             }
         }
-        return { subtotal, tax, total: subtotal + tax };
+
+        let whtAmount = 0;
+        if (order.options?.withholdingTax) {
+            const whtVal = parseFloat(order.options.withholdingTaxValue) || 0;
+            if (order.options.withholdingTaxType === 'Rate') whtAmount = subtotal * (whtVal / 100);
+            else whtAmount = whtVal;
+        }
+
+        return { subtotal, tax, total: subtotal + tax - whtAmount, whtAmount };
     }, [order]);
 
     const handleStatusChange = (newStatus: string, shouldInvoice: boolean = false) => {
@@ -164,6 +177,11 @@ const ViewPurchaseOrderView = () => {
                         {isCopyToOpen && (
                             <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 shadow-xl rounded py-1 z-[100]">
                                 {[
+                                    { label: 'Sales Quote', path: '/sales-quotes/new' },
+                                    { label: 'Sales Order', path: '/sales-orders/new' },
+                                    { label: 'Sales Invoice', path: '/sales-invoices/new' },
+                                    { label: 'Delivery Note', path: '/delivery-notes/new' },
+                                    { label: 'Credit Note', path: '/credit-notes/new' },
                                     { label: 'Purchase Quote', path: '/purchase-quotes/new' },
                                     { label: 'Purchase Order', path: '/purchase-orders/new' },
                                     { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
@@ -188,34 +206,34 @@ const ViewPurchaseOrderView = () => {
                         <button onClick={() => window.print()} className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
                             <Printer size={14} /> Print
                         </button>
-                        <button 
+                        <button
                             onClick={async () => {
                                 if (!pdfRef.current) return;
                                 const html2canvas = (await import('html2canvas')).default;
                                 const jsPDF = (await import('jspdf')).jsPDF;
-                                
+
                                 const element = pdfRef.current;
                                 const originalStyle = element.getAttribute('style') || '';
                                 element.style.maxWidth = 'none';
                                 element.style.width = '850px';
-                                
+
                                 const canvas = await html2canvas(element, {
                                     scale: 2,
                                     useCORS: true,
                                     backgroundColor: '#ffffff'
                                 });
-                                
+
                                 element.setAttribute('style', originalStyle);
-                                
+
                                 const imgData = canvas.toDataURL('image/png');
                                 const pdf = new jsPDF('p', 'mm', 'a4');
                                 const imgProps = pdf.getImageProperties(imgData);
                                 const pdfWidth = pdf.internal.pageSize.getWidth();
                                 const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                                
+
                                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
                                 pdf.save(`${order.reference || 'PurchaseOrder'}.pdf`);
-                            }} 
+                            }}
                             className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
                         >
                             <Download size={14} /> PDF
@@ -361,6 +379,8 @@ const ViewPurchaseOrderView = () => {
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unit Price</th>
+                                    {order.options?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc</th>}
+                                    {!order.options?.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>}
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
                                 </tr>
                             </thead>
@@ -376,7 +396,19 @@ const ViewPurchaseOrderView = () => {
                                         </td>
                                         <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
                                         <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                        <td className="px-4 py-4 text-right font-semibold">{((parseFloat(item.qty as any) || 0) * (parseFloat(item.unitPrice as any) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        {order.options?.columnDiscount && (
+                                            <td className="px-4 py-4 text-right">
+                                                <span className="text-xs font-bold text-rose-500">
+                                                    {item.discount ? (order.options.columnDiscountType === 'Percentage' ? `${item.discount}%` : parseFloat(item.discount).toLocaleString()) : '-'}
+                                                </span>
+                                            </td>
+                                        )}
+                                        {!order.options?.amountsAreTaxInclusive && (
+                                            <td className="px-4 py-4 text-right font-medium text-slate-400">
+                                                {(( (parseFloat(item.qty || '0') * parseFloat(item.unitPrice || '0')) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0')/100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0) ) * (item.taxCode === 'VAT 16%' ? 0.16 : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </td>
+                                        )}
+                                        <td className="px-4 py-4 text-right font-semibold">{( ( (parseFloat(item.qty as any) || 0) * (parseFloat(item.unitPrice as any) || 0) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0')/100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0) ) * (item.taxCode === 'VAT 16%' ? (order.options?.amountsAreTaxInclusive ? 1 : 1.16) : 1) ).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     </tr>
                                 )) : (
                                     <tr>
@@ -402,6 +434,12 @@ const ViewPurchaseOrderView = () => {
                                 <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Sales Tax (16%)</span>
                                 <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
+                            {order.options?.withholdingTax && (
+                                <div className="flex justify-between items-center text-rose-500">
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">Withholding Tax</span>
+                                    <span className="font-semibold">-{totals.whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2 print-bg-slate-50">
                                 <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-900">Total</span>
                                 <div className="text-right">
@@ -414,13 +452,13 @@ const ViewPurchaseOrderView = () => {
 
                     <div className="flex justify-between items-start gap-12 mt-12 pb-20 relative">
                         <div className="flex-1">
-                             <div className="pt-8 border-t border-gray-100">
+                            <div className="pt-8 border-t border-gray-100">
                                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-12">Authorized Signature</p>
                                 <div className="relative">
                                     <div className="w-48 h-[1px] bg-gray-300"></div>
                                     <p className="text-[10px] text-gray-400 mt-2 uppercase tracking-widest">Stamp & Date</p>
                                 </div>
-                             </div>
+                            </div>
                         </div>
                     </div>
 

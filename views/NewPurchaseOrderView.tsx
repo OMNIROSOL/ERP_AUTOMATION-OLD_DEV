@@ -162,6 +162,11 @@ const NewPurchaseOrderView = () => {
                     setOptions({
                         amountsAreTaxInclusive: doc.options.amountsAreTaxInclusive || false,
                         columnLineNumber: doc.options.columnLineNumber !== false,
+                        columnDiscount: doc.options.columnDiscount || false,
+                        columnDiscountType: doc.options.columnDiscountType || 'Percentage',
+                        withholdingTax: doc.options.withholdingTax || false,
+                        withholdingTaxType: doc.options.withholdingTaxType || 'Rate',
+                        withholdingTaxValue: doc.options.withholdingTaxValue || '0',
                         customTitle: doc.options.customTitle || false,
                         customTitleValue: doc.options.customTitleValue || 'Purchase Order',
                         footers: doc.options.footers || false,
@@ -196,6 +201,11 @@ const NewPurchaseOrderView = () => {
             setOptions({
                 amountsAreTaxInclusive: false,
                 columnLineNumber: true,
+                columnDiscount: false,
+                columnDiscountType: 'Percentage',
+                withholdingTax: false,
+                withholdingTaxType: 'Rate',
+                withholdingTaxValue: '0',
                 customTitle: false,
                 customTitleValue: 'Purchase Order',
                 footers: false,
@@ -210,7 +220,14 @@ const NewPurchaseOrderView = () => {
         const lineCalcs = items.map(item => {
             const qty = parseFloat(item.qty) || 0;
             const price = parseFloat(item.unitPrice) || 0;
+            const discountValue = parseFloat(item.discount) || 0;
+
             let netTotal = qty * price;
+            if (options.columnDiscount) {
+                if (options.columnDiscountType === 'Percentage') netTotal *= (1 - (discountValue / 100));
+                else netTotal = Math.max(0, netTotal - discountValue);
+            }
+
             let taxAmount = 0;
             if (item.taxCode === 'VAT 16%') {
                 if (options.amountsAreTaxInclusive) {
@@ -222,11 +239,31 @@ const NewPurchaseOrderView = () => {
             totalTax += taxAmount;
             return { taxAmount, grossTotal: netTotal + taxAmount, netTotal };
         });
+
         let grandTotal = subtotal + totalTax;
-        return { lineCalcs, subtotal, totalTax, grandTotal };
+        let whtAmount = 0;
+        if (options.withholdingTax) {
+            const whtVal = parseFloat(options.withholdingTaxValue) || 0;
+            if (options.withholdingTaxType === 'Rate') whtAmount = subtotal * (whtVal / 100);
+            else whtAmount = whtVal;
+            grandTotal -= whtAmount;
+        }
+
+        return { lineCalcs, subtotal, totalTax, grandTotal, whtAmount };
     }, [items, options]);
 
     const handleSave = async () => {
+        if (!supplier) {
+            alert('Please select a supplier.');
+            return;
+        }
+
+        const validItems = items.filter(i => i.item !== 'Select Item' && i.item !== '');
+        if (validItems.length === 0) {
+            alert('Please add at least one valid item.');
+            return;
+        }
+
         const newOrder: PurchaseOrder = {
             id: isEditing ? id! : `PO-${Date.now()}`,
             orderDate: issueDate.split('-').reverse().join('.'),
@@ -238,7 +275,7 @@ const NewPurchaseOrderView = () => {
             status: status,
             billingAddress: billingAddress,
             timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) })),
+            items: validItems.map(i => ({ ...i, id: Number(i.id) })),
             options: options
         };
 
@@ -356,7 +393,9 @@ const NewPurchaseOrderView = () => {
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">QTY</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">UNIT PRICE</th>
+                                            {options.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right whitespace-nowrap">DISCOUNT</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">TAX CODE</th>
+                                            {!options.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right text-slate-400">TAX AMOUNT</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">TOTAL</th>
                                             <th className="px-4 py-3 w-10"></th>
                                         </tr>
@@ -400,16 +439,22 @@ const NewPurchaseOrderView = () => {
                                                             placeholder="Add description..."
                                                         />
                                                     </td>
-                                                    <td className="px-4 py-4">
-                                                        <input
-                                                            type="text"
-                                                            value={item.qty}
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: val } : i));
-                                                            }}
-                                                            className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
-                                                        />
+                                                    <td className="px-4 py-4 relative group/qty text-right">
+                                                        <div className="flex flex-col items-end">
+                                                            <input
+                                                                type="text"
+                                                                value={item.qty}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: val } : i));
+                                                                }}
+                                                                className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
+                                                            />
+                                                            <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-between w-full">
+                                                                <span>Stock: {((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span>
+                                                                <span className="text-indigo-500 font-black">{(mockInventory as any)[item.item]?.unit || ''}</span>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td className="px-4 py-4">
                                                         <input
@@ -419,10 +464,27 @@ const NewPurchaseOrderView = () => {
                                                                 const val = e.target.value;
                                                                 setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: val } : i));
                                                             }}
-                                                            className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
+                                                            className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700 placeholder:text-slate-300"
                                                             placeholder="0.00"
                                                         />
                                                     </td>
+                                                    {options.columnDiscount && (
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <input
+                                                                    type="text"
+                                                                    value={item.discount}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setItems(prev => prev.map(i => i.id === item.id ? { ...i, discount: val } : i));
+                                                                    }}
+                                                                    className="w-16 bg-transparent border-none p-0 text-sm font-bold text-indigo-600 text-right outline-none placeholder:text-slate-300"
+                                                                    placeholder="0"
+                                                                />
+                                                                <span className="text-[10px] text-slate-400 font-bold">{options.columnDiscountType === 'Percentage' ? '%' : currency}</span>
+                                                            </div>
+                                                        </td>
+                                                    )}
                                                     <td className="px-4 py-4">
                                                         <select
                                                             value={item.taxCode}
@@ -436,16 +498,38 @@ const NewPurchaseOrderView = () => {
                                                             <option value="VAT 16%">VAT 16%</option>
                                                         </select>
                                                     </td>
+                                                    {!options.amountsAreTaxInclusive && (
+                                                        <td className="px-4 py-4 text-sm font-bold text-slate-400 text-right tabular-nums">
+                                                            {calc?.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </td>
+                                                    )}
                                                     <td className="px-4 py-4 text-sm font-bold text-slate-800 text-right tabular-nums">
                                                         {calc?.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <button
-                                                            onClick={() => setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== item.id) : prev)}
-                                                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all opacity-0 group-hover:opacity-100"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
+                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newItem = { ...item, id: Date.now() };
+                                                                    setItems(prev => {
+                                                                        const newArr = [...prev];
+                                                                        newArr.splice(index + 1, 0, newItem);
+                                                                        return newArr;
+                                                                    });
+                                                                }}
+                                                                className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
+                                                                title="Duplicate Row"
+                                                            >
+                                                                <Copy size={13} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setItems(prev => prev.length > 1 ? prev.filter(i => i.id !== item.id) : prev)}
+                                                                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+                                                                title="Delete Row"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             );
@@ -453,7 +537,7 @@ const NewPurchaseOrderView = () => {
                                     </tbody>
                                 </table>
                                 <div className="mt-4 pt-4 border-t border-slate-100 flex justify-end pr-24">
-                                    <div className="w-full max-w-sm space-y-2">
+                                    <div className="w-full max-w-xs space-y-2">
                                         <div className="flex justify-end items-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] gap-8">
                                             <span>Subtotal ({currency})</span>
                                             <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">
@@ -464,11 +548,17 @@ const NewPurchaseOrderView = () => {
                                             <span>Tax Component</span>
                                             <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">{calculations.totalTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </div>
-                                        <div className="flex justify-end items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 mt-4 h-16 gap-x-6">
-                                            <div className="flex-1">
-                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payment</p>
+                                        {options.withholdingTax && (
+                                            <div className="flex justify-end items-center text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] gap-8 text-right">
+                                                <span>Withholding Tax</span>
+                                                <span className="text-rose-600 font-bold tabular-nums text-[13px] w-32 text-right">-{calculations.whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                             </div>
-                                            <h2 className="text-xl font-medium text-slate-900 tracking-tight tabular-nums flex items-baseline">
+                                        )}
+                                        <div className="flex justify-end items-center bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50 mt-2 h-14 gap-x-6">
+                                            <div className="flex-1 text-left">
+                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payable</p>
+                                            </div>
+                                            <h2 className="text-xl font-bold text-slate-900 tracking-tight tabular-nums flex items-baseline">
                                                 <span className="text-xs font-medium text-indigo-400 mr-2 uppercase">{currency}</span>
                                                 {calculations.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </h2>
@@ -503,6 +593,8 @@ const NewPurchaseOrderView = () => {
                                     {([
                                         ['Tax Inclusive', 'amountsAreTaxInclusive'],
                                         ['Line Numbers', 'columnLineNumber'],
+                                        ['Discount', 'columnDiscount'],
+                                        ['Withholding Tax', 'withholdingTax'],
                                         ['Custom Title', 'customTitle'],
                                         ['Footers', 'footers']
                                     ] as const).map(([label, key]) => (
@@ -518,6 +610,43 @@ const NewPurchaseOrderView = () => {
                                                 </div>
                                                 <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight">{label}</span>
                                             </label>
+                                            {key === 'columnDiscount' && options.columnDiscount && (
+                                                <div className="flex items-center space-x-2 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                    <div className="relative flex-1">
+                                                        <select
+                                                            value={options.columnDiscountType}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, columnDiscountType: e.target.value }))}
+                                                            className="w-full appearance-none bg-indigo-50/50 border border-indigo-100/50 rounded-xl px-3 py-1.5 text-[10px] font-black text-indigo-600 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer"
+                                                        >
+                                                            <option value="Percentage">Percentage (%)</option>
+                                                            <option value="Amount">Exact Amount</option>
+                                                        </select>
+                                                        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {key === 'withholdingTax' && options.withholdingTax && (
+                                                <div className="space-y-2 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                    <div className="relative">
+                                                        <select
+                                                            value={options.withholdingTaxType}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, withholdingTaxType: e.target.value }))}
+                                                            className="w-full appearance-none bg-rose-50 border border-rose-100 rounded-xl px-3 py-1.5 text-[10px] font-black text-rose-600 uppercase tracking-wider focus:outline-none cursor-pointer"
+                                                        >
+                                                            <option value="Rate">Rate (%)</option>
+                                                            <option value="Amount">Amount</option>
+                                                        </select>
+                                                        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-rose-400" />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        value={options.withholdingTaxValue}
+                                                        onChange={(e) => setOptions(prev => ({ ...prev, withholdingTaxValue: e.target.value }))}
+                                                        placeholder="Value..."
+                                                        className="w-full bg-rose-50 border border-rose-100 rounded-xl px-3 py-1.5 text-[11px] font-bold text-rose-600 focus:outline-none placeholder:text-rose-300"
+                                                    />
+                                                </div>
+                                            )}
                                             {key === 'customTitle' && options.customTitle && (
                                                 <div className="flex items-center space-x-2 ml-4 animate-in slide-in-from-top-2 duration-300">
                                                     <input

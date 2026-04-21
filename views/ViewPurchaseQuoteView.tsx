@@ -113,6 +113,23 @@ const ViewPurchaseQuoteView = () => {
 
     return (
         <div className="min-h-screen bg-[#f3f4f6]/50 flex flex-col font-sans">
+            <style>{`
+                @media print {
+                    @page { margin: 15mm; size: auto; }
+                    body { background: white !important; }
+                    .no-print { display: none !important; }
+                    .print-p-0 { padding: 0 !important; }
+                    main { background: white !important; padding: 0 !important; }
+                    .bg-white.shadow-xl { 
+                        box-shadow: none !important; 
+                        border: none !important; 
+                        width: 100% !important; 
+                        max-width: none !important;
+                        padding: 0 !important;
+                    }
+                    .print-bg-slate-50 { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
+                }
+            `}</style>
             <div className="bg-[#f8fafc] border-b border-gray-300 px-6 py-3 flex items-center justify-between sticky top-0 z-50 no-print">
                 <div className="flex items-center space-x-3">
                     <button
@@ -140,11 +157,11 @@ const ViewPurchaseQuoteView = () => {
                             <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 shadow-xl rounded py-1 z-[100]">
                                 {[
                                     { label: 'Sales Quote', path: '/sales-quotes/new' },
-                                    { label: 'Purchase Quote', path: '/purchase-quotes/new' },
                                     { label: 'Sales Order', path: '/sales-orders/new' },
                                     { label: 'Sales Invoice', path: '/sales-invoices/new' },
                                     { label: 'Delivery Note', path: '/delivery-notes/new' },
                                     { label: 'Credit Note', path: '/credit-notes/new' },
+                                    { label: 'Purchase Quote', path: '/purchase-quotes/new' },
                                     { label: 'Purchase Order', path: '/purchase-orders/new' },
                                     { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
                                     { label: 'Goods Receipt', path: '/goods-receipts/new' },

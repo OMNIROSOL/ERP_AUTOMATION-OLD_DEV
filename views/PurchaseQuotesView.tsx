@@ -12,6 +12,7 @@ import {
     ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, LayoutGrid, HelpCircle, ArrowUpDown
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { motion } from 'framer-motion';
 
 const PurchaseQuotesView = () => {
     const navigate = useNavigate();
@@ -31,6 +32,41 @@ const PurchaseQuotesView = () => {
     const [currentUser, setCurrentUser] = useState(getCurrentUser());
     const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
+    const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
+        const defaultVisible: Record<string, boolean> = {
+            'Actions': true,
+            'Issue Date': true,
+            'Expiry Date': true,
+            'Reference': true,
+            'Supplier': true,
+            'Description': true,
+            'Amount': true,
+            'Status': true,
+            'Timestamp': true
+        };
+        const saved = localStorage.getItem('purchase_quote_column_settings');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            const record: Record<string, boolean> = { 'Actions': true };
+            parsed.forEach((col: any) => {
+                const mapping: Record<string, string> = {
+                    'issuedate': 'Issue Date',
+                    'expirydate': 'Expiry Date',
+                    'reference': 'Reference',
+                    'supplier': 'Supplier',
+                    'description': 'Description',
+                    'amount': 'Amount',
+                    'status': 'Status',
+                    'timestamp': 'Timestamp'
+                };
+                const normalizedId = mapping[col.id.toLowerCase()] || col.id;
+                record[normalizedId] = col.visible;
+            });
+            return { ...defaultVisible, ...record };
+        }
+        return defaultVisible;
+    });
+
     useEffect(() => {
         const handleUserUpdate = () => setCurrentUser(getCurrentUser());
         window.addEventListener('user_sim_updated', handleUserUpdate);
@@ -48,6 +84,33 @@ const PurchaseQuotesView = () => {
         };
     }, [currentUser]);
 
+    useEffect(() => {
+        const updateVisibility = () => {
+            const saved = localStorage.getItem('purchase_quote_column_settings');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                const record: Record<string, boolean> = { 'Actions': true };
+                parsed.forEach((col: any) => {
+                    const mapping: Record<string, string> = {
+                        'issuedate': 'Issue Date',
+                        'expirydate': 'Expiry Date',
+                        'reference': 'Reference',
+                        'supplier': 'Supplier',
+                        'description': 'Description',
+                        'amount': 'Amount',
+                        'status': 'Status',
+                        'timestamp': 'Timestamp'
+                    };
+                    const normalizedId = mapping[col.id.toLowerCase()] || col.id;
+                    record[normalizedId] = col.visible;
+                });
+                setVisibleColumns(prev => ({ ...prev, ...record }));
+            }
+        };
+        window.addEventListener('storage', updateVisibility);
+        return () => window.removeEventListener('storage', updateVisibility);
+    }, []);
+
     React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (batchOpsRef.current && !batchOpsRef.current.contains(event.target as Node)) {
@@ -58,43 +121,8 @@ const PurchaseQuotesView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
-        const defaultVisible: Record<string, boolean> = {
-            'Actions': true,
-            'Issue Date': true,
-            'Expiry Date': true,
-            'Reference': true,
-            'Supplier': true,
-            'Description': true,
-            'Amount': true,
-            'Status': true,
-            'Timestamp': true
-        };
 
-        const saved = localStorage.getItem('purchase_quote_column_settings');
-        if (saved) {
-            const parsed = JSON.parse(saved);
-            const record: Record<string, boolean> = { 'Actions': true };
 
-            parsed.forEach((col: any) => {
-                const mapping: Record<string, string> = {
-                    'issuedate': 'Issue Date',
-                    'expirydate': 'Expiry Date',
-                    'reference': 'Reference',
-                    'supplier': 'Supplier',
-                    'description': 'Description',
-                    'amount': 'Amount',
-                    'status': 'Status',
-                    'timestamp': 'Timestamp'
-                };
-
-                const normalizedId = mapping[col.id.toLowerCase()] || col.id;
-                record[normalizedId] = col.visible;
-            });
-            return { ...defaultVisible, ...record };
-        }
-        return defaultVisible;
-    });
 
     const toggleColumnVisibility = (id: string) => {
         const newVisible = { ...visibleColumns, [id]: !visibleColumns[id] };
@@ -511,27 +539,87 @@ const PurchaseQuotesView = () => {
                 />
             </div>
 
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-6 rounded-[24px] border border-slate-200 shadow-sm">
-                <div className="flex flex-col items-center space-y-2">
-                    <div className="flex items-center space-x-2 text-[12px] text-slate-500 font-medium">
-                        <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="p-1 disabled:opacity-30"><ChevronsLeft size={16} /></button>
-                        <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-1 disabled:opacity-30"><ChevronLeft size={16} /></button>
-                        <span>Page {currentPage} of {totalPages}</span>
-                        <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="p-1 disabled:opacity-30"><ChevronRight size={16} /></button>
-                        <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="p-1 disabled:opacity-30"><ChevronsRight size={16} /></button>
+            <div className="flex flex-col md:flex-row items-center justify-between bg-white px-8 py-6 rounded-[32px] border border-slate-100 shadow-sm gap-8 mt-8">
+                <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2 text-slate-400">
+                        <button
+                            onClick={() => { setCurrentPage(1); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === 1}
+                            className="p-1 hover:text-indigo-600 disabled:opacity-20 transition-all"
+                        >
+                            <ChevronsLeft size={18} strokeWidth={1.5} />
+                        </button>
+                        <button
+                            onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === 1}
+                            className="p-1 hover:text-indigo-600 disabled:opacity-20 transition-all mr-2"
+                        >
+                            <ChevronLeft size={18} strokeWidth={1.5} />
+                        </button>
+                        <span className="text-[13px] font-semibold text-slate-600 tracking-tight">Page {currentPage} of {totalPages || 1}</span>
+                        <button
+                            onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className="p-1 hover:text-indigo-600 disabled:opacity-20 transition-all ml-2"
+                        >
+                            <ChevronRight size={18} strokeWidth={1.5} />
+                        </button>
+                        <button
+                            onClick={() => { setCurrentPage(totalPages); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            disabled={currentPage === totalPages || totalPages === 0}
+                            className="p-1 hover:text-indigo-600 disabled:opacity-20 transition-all"
+                        >
+                            <ChevronsRight size={18} strokeWidth={1.5} />
+                        </button>
                     </div>
-                    <div className="flex items-center space-x-4">
-                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Show:</span>
-                        {[50, 100, 250, 500].map(size => (<button key={size} onClick={() => { setPageSize(size); setCurrentPage(1); }} className={`text-[10px] font-black ${pageSize === size ? 'text-indigo-600 underline decoration-2' : 'text-slate-400'}`}>{size}</button>))}
+                    <div className="flex items-center gap-6 mt-1">
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">SHOW PER PAGE:</span>
+                        <div className="flex items-center gap-4">
+                            {[50, 100, 250, 500].map(size => (
+                                <button
+                                    key={size}
+                                    onClick={() => { setPageSize(size); setCurrentPage(1); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                                    className={cn(
+                                        "text-[11px] font-black transition-all relative py-1",
+                                        pageSize === size ? "text-indigo-600" : "text-slate-400 hover:text-slate-600"
+                                    )}
+                                >
+                                    {size}
+                                    {pageSize === size && <motion.div layoutId="activeQuotePageSize" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button onClick={handleCopyToClipboard} className="px-4 py-2 bg-slate-50 text-[11px] font-black text-slate-500 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200/50 uppercase tracking-widest flex items-center gap-2"><Copy size={12} /> Export</button>
-                    <div className="relative" ref={batchOpsRef}>
-                        <button onClick={() => setIsBatchOpsOpen(!isBatchOpsOpen)} className="px-4 py-2 bg-indigo-600 text-[11px] font-bold text-white rounded-md uppercase flex items-center">Management {isBatchOpsOpen ? <ChevronDown size={14} className="ml-2" /> : <ChevronUp size={14} className="ml-2" />}</button>
+
+                <div className="flex items-center gap-4">
+                    <button 
+                        onClick={handleCopyToClipboard}
+                        className="px-8 py-3.5 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm"
+                    >
+                        <Copy size={16} className="text-slate-400" /> EXPORT DATA
+                    </button>
+                    <div className="relative group" ref={batchOpsRef}>
+                        <button 
+                            onClick={() => setIsBatchOpsOpen(!isBatchOpsOpen)}
+                            className="px-10 py-3.5 bg-indigo-600 text-white rounded-[20px] text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-4"
+                        >
+                            MANAGEMENT <ChevronUp size={16} className={cn("transition-transform", isBatchOpsOpen && "rotate-180")} />
+                        </button>
                         {isBatchOpsOpen && (
-                            <div className="absolute bottom-full right-0 mb-2 w-56 bg-white border border-gray-200 shadow-xl rounded-md py-1 z-[100] animate-in slide-in-from-bottom-2">
-                                <button onClick={() => { setIsSelectionMode(!isSelectionMode); setIsBatchOpsOpen(false); }} className="w-full text-left px-4 py-2 text-[12px] font-medium text-gray-700 hover:bg-gray-100">{isSelectionMode ? 'Disable Batch Mode' : 'Enable Batch Actions'}</button>
+                            <div className="absolute bottom-full right-0 mb-4 w-56 bg-white border border-gray-100 shadow-2xl rounded-2xl py-3 z-[100] animate-in slide-in-from-bottom-2 duration-200 overflow-hidden">
+                                <button 
+                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsBatchOpsOpen(false); }} 
+                                    className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                                >
+                                    {isSelectionMode ? 'Disable Batch Mode' : 'Enable Batch Actions'}
+                                </button>
+                                <button 
+                                    onClick={() => { navigate('/purchase-quotes/edit-columns'); setIsBatchOpsOpen(false); }}
+                                    className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                                >
+                                    Column Setting
+                                </button>
                             </div>
                         )}
                     </div>

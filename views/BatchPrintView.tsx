@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockPurchaseQuotes, mockPurchaseOrders, mockSalesOrders, getDeliveryNotes, mockReceipts } from '../mockData';
+import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockPurchaseQuotes, mockPurchaseOrders, mockSalesOrders, getDeliveryNotes, mockReceipts, getFooters } from '../mockData';
 import { Customer } from '../types';
 import { Printer, ChevronLeft } from 'lucide-react';
 
@@ -378,22 +378,31 @@ const BatchPrintView = () => {
 
                     const isInvoice = 'issueDate' in item && 'balanceDue' in item;
                     const isQuote = 'issueDate' in item && 'reference' in item && !isInvoice;
+                    const isOrder = 'orderDate' in item && 'reference' in item;
                     const isPurchaseQuote = isQuote && 'supplier' in item;
-                    const isOrder = 'orderDate' in item && 'reference' in item && !('supplier' in item);
-                    const isPurchaseOrder = 'orderDate' in item && 'reference' in item && 'supplier' in item;
+                    const isPurchaseOrder = isOrder && 'supplier' in item;
                     const isDeliveryNote = 'deliveryDate' in item && 'orderNumber' in item;
                     const isReceipt = 'paidByContact' in item && 'paymentMethod' in item;
 
-                    if (isQuote || isOrder || isInvoice || isDeliveryNote || isReceipt || isPurchaseOrder) {
-                        const dateLabel = isQuote || isInvoice ? 'Issue Date' : (isOrder || isPurchaseOrder ? 'Order Date' : (isDeliveryNote ? 'Delivery Date' : 'Receipt Date'));
-                        const dateValue = isQuote || isInvoice ? item.issueDate : (isOrder || isPurchaseOrder ? item.orderDate : (isDeliveryNote ? item.deliveryDate : item.date));
+                    if (isQuote || isOrder || isInvoice || isDeliveryNote || isReceipt) {
+                        const dateLabel = isQuote || isInvoice ? 'Issue Date' : (isOrder ? 'Order Date' : (isDeliveryNote ? 'Delivery Date' : 'Receipt Date'));
+                        const dateValue = isQuote || isInvoice ? item.issueDate : (isOrder ? item.orderDate : (isDeliveryNote ? item.deliveryDate : item.date));
 
                         const hasOptions = !!item.options;
                         const documentTitle = (hasOptions && item.options.customTitle && item.options.customTitleValue)
                             ? item.options.customTitleValue
-                            : (item.customTitle || (isPurchaseQuote ? 'Purchase Quote' : (isPurchaseOrder ? 'Purchase Order' : (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order')))))));
+                            : (item.customTitle || (isPurchaseQuote ? 'Purchase Quotation' : (isPurchaseOrder ? 'Purchase Order' : (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order')))))));
 
-                        const subTitle = isQuote ? 'OFFICIAL PROPOSAL' : (isInvoice ? 'TAX INVOICE' : (isDeliveryNote ? 'PROOF OF DELIVERY' : (isReceipt ? 'PAYMENT CONFIRMATION' : 'CONFIRMED ORDER')));
+                        const subTitle = isPurchaseQuote ? 'PROCUREMENT REQUEST' : (isQuote ? 'OFFICIAL PROPOSAL' : (isInvoice ? 'TAX INVOICE' : (isDeliveryNote ? 'PROOF OF DELIVERY' : (isReceipt ? 'PAYMENT CONFIRMATION' : (isPurchaseOrder ? 'ORDER TO SUPPLIER' : 'CONFIRMED ORDER')))));
+
+                        let footerValue = (item.options?.footers && item.options?.footerValue) ? item.options.footerValue : (item.footer || '');
+                        
+                        // Handle Purchase Docs Default Footer
+                        if ((isPurchaseOrder || isPurchaseQuote) && !footerValue) {
+                            const footers = getFooters();
+                            const pqFooter = footers.find(f => f.name === 'Purchase Quote');
+                            if (pqFooter) footerValue = pqFooter.content;
+                        }
 
                         let expiryDate = null;
                         if (isQuote) {
@@ -414,17 +423,16 @@ const BatchPrintView = () => {
                                             <div className="flex justify-between items-center mb-1">
                                                 <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">{documentTitle}</h1>
                                             </div>
-                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {item.reference}</p>
+                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">{isPurchaseQuote ? 'Ref' : 'Reference'}: {item.reference}</p>
                                         </div>
 
                                         <div className="grid grid-cols-2 gap-12 items-start">
-                                            {/* Billed To */}
+                                            {/* Billed To / Supplier */}
                                             <div>
                                                 <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">{(isPurchaseQuote || isPurchaseOrder) ? 'Supplier' : 'Billed To'}</h3>
                                                 <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{(isPurchaseQuote || isPurchaseOrder) ? item.supplier : item.customer}</p>
-                                                <p className="text-slate-500 text-[11px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">{item.billingAddress || ((isPurchaseQuote || isPurchaseOrder) ? 'No address provided' : 'No billing address provided')}</p>
+                                                <p className="text-slate-500 text-[12px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">{item.billingAddress || ((isPurchaseQuote || isPurchaseOrder) ? '' : 'No billing address provided')}</p>
                                             </div>
-
 
                                             {/* Order Details */}
                                             <div className="border-l border-gray-100 pl-12">
@@ -466,7 +474,7 @@ const BatchPrintView = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Company Logo */}
                                     <div className="w-[180px] shrink-0 pt-2">
                                         <img src="/logo.png" alt="Company Logo" className="w-full object-contain" />
@@ -483,6 +491,7 @@ const BatchPrintView = () => {
                                                 <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                                                 <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unit Price</th>
                                                 {item.options?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc</th>}
+                                                {(isPurchaseOrder || isPurchaseQuote) && !item.options?.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>}
                                                 <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
                                             </tr>
                                         </thead>
@@ -516,7 +525,12 @@ const BatchPrintView = () => {
                                                                 </span>
                                                             </td>
                                                         )}
-                                                        <td className="px-4 py-4 text-right font-semibold">{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                        {(isPurchaseOrder || isPurchaseQuote) && !item.options?.amountsAreTaxInclusive && (
+                                                            <td className="px-4 py-4 text-right font-medium text-slate-400">
+                                                                {(lineTotal * (line.taxCode === 'VAT 16%' ? 0.16 : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                            </td>
+                                                        )}
+                                                        <td className="px-4 py-4 text-right font-semibold">{(lineTotal * (line.taxCode === 'VAT 16%' ? (item.options?.amountsAreTaxInclusive ? 1 : 1.16) : 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                                     </tr>
                                                 );
                                             }) : (
@@ -622,11 +636,11 @@ const BatchPrintView = () => {
                                     </div>
                                 </div>
 
-                                {((item.options?.footers && item.options?.footerValue) || item.footer) && (
+                                {footerValue && (
                                     <div className="pt-6 border-t border-slate-100 uppercase tracking-widest mt-12">
                                         <span className="text-[10px] font-black text-slate-400 block mb-3 lowercase tracking-[0.2em] italic">Terms & Conditions</span>
                                         <p className="text-[11px] text-slate-500 font-medium leading-relaxed max-w-2xl whitespace-pre-wrap">
-                                            {(item.options?.footers && item.options?.footerValue) ? item.options.footerValue : item.footer}
+                                            {footerValue}
                                         </p>
                                     </div>
                                 )}

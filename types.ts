@@ -359,6 +359,7 @@ export interface Supplier {
   billingAddress?: string;
   currency?: string;
   tpin?: string;
+  withholdingTax?: number | string;
   inactive?: boolean;
 }
 
