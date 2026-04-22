@@ -1,0 +1,167 @@
+// This is your Prisma schema file.
+// It maps your database tables to your Javascript code.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"] // Crucial for your 7-area setup
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["master", "sales", "purchase", "inventory", "finance", "admin"]
+}
+
+// ---------------------------------------------------------
+// 1. MASTER DATA AREA
+// ---------------------------------------------------------
+
+model Customer {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code            String   @unique
+  name            String
+  email           String?
+  currency        String?  @default("USD")
+  billingAddress  String?  @map("billing_address")
+  status          String?  @default("Active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  salesInvoices   Invoice[]
+  receipts        Receipt[]
+
+  @@map("customers")
+  @@schema("master")
+}
+
+model Item {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemCode        String   @unique @map("item_code")
+  itemName        String   @map("item_name")
+  description     String?
+  unitName        String?  @default("Pcs") @map("unit_name")
+  valuationMethod String?  @default("FIFO") @map("valuation_method")
+  isInactive      Boolean  @default(false) @map("is_inactive")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  invoiceItems    InvoiceItem[]
+  stockLedger     StockLedger[]
+
+  @@map("items")
+  @@schema("master")
+}
+
+// ---------------------------------------------------------
+// 2. SALES AREA
+// ---------------------------------------------------------
+
+model Invoice {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reference     String   @unique
+  issueDate     DateTime @default(now()) @map("issue_date")
+  dueDate       DateTime? @map("due_date")
+  customer      Customer @relation(fields: [customerId], references: [id])
+  customerId    String   @db.Uuid @map("customer_id")
+  
+  grandTotal    Float    @default(0) @map("grand_total")
+  balanceDue    Float    @default(0) @map("balance_due")
+  status        String   @default("Unpaid")
+  docOptions    Json?    @default("{}") @map("doc_options")
+  
+  items         InvoiceItem[]
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("invoices")
+  @@schema("sales")
+}
+
+model InvoiceItem {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId    String   @db.Uuid @map("invoice_id")
+  item         Item     @relation(fields: [itemId], references: [id])
+  itemId       String   @db.Uuid @map("item_id")
+  
+  qty          Float
+  unitPrice    Float    @map("unit_price")
+  totalAmount  Float    @map("total_amount")
+
+  @@map("invoice_items")
+  @@schema("sales")
+}
+
+// ---------------------------------------------------------
+// 4. INVENTORY AREA
+// ---------------------------------------------------------
+
+model Location {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  code      String?  @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  stockLedger StockLedger[]
+
+  @@map("locations")
+  @@schema("inventory")
+}
+
+model StockLedger {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  item            Item     @relation(fields: [itemId], references: [id])
+  itemId          String   @db.Uuid @map("item_id")
+  location        Location @relation(fields: [locationId], references: [id])
+  locationId      String   @db.Uuid @map("location_id")
+  
+  qtyChange       Float    @map("qty_change")
+  transactionType String   @map("transaction_type")
+  sourceDocumentId String? @db.Uuid @map("source_document_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("stock_ledger")
+  @@schema("inventory")
+}
+
+// ---------------------------------------------------------
+// 5. FINANCE AREA
+// ---------------------------------------------------------
+
+model ChartOfAccount {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String   @unique
+  name             String
+  accountType      String   @map("account_type")
+  isPaymentAccount Boolean  @default(false) @map("is_payment_account")
+  
+  ledgerEntries    LedgerEntry[]
+  receipts         Receipt[]
+
+  @@map("chart_of_accounts")
+  @@schema("finance")
+}
+
+model LedgerEntry {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account         ChartOfAccount @relation(fields: [accountId], references: [id])
+  accountId       String   @db.Uuid @map("account_id")
+  transactionDate DateTime @default(now()) @map("transaction_date")
+  debit           Float    @default(0)
+  credit          Float    @default(0)
+  transactionType String?  @map("transaction_type")
+
+  @@map("ledger_entries")
+  @@schema("finance")
+}
+
+model Receipt {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reference     String   @unique
+  customer      Customer @relation(fields: [customerId], references: [id])
+  customerId    String   @db.Uuid @map("customer_id")
+  account       ChartOfAccount @relation(fields: [accountId], references: [id])
+  accountId     String   @db.Uuid @map("account_id")
+  amountReceived Float   @map("amount_received")
+
+  @@map("receipts")
+  @@schema("finance")
+}

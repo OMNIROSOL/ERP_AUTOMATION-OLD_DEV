@@ -1,4 +1,4 @@
-import React, { useState } from 'react'; // Triggering rebuild
+import React, { useState, useEffect } from 'react'; // Triggering rebuild
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 
 // Import Layout
@@ -120,6 +120,8 @@ import ViewSupplierView from './views/ViewSupplierView';
 import { mockApprovalRequests } from './mockData';
 import { ApprovalRequest } from './types';
 
+import { useERPStore } from './store/useERPStore';
+
 // Not Found Component
 const NotFound = () => (
   <div className="h-full flex items-center justify-center">
@@ -134,6 +136,11 @@ const NotFound = () => (
 
 const App = () => {
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>(mockApprovalRequests);
+  const fetchAllData = useERPStore((state) => state.fetchAllData);
+
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
 
   return (
     <Router>
