@@ -16,6 +16,15 @@ model Customer {
   email          String?
   currency       String?        @default("USD")
   billingAddress String?        @map("billing_address")
+  deliveryAddress String?       @map("delivery_address")
+  tpin           String?
+  division       String?
+  salesPerson    String?        @map("sales_person")
+  creditDays     Int?           @default(30) @map("credit_days")
+  creditLimit    Decimal?       @default(0) @map("credit_limit") @db.Decimal(15, 2)
+  documentation  String?
+  inactive       Boolean?       @default(false)
+  balance        Decimal?       @default(0) @db.Decimal(15, 2)
   status         String?        @default("Active")
   createdAt      DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
   deliveryNotes  DeliveryNote[]

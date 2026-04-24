@@ -73,7 +73,13 @@ const NewSupplierView = () => {
 
     useEffect(() => {
         apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
-        apiService.getNextReference('supplier').then(setCode).catch(err => console.error('Failed to fetch next supplier code:', err));
+        apiService.getNextReference('supplier')
+            .then(setCode)
+            .catch(err => {
+                console.error('Failed to fetch next supplier code:', err);
+                // Fallback to timestamp based code if API fails
+                setCode(`SUP-${Date.now().toString().slice(-4)}`);
+            });
     }, []);
 
     const validateEmail = (email: string) => {

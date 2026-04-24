@@ -1,7 +1,6 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { User, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, Save, ChevronUp, UserX } from 'lucide-react';
-import { getCustomers, mockInvoices, mockSalesQuotes, mockSalesOrders } from '../mockData';
 import { Customer, Division } from '../types';
 import apiService from '../services/apiService';
 
@@ -60,42 +59,9 @@ const EditCustomerView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const allCustomers = useMemo(() => getCustomers(), []);
-
-    const existingCustomer = useMemo(() => {
-        // First check saved customers
-        let customer = allCustomers.find(c => c.id === id) || allCustomers.find(c => c.code === id);
-
-        // If not found, it might be a derived customer from the views that hasn't been saved yet
-        if (!customer && id?.startsWith('cust-derived-')) {
-            const allCustomerNames = [
-                ...mockInvoices.map(i => i.customer),
-                ...mockSalesQuotes.map(q => q.customer),
-                ...mockSalesOrders.map(o => o.customer)
-            ];
-            const savedCustomerNames = new Set(allCustomers.map(c => c.name));
-
-            const uniqueDerived = Array.from(new Set(allCustomerNames))
-                .filter(name => !savedCustomerNames.has(name))
-                .map((name, index) => ({
-                    id: `cust-derived-${index + 1}`,
-                    name: name,
-                    code: `CUST-${(index + 1).toString().padStart(4, '0')}`,
-                    division: 'Global Division',
-                    status: mockInvoices.filter(i => i.customer === name).reduce((sum, inv) => sum + inv.balanceDue, 0) > 0 ? 'Unpaid' as 'Unpaid' : 'Paid' as 'Paid',
-                    tpin: `100${Math.floor(Math.random() * 10000000)}`,
-                    salesPerson: ['John Doe', 'Jane Smith', 'Alice Johnson'][index % 3],
-                    creditDays: [15, 30, 45, 60][index % 4],
-                    balance: mockInvoices.filter(i => i.customer === name).reduce((sum, inv) => sum + inv.balanceDue, 0)
-                }));
-
-            customer = uniqueDerived.find(c => c.id === id);
-        }
-
-        return customer;
-    }, [id, allCustomers]);
-
+    const [customer, setCustomer] = useState<Customer | null>(null);
     const [name, setName] = useState('');
+    const [code, setCode] = useState('');
     const [creditLimit, setCreditLimit] = useState('');
     const [currency, setCurrency] = useState('ZMW - Zambian Kwacha');
     const [billingAddress, setBillingAddress] = useState('');
@@ -110,32 +76,47 @@ const EditCustomerView = () => {
     const [inactive, setInactive] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
-    }, []);
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [customers, divisions] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getDivisions()
+                ]);
+                setAvailableDivisions(divisions);
+                const cust = customers.find(c => c.id === id || c.code === id);
+                if (cust) {
+                    setCustomer(cust);
+                    setName(cust.name || '');
+                    setCode(cust.code || '');
+                    setCreditLimit(cust.creditLimit?.toString() || '');
+                    setCurrency(cust.currency || 'ZMW - Zambian Kwacha');
+                    setBillingAddress(cust.billingAddress || '');
+                    setDeliveryAddress(cust.deliveryAddress || '');
+                    setEmail(cust.email || '');
+                    setDivision(cust.division || 'Optional');
+                    setTpin(cust.tpin || '');
+                    setCreditDays(cust.creditDays?.toString() || '30');
+                    setSalesPerson(cust.salesPerson || '');
+                    setFileName(cust.documentation || 'No file chosen');
+                    setInactive(cust.inactive || false);
+                }
+            } catch (err) {
+                console.error('Failed to fetch edit data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
 
     const validateEmail = (email: string) => {
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return re.test(email);
     };
-
-    useEffect(() => {
-        if (existingCustomer) {
-            setName(existingCustomer.name || '');
-            setCreditLimit(existingCustomer.creditLimit?.toString() || '');
-            setCurrency(existingCustomer.currency || 'ZMW - Zambian Kwacha');
-            setBillingAddress(existingCustomer.billingAddress || '');
-            setDeliveryAddress(existingCustomer.deliveryAddress || '');
-            setEmail(existingCustomer.email || '');
-            setDivision(existingCustomer.division || 'Optional');
-            setTpin(existingCustomer.tpin || '');
-            setCreditDays(existingCustomer.creditDays?.toString() || '30');
-            setSalesPerson(existingCustomer.salesPerson || '');
-            setFileName(existingCustomer.documentation || 'No file chosen');
-            setInactive(existingCustomer.inactive || false);
-        }
-    }, [existingCustomer]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -144,6 +125,24 @@ const EditCustomerView = () => {
     };
 
     const triggerFileSelect = () => fileInputRef.current?.click();
+
+    if (isLoading) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing Profile...</p>
+            </div>
+        );
+    }
+
+    if (!customer) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[12px]">Customer not found.</p>
+                <button onClick={() => navigate('/customers')} className="text-blue-600 font-bold text-[10px] uppercase hover:underline">Back to Directory</button>
+            </div>
+        );
+    }
 
     return (
         <div className="p-10 max-w-5xl mx-auto space-y-10">
@@ -178,6 +177,10 @@ const EditCustomerView = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <InputField label="Customer Name" value={name} onChange={(e: any) => setName(e.target.value)} Icon={User} placeholder="e.g. Acme Corp" />
+                            <InputField label="Customer Code" value={code} onChange={(e: any) => setCode(e.target.value)} Icon={Hash} placeholder="e.g. CUST-0001" />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Preferred Currency</label>
                                 <div className="relative group">
@@ -341,13 +344,9 @@ const EditCustomerView = () => {
                             Discard Changes
                         </button>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 if (email && !validateEmail(email)) {
                                     setEmailError('Invalid email format');
-                                    return;
-                                }
-                                if (!existingCustomer) {
-                                    alert('Customer not found!');
                                     return;
                                 }
 
@@ -356,42 +355,31 @@ const EditCustomerView = () => {
                                     ? `${name} - ${currencyCode}` 
                                     : name;
 
-                                const updatedCustomer: Customer = {
-                                    ...existingCustomer,
+                                const updatedData = {
+                                    code: code,
                                     name: finalName || 'Unnamed Customer',
-                                    division: division !== 'Optional' ? division : 'General',
-                                    tpin: tpin,
-                                    salesPerson: salesPerson,
-                                    creditDays: parseInt(creditDays) || 30,
                                     email: email,
+                                    currency: currency,
                                     billingAddress: billingAddress,
                                     deliveryAddress: deliveryAddress,
-                                    currency: currency,
+                                    tpin: tpin,
+                                    division: division,
+                                    salesPerson: salesPerson,
+                                    creditDays: creditDays,
                                     creditLimit: creditLimit,
                                     documentation: fileName !== 'No file chosen' ? fileName : undefined,
-                                    inactive: inactive
+                                    inactive: inactive,
+                                    status: inactive ? 'Inactive' : 'Paid'
                                 };
 
-                                let persistentCustomers = [];
                                 try {
-                                    const saved = localStorage.getItem('customers_data');
-                                    persistentCustomers = saved ? JSON.parse(saved) : [];
-                                    if (!Array.isArray(persistentCustomers)) persistentCustomers = [];
-                                } catch (e) {
-                                    console.error('Error parsing customer data:', e);
-                                    persistentCustomers = [];
+                                    await apiService.updateCustomer(customer.id, updatedData);
+                                    alert('Customer profile updated successfully!');
+                                    navigate('/customers');
+                                } catch (err: any) {
+                                    console.error('Failed to update customer:', err);
+                                    alert('Failed to save changes: ' + (err.response?.data?.error || err.message));
                                 }
-
-                                const index = persistentCustomers.findIndex((c: Customer) => c.id === existingCustomer.id);
-                                if (index >= 0) {
-                                    persistentCustomers[index] = updatedCustomer;
-                                } else {
-                                    persistentCustomers.push(updatedCustomer);
-                                }
-
-                                localStorage.setItem('customers_data', JSON.stringify(persistentCustomers));
-                                alert('Customer profile updated successfully!');
-                                navigate('/customers');
                             }}
                             className="bg-blue-600 text-white px-12 py-4 rounded-2xl text-[14px] font-black hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 uppercase tracking-[0.2em] flex items-center gap-2"
                         >

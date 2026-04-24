@@ -14,6 +14,10 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (req, res) => {
+  res.send('🚀 ERP Backend is running');
+});
+
 // Log all requests
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
@@ -38,7 +42,15 @@ app.post('/api/customers', async (req, res) => {
         email: data.email,
         currency: data.currency,
         billingAddress: data.billingAddress,
-        status: data.status || 'Unpaid',
+        deliveryAddress: data.deliveryAddress,
+        tpin: data.tpin,
+        division: data.division,
+        salesPerson: data.salesPerson,
+        creditDays: data.creditDays ? parseInt(data.creditDays.toString()) : undefined,
+        creditLimit: data.creditLimit ? parseFloat(data.creditLimit.toString()) : undefined,
+        documentation: data.documentation,
+        inactive: data.inactive || false,
+        status: data.status || 'Active',
       }
     });
     res.json(result);
@@ -60,6 +72,14 @@ app.put('/api/customers/:id', async (req, res) => {
         email: data.email,
         currency: data.currency,
         billingAddress: data.billingAddress,
+        deliveryAddress: data.deliveryAddress,
+        tpin: data.tpin,
+        division: data.division,
+        salesPerson: data.salesPerson,
+        creditDays: data.creditDays ? parseInt(data.creditDays.toString()) : undefined,
+        creditLimit: data.creditLimit ? parseFloat(data.creditLimit.toString()) : undefined,
+        documentation: data.documentation,
+        inactive: data.inactive,
         status: data.status
       }
     });

@@ -1,16 +1,37 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Eye, Edit, ChevronRight, LayoutGrid, Printer, FileText, Mail, Copy, ChevronLeft, ChevronsLeft, ChevronsRight, FolderOpen } from 'lucide-react';
-import { getCustomers, mockInvoices, mockSalesQuotes, mockSalesOrders } from '../mockData';
+import { Customer } from '../types';
+import apiService from '../services/apiService';
 
 const ViewCustomerView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const allCustomers = useMemo(() => getCustomers(), []);
-
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const customers = await apiService.getCustomers();
+                setAllCustomers(customers);
+                
+                // Find current customer
+                const cust = customers.find(c => c.id === id || c.code === id);
+                setCustomer(cust || null);
+            } catch (err) {
+                console.error('Failed to fetch customer data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -22,9 +43,7 @@ const ViewCustomerView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const customerIndex = useMemo(() => {
-        return allCustomers.findIndex(c => c.id === id || c.code === id);
-    }, [id, allCustomers]);
+    const customerIndex = allCustomers.findIndex(c => c.id === id || c.code === id);
 
     const handleNext = () => {
         if (customerIndex >= 0 && customerIndex < allCustomers.length - 1) {
@@ -59,53 +78,26 @@ const ViewCustomerView = () => {
         </button>
     );
 
-    const customer = useMemo(() => {
-        // First check saved customers
-        let cust = allCustomers.find(c => c.id === id) || allCustomers.find(c => c.code === id);
-
-        // If not found, check derived customers
-        if (!cust && id?.startsWith('cust-derived-')) {
-            const allCustomerNames = [
-                ...mockInvoices.map(i => i.customer),
-                ...mockSalesQuotes.map(q => q.customer),
-                ...mockSalesOrders.map(o => o.customer)
-            ];
-            const savedCustomerNames = new Set(allCustomers.map(c => c.name));
-
-            const uniqueDerived = Array.from(new Set(allCustomerNames))
-                .filter(name => !savedCustomerNames.has(name))
-                .map((name, index) => ({
-                    id: `cust-derived-${index + 1}`,
-                    name: name,
-                    code: `CUST-${(index + 1).toString().padStart(4, '0')}`,
-                    division: 'Global Division',
-                    status: mockInvoices.filter(i => i.customer === name).reduce((sum, inv) => sum + inv.balanceDue, 0) > 0 ? 'Unpaid' as 'Unpaid' : 'Paid' as 'Paid',
-                    tpin: `100${Math.floor(Math.random() * 10000000)}`,
-                    salesPerson: ['John Doe', 'Jane Smith', 'Alice Johnson'][index % 3],
-                    creditDays: [15, 30, 45, 60][index % 4],
-                    balance: mockInvoices.filter(i => i.customer === name).reduce((sum, inv) => sum + inv.balanceDue, 0),
-                    creditLimit: 50000,
-                    currency: 'ZMW - Zambian Kwacha',
-                    email: `${name.replace(/\s+/g, '.').toLowerCase()}@example.com`,
-                    billingAddress: '123 Main Street\nLusaka, Zambia',
-                    deliveryAddress: '123 Main Street\nLusaka, Zambia'
-                }));
-
-            cust = uniqueDerived.find(c => c.id === id);
-        }
-
-        return cust;
-    }, [id, allCustomers]);
-
+    if (isLoading) {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading Profile...</p>
+            </div>
+        );
+    }
 
     if (!customer) {
-        return <div className="p-8 text-center text-gray-500">Customer not found.</div>;
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[12px]">Customer not found.</p>
+                <button onClick={() => navigate('/customers')} className="text-blue-600 font-bold text-[10px] uppercase hover:underline">Back to Directory</button>
+            </div>
+        );
     }
 
     return (
         <div className="bg-[#f3f4f6] min-h-full flex flex-col">
-
-
             <div className="bg-white px-8 py-3 border-b border-gray-200 flex items-center text-[11px] font-bold text-gray-400 uppercase tracking-widest space-x-2 select-none no-print">
                 <FolderOpen size={14} className="text-slate-400" />
                 <ChevronRight size={10} className="opacity-30" />
@@ -280,7 +272,7 @@ const ViewCustomerView = () => {
                                 <div className="flex">
                                     <span className="w-32 text-gray-500">Credit Limit:</span>
                                     <span className="font-medium">
-                                        {customer.creditLimit ? `${customer.currency?.split(' ')[0] || 'ZMW'} ${customer.creditLimit.toLocaleString()}` : 'None'}
+                                        {customer.creditLimit ? `${customer.currency?.split(' ')[0] || 'ZMW'} ${Number(customer.creditLimit).toLocaleString()}` : 'None'}
                                     </span>
                                 </div>
                             </div>
@@ -328,11 +320,10 @@ const ViewCustomerView = () => {
                             <span className="text-slate-500 font-bold uppercase tracking-widest text-[12px]">Total Outstanding Balance</span>
                             <span className="font-black text-3xl text-slate-900 tracking-tighter">
                                 <span className="text-[14px] mr-3 text-slate-400 font-bold">{customer.currency?.split(' ')[0] || 'ZMW'}</span>
-                                {(customer.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                {(Number(customer.balance) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
                         </div>
                     </div>
-
                 </div>
             </div>
 
@@ -351,3 +342,4 @@ const ViewCustomerView = () => {
 };
 
 export default ViewCustomerView;
+

@@ -37,20 +37,20 @@ const NumericInputField = ({ label, value, onChange, placeholder, onIncrement, o
                 className={`w-full bg-slate-50 border ${error ? 'border-rose-500 ring-4 ring-rose-500/10' : 'border-slate-200'} rounded-2xl ${Icon ? 'pl-11' : 'px-5'} pr-16 py-3 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 ${error ? 'focus:ring-rose-500/10 focus:border-rose-500' : 'focus:ring-indigo-500/10 focus:border-indigo-500'} transition-all`}
             />
             <div className="absolute right-2 flex flex-col gap-0.5">
-                <button 
-                  type="button"
-                  onClick={onIncrement}
-                  className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors outline-none"
+                <button
+                    type="button"
+                    onClick={onIncrement}
+                    className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors outline-none"
                 >
-                  <ChevronUp size={12} strokeWidth={3} />
+                    <ChevronUp size={12} strokeWidth={3} />
                 </button>
                 <div className="h-[1px] bg-slate-200 mx-1"></div>
-                <button 
-                  type="button"
-                  onClick={onDecrement}
-                  className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors outline-none"
+                <button
+                    type="button"
+                    onClick={onDecrement}
+                    className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-indigo-600 transition-colors outline-none"
                 >
-                  <ChevronDown size={12} strokeWidth={3} />
+                    <ChevronDown size={12} strokeWidth={3} />
                 </button>
             </div>
         </div>
@@ -78,7 +78,13 @@ const NewCustomerView = () => {
 
     useEffect(() => {
         apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
-        apiService.getNextReference('customer').then(setCode).catch(err => console.error('Failed to fetch next customer code:', err));
+        apiService.getNextReference('customer')
+            .then(setCode)
+            .catch(err => {
+                console.error('Failed to fetch next customer code:', err);
+                // Fallback to timestamp based code if API fails
+                setCode(`CUST-${Date.now().toString().slice(-4)}`);
+            });
     }, []);
 
     const validateEmail = (email: string) => {
@@ -184,16 +190,16 @@ const NewCustomerView = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             <InputField label="Credit Limit" value={creditLimit} onChange={(e: any) => setCreditLimit(e.target.value)} Icon={CreditCard} placeholder="Maximum balance" />
                             <InputField label="Tax Identification (TPIN)" value={tpin} onChange={(e: any) => setTpin(e.target.value)} Icon={Landmark} placeholder="TPIN Number" />
-                            <InputField 
-                                label="Contact Email" 
-                                type="email" 
-                                value={email} 
+                            <InputField
+                                label="Contact Email"
+                                type="email"
+                                value={email}
                                 onChange={(e: any) => {
                                     setEmail(e.target.value);
                                     if (emailError) setEmailError('');
-                                }} 
-                                Icon={Mail} 
-                                placeholder="finance@company.com" 
+                                }}
+                                Icon={Mail}
+                                placeholder="finance@company.com"
                                 error={emailError}
                             />
                         </div>
@@ -209,14 +215,14 @@ const NewCustomerView = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                            <NumericInputField 
-                                label="Credit Days" 
-                                value={creditDays} 
-                                onChange={(e: any) => setCreditDays(e.target.value)} 
+                            <NumericInputField
+                                label="Credit Days"
+                                value={creditDays}
+                                onChange={(e: any) => setCreditDays(e.target.value)}
                                 onIncrement={() => setCreditDays(prev => (parseInt(prev) || 0) + 1 + "")}
                                 onDecrement={() => setCreditDays(prev => Math.max(0, (parseInt(prev) || 0) - 1) + "")}
-                                Icon={IdCard} 
-                                placeholder="e.g. 30" 
+                                Icon={IdCard}
+                                placeholder="e.g. 30"
                             />
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Assigned Sales Agent</label>
@@ -279,17 +285,24 @@ const NewCustomerView = () => {
                                 }
 
                                 const currencyCode = currency.split(' ')[0];
-                                const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`)) 
-                                    ? `${name} - ${currencyCode}` 
+                                const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`))
+                                    ? `${name} - ${currencyCode}`
                                     : name;
 
                                 const customerData = {
                                     code: code,
                                     name: finalName || 'Unnamed Customer',
                                     email: email,
-                                    currency: currencyCode,
+                                    currency: currency,
                                     billingAddress: billingAddress,
-                                    status: 'Unpaid'
+                                    deliveryAddress: deliveryAddress,
+                                    tpin: tpin,
+                                    division: division,
+                                    salesPerson: salesPerson,
+                                    creditDays: creditDays,
+                                    creditLimit: creditLimit,
+                                    documentation: fileName !== 'No file chosen' ? fileName : undefined,
+                                    status: 'Paid'
                                 };
 
                                 try {
