@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, ArrowRightLeft, Plus, Trash2, ArrowLeft } from 'lucide-react';
 import { mockInventoryTransfers, mockInventoryItems, getInventoryLocations } from '../mockData';
-import { InventoryTransfer } from '../types';
+import { InventoryTransfer, Division } from '../types';
+import apiService from '../services/apiService';
 
 const NewInventoryTransferView = () => {
   const navigate = useNavigate();
@@ -19,6 +20,12 @@ const NewInventoryTransferView = () => {
     status: 'Draft',
     items: [{ inventoryItem: '', qty: 0 }]
   });
+
+  const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+
+  React.useEffect(() => {
+    apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -156,11 +163,12 @@ const NewInventoryTransferView = () => {
                 className="w-full px-4 py-3 bg-emerald-50/30 border border-emerald-100 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all font-medium"
                 required
               >
-                <option value="">Select Source...</option>
-                {getInventoryLocations().map(loc => (
-                  <option key={loc.id} value={loc.name}>{loc.name}</option>
-                ))}
-              </select>
+                 <option value="">Select Source...</option>
+                 <option value="General">General</option>
+                 {availableDivisions.map(div => (
+                   <option key={div.id} value={div.name}>{div.name}</option>
+                 ))}
+               </select>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-blue-600 font-bold">Destination Warehouse</label>
@@ -171,11 +179,12 @@ const NewInventoryTransferView = () => {
                 className="w-full px-4 py-3 bg-blue-50/30 border border-blue-100 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
                 required
               >
-                <option value="">Select Destination...</option>
-                {getInventoryLocations().map(loc => (
-                  <option key={loc.id} value={loc.name}>{loc.name}</option>
-                ))}
-              </select>
+                 <option value="">Select Destination...</option>
+                 <option value="General">General</option>
+                 {availableDivisions.map(div => (
+                   <option key={div.id} value={div.name}>{div.name}</option>
+                 ))}
+               </select>
             </div>
           </div>
 

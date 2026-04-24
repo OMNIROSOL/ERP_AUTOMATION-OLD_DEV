@@ -8,6 +8,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { mockInventoryItems, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import { InventoryItem, ScreenPermission } from '../types';
 import { useEffect } from 'react';
+import apiService from '../services/apiService';
 
 const InventoryItemsView = () => {
   const navigate = useNavigate();
@@ -30,6 +31,24 @@ const InventoryItemsView = () => {
 
     return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
   }, [currentUser]);
+
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchItems = async () => {
+      setIsLoading(true);
+      try {
+        const data = await apiService.getItems();
+        setInventoryItems(data);
+      } catch (err) {
+        console.error('Failed to fetch inventory items:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchItems();
+  }, []);
 
   const defaultColumns = [
     { id: 'itemCode', label: 'Item Code', visible: true },
@@ -64,7 +83,7 @@ const InventoryItemsView = () => {
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    let result = mockInventoryItems.filter(item => {
+    let result = inventoryItems.filter(item => {
       const searchStr = `${item.itemName} ${item.itemCode} ${item.description} ${item.category}`.toLowerCase();
       return searchStr.includes(query);
     });
@@ -206,7 +225,22 @@ const InventoryItemsView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {currentSlice.map((item) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={columns.filter((c: any) => c.visible).length + 2} className="px-8 py-20 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-4">
+                      <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                      <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching inventory data...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : currentSlice.length === 0 ? (
+                 <tr>
+                  <td colSpan={columns.filter((c: any) => c.visible).length + 2} className="px-8 py-20 text-center text-slate-400 font-bold">
+                    No inventory items found.
+                  </td>
+                </tr>
+              ) : currentSlice.map((item) => (
                 <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
                   <td className="px-4 py-4 text-center">
                     <div className="flex items-center justify-center space-x-1">

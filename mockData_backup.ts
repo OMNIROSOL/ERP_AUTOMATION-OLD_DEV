@@ -1,4 +1,4 @@
-import {
+import type {
   Customer,
   SalesQuote,
   SalesOrder,
@@ -27,7 +27,7 @@ import {
   RoleDefinition,
   ScreenPermission,
   DocumentFooter
-} from './types';
+} from './types.ts';
 
 export const ADJUSTABLE_MARGIN_THRESHOLD = 0.1; // 10%
 

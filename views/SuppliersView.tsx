@@ -9,6 +9,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { getSuppliers } from '../mockData';
 import { Supplier } from '../types';
 import { cn } from '../utils/cn';
+import apiService from '../services/apiService';
 
 const SuppliersView = () => {
     const navigate = useNavigate();
@@ -59,7 +60,23 @@ const SuppliersView = () => {
         localStorage.setItem('is_supplier_batch_view_mode', isBatchViewMode.toString());
     }, [isBatchViewMode]);
 
-    const suppliers = useMemo(() => getSuppliers(), [refreshTrigger]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchSuppliers = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getSuppliers();
+                setSuppliers(data);
+            } catch (err) {
+                console.error('Failed to fetch suppliers:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchSuppliers();
+    }, [refreshTrigger]);
 
     const defaultColumns = [
         { id: 'name', label: 'Supplier Name', visible: true },
@@ -351,8 +368,17 @@ const SuppliersView = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {currentSlice.length > 0 ? (
-                            currentSlice.map((supplier: any) => (
+                        {isLoading ? (
+                            <tr>
+                                <td colSpan={columns.filter((c: any) => c.visible).length + (isBatchViewMode ? 2 : 1)} className="px-8 py-20 text-center">
+                                    <div className="flex flex-col items-center justify-center space-y-4">
+                                        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Synchronizing with database...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : currentSlice.length > 0 ? (
+                             currentSlice.map((supplier: any) => (
                                 <tr key={supplier.id} className={`group hover:bg-indigo-50/30 transition-all duration-300 ${selectedSupplierIds.has(supplier.id) ? 'bg-indigo-50/50' : ''}`}>
                                     {isBatchViewMode && (
                                         <td className="px-6 py-4 text-center">

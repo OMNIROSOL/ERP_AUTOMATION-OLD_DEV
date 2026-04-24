@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
-import { 
-    Receipt, ChevronRight, Calculator, ChevronDown, 
-    Copy, X, Plus, Calendar, Hash, User, Briefcase, 
-    Landmark, CreditCard, Trash2, Save, Undo2, 
-    CheckCircle2, Info, Image as ImageIcon, Download, 
+import {
+    Receipt, ChevronRight, Calculator, ChevronDown,
+    Copy, X, Plus, Calendar, Hash, User, Briefcase,
+    Landmark, CreditCard, Trash2, Save, Undo2,
+    CheckCircle2, Info, Image as ImageIcon, Download,
     ChevronUp, Settings
 } from 'lucide-react';
 import { mockReceipts, mockInventory, mockAccounts } from '../mockData';
@@ -50,7 +50,7 @@ const SelectField = ({ label, value, onChange, Icon, children, className }: any)
 );
 
 const CheckboxField = ({ label, checked, onChange, description }: any) => (
-    <div 
+    <div
         onClick={onChange}
         className={cn(
             "flex items-center space-x-4 p-4 rounded-2xl border transition-all cursor-pointer group",
@@ -290,9 +290,9 @@ const NewReceiptView = () => {
 
                         <AnimatePresence>
                             {options.customTitle && (
-                                <motion.div 
-                                    initial={{ opacity: 0, height: 0 }} 
-                                    animate={{ opacity: 1, height: 'auto' }} 
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
                                     className="overflow-hidden"
                                 >
@@ -300,10 +300,10 @@ const NewReceiptView = () => {
                                 </motion.div>
                             )}
                         </AnimatePresence>
-                        
+
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                             <InputField label="Receipt Date" type="date" value={date} onChange={(e: any) => setDate(e.target.value)} Icon={Calendar} />
-                            
+
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Reference</label>
                                 <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:border-indigo-500 transition-all">
@@ -324,8 +324,8 @@ const NewReceiptView = () => {
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Paid By</label>
                                 <div className="flex bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:border-indigo-500 transition-all group">
                                     <div className="relative w-32 border-r border-slate-200">
-                                        <select 
-                                            value={paidByContact} 
+                                        <select
+                                            value={paidByContact}
                                             onChange={(e) => setPaidByContact(e.target.value)}
                                             className="w-full h-full bg-transparent pl-4 pr-8 py-3 text-[13px] font-semibold text-slate-700 outline-none appearance-none cursor-pointer"
                                         >
@@ -335,8 +335,8 @@ const NewReceiptView = () => {
                                         </select>
                                         <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-colors group-focus-within:text-indigo-500" />
                                     </div>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={paidByOptional}
                                         onChange={(e) => setPaidByOptional(e.target.value)}
                                         placeholder="Name or Contact..."
@@ -350,8 +350,8 @@ const NewReceiptView = () => {
                                 <div className="flex bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:border-indigo-500 transition-all group">
                                     <div className="bg-slate-100 flex items-center px-4 border-r border-slate-200 text-[10px] font-black text-slate-400 uppercase tracking-widest">{receivedIn}</div>
                                     <div className="relative flex-1">
-                                        <select 
-                                            value={receivedInAccount} 
+                                        <select
+                                            value={receivedInAccount}
                                             onChange={(e) => setReceivedInAccount(e.target.value)}
                                             className="w-full h-full bg-transparent pl-4 pr-8 py-3 text-[13px] font-semibold text-slate-700 outline-none appearance-none cursor-pointer"
                                         >
@@ -402,8 +402,8 @@ const NewReceiptView = () => {
                                             {options.lineNumber && <td className="px-4 py-4 text-xs font-black text-slate-400 text-center">{index + 1}</td>}
                                             <td className="px-4 py-4">
                                                 <div className="relative">
-                                                    <select 
-                                                        value={item.item} 
+                                                    <select
+                                                        value={item.item}
                                                         onChange={(e) => updateItem(item.id, 'item', e.target.value)}
                                                         className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-indigo-600 outline-none appearance-none cursor-pointer"
                                                     >
@@ -416,8 +416,8 @@ const NewReceiptView = () => {
                                             </td>
                                             <td className="px-4 py-4">
                                                 <div className="relative">
-                                                    <select 
-                                                        value={item.account} 
+                                                    <select
+                                                        value={item.account}
                                                         onChange={(e) => updateItem(item.id, 'account', e.target.value)}
                                                         className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                     >
@@ -535,9 +535,9 @@ const NewReceiptView = () => {
 
                         <AnimatePresence>
                             {(options.withholdingTax || options.footers) && (
-                                <motion.div 
-                                    initial={{ opacity: 0, y: 10 }} 
-                                    animate={{ opacity: 1, y: 0 }} 
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0 }}
                                     className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 bg-slate-50/50 rounded-[32px] border border-slate-100 mt-4"
                                 >
@@ -553,10 +553,10 @@ const NewReceiptView = () => {
                                                     <option value="Amount">Amount (Fixed)</option>
                                                 </SelectField>
                                                 <div className="flex-1">
-                                                    <InputField 
-                                                        label={withholdingTaxMethod === 'Rate' ? 'Rate (%)' : 'Fixed Amount (ZMW)'} 
-                                                        value={withholdingTaxRate} 
-                                                        onChange={(e: any) => setWithholdingTaxRate(e.target.value)} 
+                                                    <InputField
+                                                        label={withholdingTaxMethod === 'Rate' ? 'Rate (%)' : 'Fixed Amount (ZMW)'}
+                                                        value={withholdingTaxRate}
+                                                        onChange={(e: any) => setWithholdingTaxRate(e.target.value)}
                                                         placeholder="0.00"
                                                     />
                                                 </div>
@@ -569,8 +569,8 @@ const NewReceiptView = () => {
                                                 <div className="w-6 h-6 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500"><Plus size={12} /></div>
                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Receipt Footer</p>
                                             </div>
-                                            <textarea 
-                                                value={footerText} 
+                                            <textarea
+                                                value={footerText}
                                                 onChange={(e) => setFooterText(e.target.value)}
                                                 className="w-full bg-white border border-slate-200 rounded-[24px] px-5 py-4 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all min-h-[100px] resize-none"
                                                 placeholder="Terms, conditions, or bank details..."
@@ -606,14 +606,14 @@ const NewReceiptView = () => {
 
                 {/* Bottom Footer Actions */}
                 <div className="bg-slate-50/50 p-10 border-t border-slate-100 flex items-center justify-between">
-                    <button 
+                    <button
                         onClick={() => navigate('/receipts')}
                         className="flex items-center space-x-2 text-[11px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                     >
                         <Undo2 size={16} />
                         <span>Discard Receipt</span>
                     </button>
-                    
+
                     <button
                         onClick={handleSave}
                         className="group relative flex items-center space-x-4 px-12 py-4 bg-indigo-600 text-white rounded-[24px] font-black text-[13px] uppercase tracking-[0.2em] hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 active:scale-95"

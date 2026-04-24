@@ -1,18 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Save, X, GripVertical, Eye, EyeOff } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { ChevronRight, Check, FileCheck } from 'lucide-react';
+import { cn } from '../utils/cn';
 
 const EditPurchaseInvoiceColumnsView = () => {
     const navigate = useNavigate();
+    
     const [columns, setColumns] = useState([
-        { id: 'Actions', label: 'Actions', visible: true, locked: true },
-        { id: 'Issue date', label: 'Issue Date', visible: true, locked: false },
-        { id: 'Reference', label: 'Reference', visible: true, locked: false },
-        { id: 'Supplier', label: 'Supplier', visible: true, locked: false },
-        { id: 'Amount', label: 'Amount', visible: true, locked: false },
-        { id: 'Balance due', label: 'Balance Due', visible: true, locked: false },
-        { id: 'Status', label: 'Status', visible: true, locked: false }
+        { id: 'Issue date', label: 'Issue date', visible: true },
+        { id: 'Due date', label: 'Due date', visible: true },
+        { id: 'Reference', label: 'Reference', visible: true },
+        { id: 'Purchase Order', label: 'Purchase Order', visible: true },
+        { id: 'Supplier', label: 'Supplier', visible: true },
+        { id: 'Description', label: 'Description', visible: true },
+        { id: 'Project', label: 'Project', visible: true },
+        { id: 'Closed invoice', label: 'Closed invoice', visible: true },
+        { id: 'Withholding tax', label: 'Withholding tax', visible: true },
+        { id: 'Discount', label: 'Discount', visible: true },
+        { id: 'Invoice Amount', label: 'Invoice Amount', visible: true },
+        { id: 'Balance due', label: 'Balance due', visible: true },
+        { id: 'Days to Due Date', label: 'Days to Due Date', visible: true },
+        { id: 'Days overdue', label: 'Days overdue', visible: true },
+        { id: 'Status', label: 'Status', visible: true },
+        { id: 'Timestamp', label: 'Timestamp', visible: true },
     ]);
 
     useEffect(() => {
@@ -21,12 +31,18 @@ const EditPurchaseInvoiceColumnsView = () => {
             const visibility = JSON.parse(saved);
             setColumns(prev => prev.map(col => ({
                 ...col,
-                visible: col.locked ? true : (visibility[col.id] !== false)
+                visible: visibility[col.id] !== false
             })));
         }
     }, []);
 
-    const handleSave = () => {
+    const toggleColumn = (id: string) => {
+        setColumns(columns.map((col: any) =>
+            col.id === id ? { ...col, visible: !col.visible } : col
+        ));
+    };
+
+    const handleUpdate = () => {
         const visibility = columns.reduce((acc, col) => ({
             ...acc,
             [col.id]: col.visible
@@ -36,93 +52,69 @@ const EditPurchaseInvoiceColumnsView = () => {
         navigate('/purchase-invoices');
     };
 
-    const toggleVisibility = (id: string) => {
-        setColumns(prev => prev.map(col => 
-            (col.id === id && !col.locked) ? { ...col, visible: !col.visible } : col
-        ));
-    };
-
     return (
-        <div className="p-10 max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex justify-between items-center">
-                <div>
-                    <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
-                        <span className="cursor-pointer hover:underline" onClick={() => navigate('/purchase-invoices')}>Purchase Invoices</span>
-                        <ChevronRight size={10} className="opacity-50" />
-                        <span className="text-slate-400 font-bold">Column Configuration</span>
-                    </div>
-                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Configure Columns</h1>
-                    <p className="text-slate-500 text-sm mt-1">Select which columns appear in your purchase invoice list.</p>
+        <div className="bg-slate-50 min-h-screen selection:bg-indigo-100 selection:text-indigo-900 font-sans p-8 md:p-12 animate-in fade-in duration-700">
+            <div className="max-w-2xl mx-auto mb-10">
+                <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-4">
+                    <span className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => navigate('/purchase-invoices')}>Purchase Invoices</span>
+                    <ChevronRight size={10} className="opacity-50" />
+                    <span className="text-slate-400">Column Configuration</span>
                 </div>
-                <button 
-                    onClick={() => navigate('/purchase-invoices')}
-                    className="w-12 h-12 flex items-center justify-center bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all shadow-sm text-slate-400 hover:text-slate-600"
-                >
-                    <X size={20} />
-                </button>
+                
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center text-indigo-500">
+                        <FileCheck size={22} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Configure Columns</h1>
+                        <p className="text-slate-500 font-medium text-sm">Select which data fields you want to see for Purchase Invoices.</p>
+                    </div>
+                </div>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl shadow-slate-200/50 overflow-hidden">
-                <div className="p-8 space-y-4">
-                    {columns.map((column, index) => (
-                        <motion.div 
-                            key={column.id}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                            className={`flex items-center p-5 rounded-3xl border transition-all ${
-                                column.visible 
-                                    ? 'bg-white border-slate-200 shadow-sm' 
-                                    : 'bg-slate-50/50 border-transparent opacity-60'
-                            }`}
-                        >
-                            <div className="mr-6 text-slate-300">
-                                <GripVertical size={20} />
-                            </div>
-                            
-                            <div className="flex-1">
-                                <h3 className={`text-sm font-bold uppercase tracking-wider ${column.visible ? 'text-slate-800' : 'text-slate-400'}`}>
-                                    {column.label}
-                                </h3>
-                                {column.locked && (
-                                    <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mt-1 block">Required Column</span>
-                                )}
-                            </div>
+            <div className="max-w-xl mx-auto grid grid-cols-1 gap-3 mb-12">
+                {columns.map((col: any) => (
+                    <div
+                        key={col.id}
+                        onClick={() => toggleColumn(col.id)}
+                        className={cn(
+                            "flex items-center space-x-5 bg-white border rounded-[24px] p-5 cursor-pointer transition-all hover:scale-[1.01] hover:shadow-md active:scale-[0.99]",
+                            col.visible 
+                                ? "border-emerald-500/30 bg-white" 
+                                : "border-slate-100 bg-white/60 opacity-60"
+                        )}
+                    >
+                        <div className={cn(
+                            "w-7 h-7 rounded-xl border-2 flex items-center justify-center transition-all",
+                            col.visible 
+                                ? "bg-emerald-500 border-emerald-500 shadow-lg shadow-emerald-200" 
+                                : "bg-white border-slate-200"
+                        )}>
+                            {col.visible && <Check size={16} className="text-white" strokeWidth={4} />}
+                        </div>
+                        <span className={cn(
+                            "text-[15px] transition-all tracking-tight",
+                            col.visible ? "text-slate-900 font-bold" : "text-slate-400 font-medium"
+                        )}>
+                            {col.label}
+                        </span>
+                    </div>
+                ))}
+            </div>
 
-                            <button
-                                onClick={() => toggleVisibility(column.id)}
-                                disabled={column.locked}
-                                className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${
-                                    column.locked
-                                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                        : column.visible
-                                            ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
-                                            : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                                }`}
-                            >
-                                {column.visible ? (
-                                    <><Eye size={14} /> Visible</>
-                                ) : (
-                                    <><EyeOff size={14} /> Hidden</>
-                                )}
-                            </button>
-                        </motion.div>
-                    ))}
-                </div>
-
-                <div className="bg-slate-50/50 p-8 flex justify-end gap-4 border-t border-slate-100">
+            <div className="max-w-xl mx-auto pt-6 border-t border-slate-200 text-center">
+                <button
+                    onClick={handleUpdate}
+                    className="w-full md:w-auto min-w-[240px] px-10 py-4 bg-emerald-500 text-white rounded-[20px] font-black text-[13px] uppercase tracking-[0.2em] hover:bg-emerald-600 transition-all shadow-xl shadow-emerald-200 active:scale-95"
+                >
+                    Update View
+                </button>
+                <div className="mt-6">
                     <button 
                         onClick={() => navigate('/purchase-invoices')}
-                        className="px-8 py-4 rounded-2xl text-[12px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 transition-colors"
+                        className="text-[11px] font-bold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                     >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={handleSave}
-                        className="flex items-center gap-3 px-10 py-4 bg-indigo-600 text-white rounded-2xl text-[12px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95"
-                    >
-                        <Save size={18} />
-                        Save Configuration
+                        Cancel Changes
                     </button>
                 </div>
             </div>

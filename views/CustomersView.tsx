@@ -5,14 +5,13 @@ import {
     ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Printer, HelpCircle
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { mockInvoices, mockSalesQuotes, mockSalesOrders, mockDeliveryNotes, mockReceipts } from '../mockData';
+import { getCustomers, mockInvoices, mockSalesQuotes, mockSalesOrders, mockDeliveryNotes, mockReceipts } from '../mockData';
 import { Customer } from '../types';
 import { cn } from '../utils/cn';
-import { useERPStore } from '../store/useERPStore';
+import apiService from '../services/apiService';
 
 const CustomersView = () => {
     const navigate = useNavigate();
-    const { customers, invoices, fetchInvoices, fetchCustomers } = useERPStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [copiedNotification, setCopiedNotification] = useState(false);
     const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(new Set());
@@ -24,7 +23,6 @@ const CustomersView = () => {
     const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
     const [showInactive, setShowInactive] = useState(false);
     const [showEditColumns, setShowEditColumns] = useState(false);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -36,22 +34,35 @@ const CustomersView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    // Force refresh when component gains focus or mount
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
     useEffect(() => {
-        fetchCustomers();
-        fetchInvoices();
-        const handleFocus = () => {
-            fetchCustomers();
-            fetchInvoices();
-            setRefreshTrigger(prev => prev + 1);
-        };
+        const handleFocus = () => setRefreshTrigger(prev => prev + 1);
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, []); // Removed fetch functions from dependencies to avoid loops
+    }, []);
 
     useEffect(() => {
         localStorage.setItem('is_batch_view_mode', isBatchViewMode.toString());
     }, [isBatchViewMode]);
 
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchCustomers = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getCustomers();
+                setCustomers(data);
+            } catch (err) {
+                console.error('Failed to fetch customers:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchCustomers();
+    }, [refreshTrigger]);
 
     const defaultColumns = [
         { id: 'name', label: 'Customer Name', visible: true },
@@ -375,7 +386,22 @@ const CustomersView = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {currentSlice.map((customer: any) => (
+                        {isLoading ? (
+                            <tr>
+                                <td colSpan={columns.filter((c: any) => c.visible).length + (isBatchViewMode ? 2 : 1)} className="px-8 py-20 text-center">
+                                    <div className="flex flex-col items-center justify-center space-y-4">
+                                        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Synchronizing with database...</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        ) : currentSlice.length === 0 ? (
+                             <tr>
+                                <td colSpan={columns.filter((c: any) => c.visible).length + (isBatchViewMode ? 2 : 1)} className="px-8 py-20 text-center text-slate-400 font-bold">
+                                    No customers found matching your criteria.
+                                </td>
+                            </tr>
+                        ) : currentSlice.map((customer: any) => (
                             <tr key={customer.id} className={`group hover:bg-slate-50/80 transition-all duration-300 ${selectedCustomerIds.has(customer.id) ? 'bg-indigo-50/50' : ''}`}>
                                 {isBatchViewMode && (
                                     <td className="px-6 py-4 text-center">
@@ -477,7 +503,7 @@ const CustomersView = () => {
                                             }).length;
                                         }
                                         if (col.id === 'salesOrders') count = mockSalesOrders.filter(o => o.customer === customer.name && o.status !== 'Invoiced' && o.status !== 'Rejected').length;
-                                        if (col.id === 'salesInvoices') count = (invoices || []).filter(i => i.customer === customer.name && i.status !== 'Delivered').length;
+                                        if (col.id === 'salesInvoices') count = mockInvoices.filter(i => i.customer === customer.name && i.status !== 'Delivered').length;
                                         if (col.id === 'deliveryNotes') count = mockDeliveryNotes.filter(d => d.customer === customer.name && (d.status || 'Pending') === 'Pending').length;
 
                                         if (['receipts', 'salesQuotes', 'salesOrders', 'salesInvoices', 'deliveryNotes', 'payments'].includes(col.id) && count > 0) {

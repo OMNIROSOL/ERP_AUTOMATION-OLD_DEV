@@ -30,7 +30,8 @@ import {
     ChevronDown,
     ChevronUp,
     Hash,
-    Briefcase
+    Briefcase,
+    Settings
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -54,7 +55,7 @@ const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, 
 
 const SelectField = ({ label, value, onChange, Icon, children }: any) => (
     <div className="space-y-2">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <label className="text-[10px] font-black text-slate-600 uppercase tracking-tight ml-1">{label}</label>
         <div className="relative group">
             {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
             <select
@@ -96,15 +97,18 @@ const NewPurchaseInvoiceView = () => {
     const [description, setDescription] = useState('');
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [showOptionsArea, setShowOptionsArea] = useState(false);
+    const [freightItems, setFreightItems] = useState([{ id: Date.now(), description: 'Freight / Shipping', amount: '0', taxCode: 'No tax' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         columnLineNumber: true,
+        columnDescription: true,
         columnDiscount: false,
         columnDiscountType: 'Percentage',
-        withholdingTax: false,
-        withholdingTaxType: 'Rate',
-        withholdingTaxValue: '0',
+        freightIn: false,
+        actAsGoodReceipt: false,
+        inventoryLocation: 'Main Warehouse',
         customTitle: false,
         customTitleValue: 'Purchase Invoice',
         footers: false,
@@ -144,7 +148,7 @@ const NewPurchaseInvoiceView = () => {
                     setUseManualRef(false);
                 }
                 setDescription(doc.description || '');
-                
+
                 const itemsToSet = doc.items && doc.items.length > 0
                     ? doc.items
                     : [{ id: Date.now(), item: 'General Item', description: doc.description || '', qty: 1, unitPrice: (doc as any).invoiceAmount || (doc as any).amount || 0, discount: '', taxCode: 'No tax' }];
@@ -157,8 +161,7 @@ const NewPurchaseInvoiceView = () => {
                     qty: i.qty ? i.qty.toString() : '1',
                     unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                     discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax',
-                    unit: i.unit || ''
+                    taxCode: i.taxCode || 'No tax'
                 })));
             }
         } else {
@@ -170,7 +173,7 @@ const NewPurchaseInvoiceView = () => {
             setReference(getNextReference());
             setUseManualRef(false);
             setDescription('');
-            setItems([{ id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
         }
     }, [id, location.search]);
 
@@ -180,7 +183,14 @@ const NewPurchaseInvoiceView = () => {
         const lineCalcs = items.map(item => {
             const qty = parseFloat(item.qty) || 0;
             const price = parseFloat(item.unitPrice) || 0;
+            const discountValue = parseFloat(item.discount) || 0;
+
             let netTotal = qty * price;
+            if (options.columnDiscount) {
+                if (options.columnDiscountType === 'Percentage') netTotal *= (1 - (discountValue / 100));
+                else netTotal = Math.max(0, netTotal - discountValue);
+            }
+
             let taxAmount = 0;
             if (item.taxCode === 'VAT 16%') {
                 if (options.amountsAreTaxInclusive) {
@@ -192,9 +202,16 @@ const NewPurchaseInvoiceView = () => {
             totalTax += taxAmount;
             return { taxAmount, grossTotal: netTotal + taxAmount, netTotal };
         });
-        let grandTotal = subtotal + totalTax;
-        return { lineCalcs, subtotal, totalTax, grandTotal };
-    }, [items, options]);
+        const freightTotal = freightItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+        const freightTax = freightItems.reduce((sum, item) => {
+            const amt = parseFloat(item.amount) || 0;
+            if (item.taxCode === 'VAT 16%') return sum + (amt * 0.16);
+            return sum;
+        }, 0);
+
+        let grandTotal = subtotal + totalTax + freightTotal + freightTax;
+        return { lineCalcs, subtotal, totalTax: totalTax + freightTax, grandTotal, freightTotal };
+    }, [items, options, freightItems]);
 
     const handleSave = async () => {
         const newInvoice: PurchaseInvoice = {
@@ -264,16 +281,16 @@ const NewPurchaseInvoiceView = () => {
                                                 {!useManualRef && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
                                             </div>
                                         </div>
-                                        <input 
-                                            type="text" 
-                                            value={reference} 
-                                            onChange={(e) => useManualRef && setReference(e.target.value)} 
-                                            readOnly={!useManualRef} 
-                                            placeholder={useManualRef ? "Enter custom ref..." : ""} 
+                                        <input
+                                            type="text"
+                                            value={reference}
+                                            onChange={(e) => useManualRef && setReference(e.target.value)}
+                                            readOnly={!useManualRef}
+                                            placeholder={useManualRef ? "Enter custom ref..." : ""}
                                             className={cn(
-                                                "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors", 
+                                                "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors",
                                                 !useManualRef ? "text-indigo-600 font-black" : "text-slate-700"
-                                            )} 
+                                            )}
                                         />
                                     </div>
                                 </div>
@@ -315,7 +332,7 @@ const NewPurchaseInvoiceView = () => {
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -326,9 +343,10 @@ const NewPurchaseInvoiceView = () => {
                                             {options.columnLineNumber && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12 text-center">#</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[180px]">ITEM</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[180px]">ACCOUNT</th>
-                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
+                                            {options.columnDescription && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">QTY</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">UNIT PRICE</th>
+                                            {options.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right whitespace-nowrap">DISCOUNT</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">TAX CODE</th>
                                             {!options.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">TAX AMOUNT</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">TOTAL</th>
@@ -351,8 +369,7 @@ const NewPurchaseInvoiceView = () => {
                                                                     ...i,
                                                                     item: val,
                                                                     unitPrice: invItem ? invItem.purchasePrice.toString() : i.unitPrice,
-                                                                    description: invItem ? val : i.description,
-                                                                    unit: invItem ? (invItem as any).unit : i.unit
+                                                                    description: invItem ? val : i.description
                                                                 } : i));
                                                             }}
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
@@ -382,22 +399,25 @@ const NewPurchaseInvoiceView = () => {
                                                             <option value="Fuel & Oil">Fuel & Oil</option>
                                                         </select>
                                                     </td>
-                                                    <td className="px-4 py-4">
-                                                        <input
-                                                            type="text"
-                                                            value={item.description}
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                setItems(prev => prev.map(i => i.id === item.id ? { ...i, description: val } : i));
-                                                            }}
-                                                            className="w-full bg-transparent border-none p-0 text-sm text-slate-600 outline-none placeholder:text-slate-300"
-                                                            placeholder="Add description..."
-                                                        />
-                                                    </td>
+                                                    {options.columnDescription && (
+                                                        <td className="px-4 py-4">
+                                                            <input
+                                                                type="text"
+                                                                value={item.description}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    setItems(prev => prev.map(i => i.id === item.id ? { ...i, description: val } : i));
+                                                                }}
+                                                                className="w-full bg-transparent border-none p-0 text-sm text-slate-600 outline-none placeholder:text-slate-300"
+                                                                placeholder="Add description..."
+                                                            />
+                                                        </td>
+                                                    )}
                                                     <td className="px-4 py-4">
                                                         <input
                                                             type="text"
                                                             value={item.qty}
+                                                            onMouseDown={(e) => e.stopPropagation()}
                                                             onChange={(e) => {
                                                                 const val = e.target.value;
                                                                 setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: val } : i));
@@ -409,6 +429,7 @@ const NewPurchaseInvoiceView = () => {
                                                         <input
                                                             type="text"
                                                             value={item.unitPrice}
+                                                            onMouseDown={(e) => e.stopPropagation()}
                                                             onChange={(e) => {
                                                                 const val = e.target.value;
                                                                 setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: val } : i));
@@ -417,6 +438,24 @@ const NewPurchaseInvoiceView = () => {
                                                             placeholder="0.00"
                                                         />
                                                     </td>
+                                                    {options.columnDiscount && (
+                                                        <td className="px-4 py-4">
+                                                            <div className="flex items-center justify-end gap-1">
+                                                                <input
+                                                                    type="text"
+                                                                    value={item.discount}
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                    onChange={(e) => {
+                                                                        const val = e.target.value;
+                                                                        setItems(prev => prev.map(i => i.id === item.id ? { ...i, discount: val } : i));
+                                                                    }}
+                                                                    className="w-16 bg-transparent border-none p-0 text-sm font-bold text-indigo-600 text-right outline-none placeholder:text-slate-300"
+                                                                    placeholder="0"
+                                                                />
+                                                                <span className="text-[10px] text-slate-400 font-bold">{options.columnDiscountType === 'Percentage' ? '%' : currency}</span>
+                                                            </div>
+                                                        </td>
+                                                    )}
                                                     <td className="px-4 py-4">
                                                         <select
                                                             value={item.taxCode}
@@ -480,6 +519,14 @@ const NewPurchaseInvoiceView = () => {
                                             <span>Tax Component</span>
                                             <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">{calculations.totalTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </div>
+                                        {options.freightIn && (
+                                            <div className="flex justify-end items-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] gap-8">
+                                                <span>Total Freight</span>
+                                                <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">
+                                                    {calculations.freightTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-end items-center bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50 mt-2 h-14 gap-x-6">
                                             <div className="flex-1 text-left">
                                                 <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payable</p>
@@ -492,6 +539,226 @@ const NewPurchaseInvoiceView = () => {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Options Area */}
+                        <div className="space-y-6 pt-6 border-t border-slate-50 text-left">
+                            <div
+                                onClick={() => setShowOptionsArea(!showOptionsArea)}
+                                className="flex items-center justify-between group cursor-pointer hover:bg-slate-50/50 p-2 -m-2 rounded-2xl transition-all"
+                            >
+                                <div className="flex items-center space-x-4">
+                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500 group-hover:bg-amber-100 transition-colors">
+                                        <Settings size={20} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-black text-slate-800 tracking-tight">Document Options</h2>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{showOptionsArea ? 'Hide configuration' : 'Configure procurement settings'}</p>
+                                    </div>
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-amber-600 group-hover:bg-amber-100/50 transition-all">
+                                    <ChevronDown size={20} className={cn("transition-transform duration-300", showOptionsArea ? "rotate-180" : "")} />
+                                </div>
+                            </div>
+
+                            {showOptionsArea && (
+                                <div className="space-y-6 animate-in slide-in-from-top-4 duration-500">
+                                    {/* Primary Options Row */}
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                        {([
+                                            ['Tax Inclusive', 'amountsAreTaxInclusive'],
+                                            ['Description', 'columnDescription'],
+                                            ['Freight-in', 'freightIn'],
+                                            ['Act as Good Receipt', 'actAsGoodReceipt'],
+                                        ] as const).map(([label, key]) => (
+                                            <div key={key} className="space-y-3 h-full">
+                                                <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all h-full">
+                                                    <div className="relative flex items-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={(options as any)[key]}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                                                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 transition-all cursor-pointer"
+                                                        />
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight">{label}</span>
+                                                </label>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Inline Details (Freight & Inventory) */}
+                                    {(options.freightIn || options.actAsGoodReceipt) && (
+                                        <div className="space-y-4">
+                                            {options.freightIn && (
+                                                <div className="animate-in slide-in-from-top-2 duration-300">
+                                                    <div className="bg-indigo-50/20 rounded-2xl border border-indigo-100/30 p-4 space-y-3 shadow-sm text-left">
+                                                        <div className="flex items-center justify-between px-2 mb-1">
+                                                            <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">Freight Tracking Details</h3>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setFreightItems(prev => [...prev, { id: Date.now(), description: '', amount: '0', taxCode: 'No tax' }]);
+                                                                }}
+                                                                className="text-[10px] font-black text-indigo-600 hover:text-indigo-700 flex items-center space-x-1 uppercase tracking-wider"
+                                                            >
+                                                                <Plus size={10} /> <span>New Freight Line</span>
+                                                            </button>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            {freightItems.map((fItem) => (
+                                                                <div key={fItem.id} className="flex items-stretch bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm hover:border-indigo-200 transition-all group text-left">
+                                                                    <div className="flex items-center px-4 bg-slate-50 border-r border-slate-200 text-[9px] font-black text-slate-400 uppercase tracking-tighter min-w-[90px]">DESCRIPTION</div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <input
+                                                                            className="w-full h-full px-4 py-2 text-sm text-slate-600 focus:outline-none bg-transparent"
+                                                                            placeholder="Shipping, Road Transport, etc."
+                                                                            value={fItem.description}
+                                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                                            onChange={(e) => setFreightItems(prev => prev.map(i => i.id === fItem.id ? { ...i, description: e.target.value } : i))}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex items-center px-4 bg-slate-50 border-x border-slate-200 text-[9px] font-black text-slate-400 uppercase tracking-tighter">AMOUNT</div>
+                                                                    <div className="flex items-center bg-white px-2">
+                                                                        <input
+                                                                            className="w-24 px-2 py-2 text-sm font-bold text-slate-700 text-right focus:outline-none bg-transparent"
+                                                                            placeholder="0.00"
+                                                                            value={fItem.amount}
+                                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                                            onChange={(e) => setFreightItems(prev => prev.map(i => i.id === fItem.id ? { ...i, amount: e.target.value } : i))}
+                                                                        />
+                                                                        <span className="text-[10px] font-black text-slate-300 ml-1 uppercase">{currency}</span>
+                                                                    </div>
+                                                                    <div className="bg-white border-x border-slate-200">
+                                                                        <select
+                                                                            className="h-full px-4 py-2 text-[10px] font-extrabold text-indigo-500 uppercase tracking-wider bg-transparent cursor-pointer focus:outline-none appearance-none"
+                                                                            value={fItem.taxCode}
+                                                                            onChange={(e) => setFreightItems(prev => prev.map(i => i.id === fItem.id ? { ...i, taxCode: e.target.value } : i))}
+                                                                        >
+                                                                            <option value="No tax">NO TAX</option>
+                                                                            <option value="VAT 16%">VAT 16%</option>
+                                                                        </select>
+                                                                    </div>
+                                                                    <div className="flex items-center px-4 bg-slate-50/30 text-right min-w-[100px]">
+                                                                        <div className="w-full">
+                                                                            <div className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mb-0.5">Tax Amt</div>
+                                                                            <div className="text-[11px] font-bold text-slate-600 tabular-nums">
+                                                                                {((parseFloat(fItem.amount) || 0) * (fItem.taxCode === 'VAT 16%' ? 0.16 : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-stretch border-l border-slate-200">
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); setFreightItems(prev => [...prev, { ...fItem, id: Date.now() }]); }}
+                                                                            className="px-4 bg-slate-50 hover:bg-emerald-50 text-slate-300 hover:text-emerald-600 transition-all flex items-center justify-center border-r border-slate-100"
+                                                                            title="Duplicate Line"
+                                                                        ><Copy size={13} /></button>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); setFreightItems(prev => prev.length > 1 ? prev.filter(i => i.id !== fItem.id) : prev); }}
+                                                                            className="px-4 bg-slate-50 hover:bg-rose-50 text-slate-300 hover:text-rose-500 transition-all flex items-center justify-center"
+                                                                            title="Remove Line"
+                                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                                        ><Trash2 size={13} /></button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {options.actAsGoodReceipt && (
+                                                <div className="bg-slate-50/50 rounded-3xl border border-slate-100 p-4 flex items-center justify-between group hover:border-indigo-100 transition-all animate-in slide-in-from-top-2 duration-300">
+                                                    <div className="flex items-center space-x-3">
+                                                        <div className="w-8 h-8 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
+                                                            <Package size={14} />
+                                                        </div>
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Location</span>
+                                                    </div>
+                                                    <div className="relative w-48">
+                                                        <select
+                                                            value={options.inventoryLocation}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, inventoryLocation: e.target.value }))}
+                                                            className="w-full appearance-none bg-emerald-50 border border-emerald-100 rounded-full px-5 py-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/10 cursor-pointer transition-all hover:bg-emerald-100/50 pr-10"
+                                                        >
+                                                            <option value="Main Warehouse">MAIN WAREHOUSE</option>
+                                                            <option value="Showroom">SHOWROOM</option>
+                                                            <option value="Secondary Store">SECONDARY STORE</option>
+                                                            <option value="Retail Branch">RETAIL BRANCH</option>
+                                                        </select>
+                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-500">
+                                                            <ChevronDown size={12} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Secondary Options Row */}
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                        {([
+                                            ['Line Numbers', 'columnLineNumber'],
+                                            ['Custom Title', 'customTitle'],
+                                            ['Footers', 'footers']
+                                        ] as const).map(([label, key]) => (
+                                            <div key={key} className="space-y-3 h-full">
+                                                <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all h-full">
+                                                    <div className="relative flex items-center">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={(options as any)[key]}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                                                            className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 transition-all cursor-pointer"
+                                                        />
+                                                    </div>
+                                                    <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight">{label}</span>
+                                                </label>
+                                                {key === 'customTitle' && options.customTitle && (
+                                                    <div className="animate-in slide-in-from-top-2 duration-300 ml-4">
+                                                        <input
+                                                            type="text"
+                                                            autoFocus
+                                                            value={options.customTitleValue}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, customTitleValue: e.target.value }))}
+                                                            placeholder="e.g. Purchase Invoice"
+                                                            className="w-full bg-indigo-50/70 border-none rounded-full px-6 py-2 text-[12px] font-bold text-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 placeholder:text-indigo-300/50 transition-all shadow-sm"
+                                                        />
+                                                    </div>
+                                                )}
+                                                {key === 'footers' && options.footers && (
+                                                    <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                        <div className="relative group/foot">
+                                                            <select
+                                                                onMouseDown={(e) => e.stopPropagation()}
+                                                                onChange={(e) => {
+                                                                    const footer = getFooters().find(f => f.id === e.target.value);
+                                                                    if (footer) setOptions(prev => ({ ...prev, footerValue: footer.content }));
+                                                                }}
+                                                                className="w-full appearance-none bg-white border border-indigo-100 rounded-full px-6 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer pr-12 shadow-sm"
+                                                            >
+                                                                <option value="">-- Choose template --</option>
+                                                                {getFooters().map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                            </select>
+                                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-400">
+                                                                <ChevronDown size={12} />
+                                                            </div>
+                                                        </div>
+                                                        <div className="bg-white/80 rounded-2xl p-4 border border-indigo-100/50 min-h-[60px]">
+                                                            <p className="text-[10px] font-medium text-slate-600 italic leading-relaxed">
+                                                                {options.footerValue || <span className="opacity-40 italic">Select a template...</span>}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         <div className="flex justify-end space-x-4 pt-8">

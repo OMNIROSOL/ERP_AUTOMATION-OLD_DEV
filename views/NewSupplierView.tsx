@@ -1,12 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, ChevronUp } from 'lucide-react';
-import { getSuppliers, saveSuppliers, getInventoryLocations } from '../mockData';
-import { Supplier } from '../types';
+import { Division } from '../types';
+import apiService from '../services/apiService';
 
-const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error }: any) => (
+const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, required }: any) => (
     <div className="space-y-2">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">
+            {label} {required && <span className="text-rose-500">*</span>}
+        </label>
         <div className="relative group">
             {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
             <input
@@ -14,6 +16,7 @@ const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, 
                 value={value}
                 onChange={onChange}
                 placeholder={placeholder}
+                required={required}
                 className={`w-full bg-slate-50 border ${error ? 'border-rose-500 ring-4 ring-rose-500/10' : 'border-slate-200'} rounded-2xl ${Icon ? 'pl-11' : 'px-5'} py-3 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 ${error ? 'focus:ring-rose-500/10 focus:border-rose-500' : 'focus:ring-indigo-500/10 focus:border-indigo-500'} transition-all`}
             />
         </div>
@@ -58,6 +61,7 @@ const NumericInputField = ({ label, value, onChange, placeholder, onIncrement, o
 const NewSupplierView = () => {
     const navigate = useNavigate();
     const [name, setName] = useState('');
+    const [code, setCode] = useState('');
     const [currency, setCurrency] = useState('ZMW - Zambian Kwacha');
     const [address, setAddress] = useState('');
     const [email, setEmail] = useState('');
@@ -65,6 +69,12 @@ const NewSupplierView = () => {
     const [fileName, setFileName] = useState('No file chosen');
     const [emailError, setEmailError] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+
+    useEffect(() => {
+        apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
+        apiService.getNextReference('supplier').then(setCode).catch(err => console.error('Failed to fetch next supplier code:', err));
+    }, []);
 
     const validateEmail = (email: string) => {
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -111,7 +121,11 @@ const NewSupplierView = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <InputField label="Supplier Name" value={name} onChange={(e: any) => setName(e.target.value)} Icon={Building2} placeholder="e.g. Acme Supplies" />
+                            <InputField label="Supplier Name" value={name} onChange={(e: any) => setName(e.target.value)} Icon={Building2} placeholder="e.g. Acme Supplies" required />
+                            <InputField label="Supplier Code" value={code} onChange={(e: any) => setCode(e.target.value)} Icon={Hash} placeholder="e.g. SUP-001" required />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Preferred Currency</label>
                                 <div className="relative group">
@@ -188,8 +202,8 @@ const NewSupplierView = () => {
                                         className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
                                     >
                                         <option value="General">General</option>
-                                        {getInventoryLocations().map(loc => (
-                                            <option key={loc.id} value={loc.name}>{loc.name}</option>
+                                        {availableDivisions.map(div => (
+                                            <option key={div.id} value={div.name}>{div.name}</option>
                                         ))}
                                     </select>
                                     <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -216,48 +230,34 @@ const NewSupplierView = () => {
                             Discard
                         </button>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 if (email && !validateEmail(email)) {
                                     setEmailError('Invalid email format');
                                     return;
                                 }
-                                
-                                const allSuppliers = getSuppliers();
-                                const nextNumber = allSuppliers.reduce((max, s) => {
-                                    const match = s.code?.match(/\d+/);
-                                    if (match) {
-                                        const num = parseInt(match[0]);
-                                        return num > max ? num : max;
-                                    }
-                                    return max;
-                                }, 0) + 1;
-                                const newCode = `SUP-${nextNumber.toString().padStart(4, '0')}`;
 
                                 const currencyCode = currency.split(' ')[0];
                                 const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`)) 
                                     ? `${name} - ${currencyCode}` 
                                     : name;
 
-                                const newSupplier: Supplier = {
-                                    id: `sup-gen-${Date.now()}`,
+                                const supplierData = {
+                                    code: code,
                                     name: finalName || 'Unnamed Supplier',
-                                    code: newCode,
-                                    division: division,
-                                    status: 'Paid',
-                                    balance: 0,
                                     email: email,
+                                    currency: currencyCode,
                                     billingAddress: address,
-                                    currency: currency.split(' ')[0],
-                                    purchaseOrders: 0,
-                                    purchaseInvoices: 0,
-                                    goodsReceipts: 0,
-                                    qtyToReceive: 0
+                                    status: 'Paid'
                                 };
 
-                                const updatedSuppliers = [newSupplier, ...allSuppliers];
-                                saveSuppliers(updatedSuppliers);
-                                alert('Supplier profile finalized successfully!');
-                                navigate('/suppliers');
+                                try {
+                                    await apiService.createSupplier(supplierData);
+                                    alert('Supplier profile finalized successfully!');
+                                    navigate('/suppliers');
+                                } catch (err: any) {
+                                    console.error('Failed to create supplier:', err);
+                                    alert('Failed to save supplier to database: ' + (err.response?.data?.error || err.message));
+                                }
                             }}
                             className="bg-indigo-600 text-white px-12 py-4 rounded-2xl text-[14px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 uppercase tracking-[0.2em]"
                         >

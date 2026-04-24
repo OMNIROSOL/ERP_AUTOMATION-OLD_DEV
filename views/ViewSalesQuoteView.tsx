@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockSalesQuotes, getCustomers } from '../mockData';
+import { getCustomers } from '../mockData';
+import apiService from '../services/apiService';
 import { SalesQuote, Customer } from '../types';
 import {
     Printer,
@@ -26,26 +27,36 @@ const ViewSalesQuoteView = () => {
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const pdfRef = useRef<HTMLDivElement>(null);
+    const [quote, setQuote] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
 
-    const allCustomers = useMemo(() => getCustomers(), []);
-    const quoteIndex = mockSalesQuotes.findIndex(q => q.id === id);
-    const quote = mockSalesQuotes[quoteIndex];
+    useEffect(() => {
+        const fetchQuote = async () => {
+            if (!id) return;
+            try {
+                const quotes = await apiService.getQuotes();
+                const found = quotes.find((q: any) => q.id === id);
+                if (found) {
+                    setQuote(found);
+                }
+            } catch (err) {
+                console.error('Failed to fetch quote:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchQuote();
+    }, [id]);
 
-    const customerData = useMemo(() => {
-        if (!quote) return null;
-        return allCustomers.find(c => c.name === quote.customer);
-    }, [quote, allCustomers]);
-
-    const customerEmail = customerData?.email || (quote ? `${quote.customer.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
+    const customerData = quote?.customer;
+    const customerEmail = customerData?.email || (quote?.customer?.name ? `${quote.customer.name.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
 
     const expiryDate = useMemo(() => {
         if (!quote || !quote.issueDate || !quote.expiryDays) return 'N/A';
         try {
-            const parts = quote.issueDate.split('.');
-            if (parts.length !== 3) return 'N/A';
-            const date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            const date = new Date(quote.issueDate);
             date.setDate(date.getDate() + parseInt(quote.expiryDays));
-            return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+            return date.toLocaleDateString('en-GB').replace(/\//g, '.');
         } catch (e) {
             return 'N/A';
         }
@@ -53,10 +64,11 @@ const ViewSalesQuoteView = () => {
 
     const totals = useMemo(() => {
         if (!quote) return { subtotal: 0, tax: 0, total: 0 };
-        const isTaxInclusive = quote.options?.amountsAreTaxInclusive || false;
+        const options = quote.docOptions || {};
+        const isTaxInclusive = options.amountsAreTaxInclusive || false;
 
         if (!quote.items || quote.items.length === 0) {
-            const total = quote.amount;
+            const total = parseFloat(quote.amount) || 0;
             const tax = isTaxInclusive ? total * 0.16 / 1.16 : total * 0.16;
             const subtotal = isTaxInclusive ? total - tax : total;
             return { subtotal, tax, total: isTaxInclusive ? total : total + tax };
@@ -64,14 +76,14 @@ const ViewSalesQuoteView = () => {
 
         let subtotal = 0;
         let tax = 0;
-        quote.items.forEach(item => {
+        quote.items.forEach((item: any) => {
             const qty = parseFloat(item.qty) || 0;
             const price = parseFloat(item.unitPrice) || 0;
             const discount = parseFloat(item.discount) || 0;
 
             let lineTotal = qty * price;
-            if (quote.options?.columnDiscount) {
-                if (quote.options?.columnDiscountType === 'Percentage') {
+            if (options.columnDiscount) {
+                if (options.columnDiscountType === 'Percentage') {
                     lineTotal = lineTotal * (1 - discount / 100);
                 } else {
                     lineTotal = lineTotal - discount;
@@ -89,9 +101,9 @@ const ViewSalesQuoteView = () => {
         });
         let total = subtotal + tax;
         let withholdingTaxAmount = 0;
-        if (quote.options?.withholdingTax) {
-            const val = parseFloat(quote.options.withholdingTaxValue) || 0;
-            if (quote.options.withholdingTaxType === 'Rate') {
+        if (options.withholdingTax) {
+            const val = parseFloat(options.withholdingTaxValue) || 0;
+            if (options.withholdingTaxType === 'Rate') {
                 withholdingTaxAmount = subtotal * (val / 100);
             } else {
                 withholdingTaxAmount = val;
@@ -110,7 +122,9 @@ const ViewSalesQuoteView = () => {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    if (loading) return <div className="p-8 text-center text-slate-500 font-black uppercase tracking-widest">Loading quote...</div>;
     if (!quote) return <div className="p-8 text-center text-slate-500 font-black uppercase tracking-widest">Quote not found.</div>;
+
 
     const statusStyles: Record<string, string> = {
         'Active': 'bg-emerald-500 text-white',
@@ -231,32 +245,32 @@ const ViewSalesQuoteView = () => {
                 <div className="flex items-center space-x-2">
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[0].id}`)}
-                            disabled={quoteIndex <= 0}
+                            onClick={() => {}}
+                            disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronLeft size={14} /> <ChevronLeft size={14} className="-ml-2" />
                         </button>
                         <button
-                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[Math.max(0, quoteIndex - 1)].id}`)}
-                            disabled={quoteIndex <= 0}
+                            onClick={() => {}}
+                            disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
                             <ChevronLeft size={14} />
                         </button>
                     </div>
-                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">{quoteIndex + 1} / {mockSalesQuotes.length}</span>
+                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">1 / 1</span>
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[Math.min(mockSalesQuotes.length - 1, quoteIndex + 1)].id}`)}
-                            disabled={quoteIndex === mockSalesQuotes.length - 1}
+                            onClick={() => {}}
+                            disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronRight size={14} />
                         </button>
                         <button
-                            onClick={() => navigate(`/sales-quotes/view/${mockSalesQuotes[mockSalesQuotes.length - 1].id}`)}
-                            disabled={quoteIndex === mockSalesQuotes.length - 1}
+                            onClick={() => {}}
+                            disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
                             <ChevronRight size={14} /> <ChevronRight size={14} className="-ml-2" />
@@ -316,7 +330,7 @@ const ViewSalesQuoteView = () => {
                                 {/* Billed To */}
                                 <div>
                                     <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Billed To</h3>
-                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{quote.customer}</p>
+                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{quote.customer?.name}</p>
                                     <div className="text-gray-500 space-y-1">
                                         <p className="whitespace-pre-wrap">{customerData?.billingAddress || quote.billingAddress || '-'}</p>
                                         {customerEmail && <p className="text-blue-600 lowercase">{customerEmail}</p>}
@@ -329,7 +343,7 @@ const ViewSalesQuoteView = () => {
                                     <div className="space-y-3">
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Issue Date:</span>
-                                            <span className="font-semibold">{quote.issueDate}</span>
+                                            <span className="font-semibold">{new Date(quote.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.')}</span>
                                         </div>
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Expiry Date:</span>
@@ -369,12 +383,12 @@ const ViewSalesQuoteView = () => {
                                     <tr key={idx}>
                                         {quote.options?.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
                                         <td className="px-4 py-4">
-                                            <p className="font-semibold text-slate-900">{item.item || '-'}</p>
+                                            <p className="font-semibold text-slate-900">{item.item?.itemName || '-'}</p>
                                         </td>
                                         <td className="px-4 py-4">
-                                            <p className="text-gray-500">{item.description || '-'}</p>
+                                            <p className="text-gray-500">{item.description || item.item?.description || '-'}</p>
                                         </td>
-                                        <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
+                                        <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.item?.unitName || ''}</span></td>
                                         <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                         {quote.options?.columnDiscount && (
                                             <td className="px-4 py-4 text-right font-medium text-rose-500">

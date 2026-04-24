@@ -113,16 +113,11 @@ const NewPurchaseOrderView = () => {
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
     const [status, setStatus] = useState('Ordered');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
     const [showOptionsArea, setShowOptionsArea] = useState(false);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         columnLineNumber: true,
-        columnDiscount: false,
-        columnDiscountType: 'Percentage',
-        withholdingTax: false,
-        withholdingTaxType: 'Rate',
-        withholdingTaxValue: '0',
         customTitle: false,
         customTitleValue: 'Purchase Order',
         footers: false,
@@ -162,7 +157,7 @@ const NewPurchaseOrderView = () => {
                 }
                 setDescription(doc.description || '');
                 setStatus((doc as any).status || 'Ordered');
-                
+
                 if (doc.options) {
                     setOptions({
                         amountsAreTaxInclusive: doc.options.amountsAreTaxInclusive || false,
@@ -190,8 +185,7 @@ const NewPurchaseOrderView = () => {
                     qty: i.qty ? i.qty.toString() : '1',
                     unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                     discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax',
-                    unit: i.unit || ''
+                    taxCode: i.taxCode || 'No tax'
                 })));
             }
         } else {
@@ -203,7 +197,7 @@ const NewPurchaseOrderView = () => {
             setUseManualRef(false);
             setDescription('');
             setStatus('Ordered');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
             setOptions({
                 amountsAreTaxInclusive: false,
                 columnLineNumber: true,
@@ -335,16 +329,16 @@ const NewPurchaseOrderView = () => {
                                                 {!useManualRef && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
                                             </div>
                                         </div>
-                                        <input 
-                                            type="text" 
-                                            value={reference} 
-                                            onChange={(e) => useManualRef && setReference(e.target.value)} 
-                                            readOnly={!useManualRef} 
-                                            placeholder={useManualRef ? "Enter custom ref..." : ""} 
+                                        <input
+                                            type="text"
+                                            value={reference}
+                                            onChange={(e) => useManualRef && setReference(e.target.value)}
+                                            readOnly={!useManualRef}
+                                            placeholder={useManualRef ? "Enter custom ref..." : ""}
                                             className={cn(
-                                                "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors", 
+                                                "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors",
                                                 !useManualRef ? "text-indigo-600 font-black" : "text-slate-700"
-                                            )} 
+                                            )}
                                         />
                                     </div>
                                 </div>
@@ -386,7 +380,7 @@ const NewPurchaseOrderView = () => {
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Order Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -422,8 +416,7 @@ const NewPurchaseOrderView = () => {
                                                                     ...i,
                                                                     item: val,
                                                                     unitPrice: invItem ? invItem.purchasePrice.toString() : i.unitPrice,
-                                                                    description: invItem ? val : i.description,
-                                                                    unit: invItem ? (invItem as any).unit : i.unit
+                                                                    description: invItem ? val : i.description
                                                                 } : i));
                                                             }}
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"

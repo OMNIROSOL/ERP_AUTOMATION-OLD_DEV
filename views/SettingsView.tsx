@@ -40,6 +40,15 @@ const SettingsView = () => {
       title: 'Facility Configuration',
       items: [
         { 
+          id: 'divisions', 
+          label: 'Divisions', 
+          description: 'Manage business units, branches and regional departments',
+          icon: Building2, 
+          path: '/settings/divisions',
+          color: 'text-indigo-600',
+          bgColor: 'bg-indigo-50'
+        },
+        { 
           id: 'inventory-locations', 
           label: 'Inventory Locations', 
           description: 'Manage warehouses, points of sale and storage areas',

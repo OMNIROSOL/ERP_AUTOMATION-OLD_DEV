@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // Triggering rebuild
+import React, { useState } from 'react'; // Triggering rebuild
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 
 // Import Layout
@@ -112,6 +112,7 @@ import WithholdingTaxView from './views/WithholdingTaxView';
 import RoleManagementView from './views/RoleManagementView';
 import SettingsView from './views/SettingsView';
 import SettingsFootersView from './views/SettingsFootersView';
+import DivisionsView from './views/DivisionsView';
 import EditSupplierColumnsView from './views/EditSupplierColumnsView';
 import NewSupplierView from './views/NewSupplierView';
 import EditSupplierView from './views/EditSupplierView';
@@ -119,8 +120,6 @@ import ViewSupplierView from './views/ViewSupplierView';
 
 import { mockApprovalRequests } from './mockData';
 import { ApprovalRequest } from './types';
-
-import { useERPStore } from './store/useERPStore';
 
 // Not Found Component
 const NotFound = () => (
@@ -136,11 +135,6 @@ const NotFound = () => (
 
 const App = () => {
   const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>(mockApprovalRequests);
-  const fetchAllData = useERPStore((state) => state.fetchAllData);
-
-  useEffect(() => {
-    fetchAllData();
-  }, [fetchAllData]);
 
   return (
     <Router>
@@ -194,6 +188,7 @@ const App = () => {
           <Route path="/settings/withholding-taxes" element={<WithholdingTaxView />} />
           <Route path="/settings/role-management" element={<RoleManagementView />} />
           <Route path="/settings/footers" element={<SettingsFootersView />} />
+          <Route path="/settings/divisions" element={<DivisionsView />} />
 
           {/* Inventory Routes */}
           <Route path="/inventory-items" element={<InventoryItemsView />} />

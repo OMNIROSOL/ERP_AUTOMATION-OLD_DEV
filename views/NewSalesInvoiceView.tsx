@@ -12,8 +12,8 @@ import {
     saveDeliveryNotes,
     getFooters
 } from '../mockData';
-import { Invoice, Customer, InventoryItem } from '../types';
-import { useERPStore } from '../store/useERPStore';
+import { Invoice, Division } from '../types';
+import apiService from '../services/apiService';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -142,19 +142,6 @@ const NewSalesInvoiceView = () => {
     const dateInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
-    
-    // Store State
-    const { 
-        customers, 
-        items: inventoryItems, 
-        fetchCustomers, 
-        fetchItems 
-    } = useERPStore();
-
-    useEffect(() => {
-        fetchCustomers();
-        fetchItems();
-    }, [fetchCustomers, fetchItems]);
 
     // Form State
     const [issueDate, setIssueDate] = useState('');
@@ -167,25 +154,54 @@ const NewSalesInvoiceView = () => {
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
     const [tpin, setTpin] = useState('');
-    const [status, setStatus] = useState('Draft');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', account: 'Sales', division: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
-    const addLine = () => setItems([...items, { id: Date.now(), item: 'Select Item', description: '', account: 'Sales', division: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+    const [status, setStatus] = useState('Coming due');
+    const [customers, setCustomers] = useState<any[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
     const [copyFromId, setCopyFromId] = useState<string | null>(null);
+
+    const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+
+    useEffect(() => {
+        const loadMasterData = async () => {
+            try {
+                const [custs, itemsData, divs] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getItems(),
+                    apiService.getDivisions()
+                ]);
+                setCustomers(custs);
+                setInventoryItems(itemsData);
+                setAvailableDivisions(divs);
+            } catch (err) {
+                console.error('Failed to load master data:', err);
+            }
+        };
+        loadMasterData();
+    }, []);
 
     // UI State
     const [showOptionsArea, setShowOptionsArea] = useState(false);
     const [showTransactionInsights, setShowTransactionInsights] = useState(true);
     const [fileName, setFileName] = useState('No file chosen');
-    const [marginThreshold] = useState(10);
+    const inventoryMap = useMemo(() => {
+        const map: Record<string, any> = {};
+        inventoryItems.forEach(item => {
+            map[item.itemName] = item;
+        });
+        return map;
+    }, [inventoryItems]);
+
     const approvalReason = useMemo(() => {
         let reason = '';
         const itemsToValidate = items.filter(i => i.item !== 'Select Item');
         for (const item of itemsToValidate) {
-            const inventoryItem = (mockInventory as any)[item.item];
+            const inventoryItem = inventoryMap[item.item];
             if (inventoryItem) {
                 const qty = parseFloat(item.qty) || 0;
                 const price = parseFloat(item.unitPrice) || 0;
-                if (qty > inventoryItem.stock) reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${inventoryItem.stock}). `;
+                const stock = parseFloat(inventoryItem.qtyOnHand || 0);
+                if (qty > stock) reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${stock}). `;
                 const effectiveThreshold = marginThreshold / 100;
                 const minPrice = inventoryItem.sellingPrice * (1 - effectiveThreshold);
                 if (price < inventoryItem.purchasePrice) reason += `Price for ${item.item} (${price}) is below purchase price (${inventoryItem.purchasePrice}). `;
@@ -193,16 +209,15 @@ const NewSalesInvoiceView = () => {
             }
         }
         return reason.trim();
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, inventoryMap]);
 
-    const getNextReference = () => {
-        const refs = mockInvoices
-            .map(i => i.reference)
-            .filter(ref => ref && ref.startsWith('INV-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 0 : 1000;
-        return `INV-${(nextNum + 1).toString().padStart(4, '0')}`;
+    const fetchReference = async () => {
+        try {
+            const nextRef = await apiService.getNextReference('invoice');
+            setReference(nextRef);
+        } catch (err) {
+            console.error('Failed to get reference:', err);
+        }
     };
 
     const requiresApproval = useMemo(() => approvalReason.length > 0, [approvalReason]);
@@ -221,9 +236,9 @@ const NewSalesInvoiceView = () => {
         withholdingTaxValue: '0',
         hideTotalAmount: false,
         customTitle: false,
-        customTitleValue: 'Tax Invoice',
+        customTitleValue: 'Sales Invoice',
         footers: false,
-        footerValue: '',
+        footerValue: 'Thank you for your business.',
         earlyPaymentDiscount: false,
         earlyPaymentType: 'Percentage',
         earlyPaymentValue: '0',
@@ -231,91 +246,78 @@ const NewSalesInvoiceView = () => {
         latePaymentFees: false,
         latePaymentFeePercentage: '0',
         actsAsDeliveryNote: false,
-        deliveryDate: new Date().toISOString().split('T')[0],
         inventoryLocation: 'Default Inventory Location'
     });
 
     // Load Data
     useEffect(() => {
-        const searchParams = new URLSearchParams(location.search);
-        const copyFromId = searchParams.get('copyFrom');
+        const loadData = async () => {
+            const searchParams = new URLSearchParams(location.search);
+            const copyFromId = searchParams.get('copyFrom');
 
-        if (id || copyFromId) {
-            const targetId = id || copyFromId;
-            setCopyFromId(copyFromId);
-            const sourceDoc: any =
-                mockInvoices.find(i => i.id === targetId || (i as any).invoiceId === targetId) ||
-                mockSalesOrders.find(o => o.id === targetId) ||
-                mockSalesQuotes.find(q => q.id === targetId);
+            if (id || copyFromId) {
+                const targetId = id || copyFromId;
+                setCopyFromId(copyFromId);
+                try {
+                    // Try to find the source document in various collections via API
+                    const [invoices, orders, quotes] = await Promise.all([
+                        apiService.getInvoices(),
+                        apiService.getOrders(),
+                        apiService.getQuotes()
+                    ]);
 
-            if (sourceDoc) {
-                const docDate = sourceDoc.issueDate || sourceDoc.orderDate || '';
-                const sourceDueDate = sourceDoc.dueDate;
+                    const sourceDoc: any =
+                        invoices.find((i: any) => i.id === targetId) ||
+                        orders.find((o: any) => o.id === targetId) ||
+                        quotes.find((q: any) => q.id === targetId);
 
-                let parsedIssueDate = '';
-                if (docDate.includes('.')) {
-                    parsedIssueDate = docDate.split('.').reverse().join('-');
-                    setIssueDate(parsedIssueDate);
-                } else if (docDate.includes('-')) {
-                    parsedIssueDate = docDate;
-                    setIssueDate(parsedIssueDate);
-                } else {
-                    parsedIssueDate = new Date().toISOString().split('T')[0];
-                    setIssueDate(parsedIssueDate);
-                }
+                    if (sourceDoc) {
+                        const docDate = sourceDoc.issueDate || sourceDoc.orderDate || '';
+                        setIssueDate(new Date(docDate).toISOString().split('T')[0]);
+                        setCustomer(sourceDoc.customer?.name || '');
+                        setCurrency(sourceDoc.currency || 'ZMW');
+                        setBillingAddress(sourceDoc.billingAddress || sourceDoc.customer?.billingAddress || '');
+                        if (copyFromId) {
+                            fetchReference();
+                            setUseManualRef(false);
+                        } else {
+                            setReference(sourceDoc.reference);
+                            setUseManualRef(true);
+                        }
+                        setDescription(sourceDoc.description || '');
+                        setTpin(sourceDoc.customer?.tpin || '');
 
-                // Parse Due Date
-                if (sourceDueDate) {
-                    if (sourceDueDate === 'On receipt') {
-                        setDueDateType('On receipt');
-                    } else if (sourceDueDate.includes('.')) {
-                        setDueDateType('Net');
-                        // Calculate days difference
-                        const d1 = new Date(parsedIssueDate);
-                        const d2 = new Date(sourceDueDate.split('.').reverse().join('-'));
-                        const diffTime = Math.abs(d2.getTime() - d1.getTime());
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                        setDueDateDays(diffDays.toString());
-                    } else if (sourceDueDate.includes(' Days')) {
-                        setDueDateType('Net');
-                        setDueDateDays(sourceDueDate.split(' ')[0]);
+                        if (sourceDoc.items && sourceDoc.items.length > 0) {
+                            setItems(sourceDoc.items.map((i: any) => ({
+                                id: i.id || Date.now() + Math.random(),
+                                itemId: i.itemId || i.item?.id,
+                                item: i.item?.itemName || 'Select Item',
+                                description: i.description || i.item?.description || '',
+                                account: i.account || 'Inventory sales',
+                                division: i.division || 'Main',
+                                qty: i.qty ? i.qty.toString() : '1',
+                                unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
+                                discount: i.discount || '',
+                                taxCode: i.taxCode || 'VAT 16%'
+                            })));
+                        }
                     }
+                } catch (err) {
+                    console.error('Failed to load source document:', err);
                 }
-
-                setCustomer(sourceDoc.customer);
-                setCurrency(sourceDoc.currency || 'ZMW');
-                setBillingAddress((sourceDoc as any).billingAddress || getCustomers().find(c => c.name === sourceDoc.customer)?.billingAddress || '');
-                setReference(sourceDoc.reference);
-                setUseManualRef(true);
-                setDescription(sourceDoc.description || '');
-                const customerData = getCustomers().find(c => c.name === sourceDoc.customer);
-                setTpin((sourceDoc as any).tpin || customerData?.tpin || '');
-
-                if (sourceDoc.items && sourceDoc.items.length > 0) {
-                    setItems(sourceDoc.items.map((i: any) => ({
-                        id: i.id || Date.now() + Math.random(),
-                        item: i.item || i.itemName || 'Select Item',
-                        description: i.description || '',
-                        account: i.account || 'Inventory sales',
-                        division: i.division || 'Main',
-                        qty: i.qty ? i.qty.toString() : '1',
-                        unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
-                        discount: i.discount || '',
-                        taxCode: i.taxCode || 'VAT 16%',
-                        unit: (i as any).unit || ''
-                    })));
-                }
-
-                if (sourceDoc.options) {
-                    setOptions(prev => ({ ...prev, ...sourceDoc.options }));
-                }
+            } else {
+                setIssueDate(new Date().toISOString().split('T')[0]);
+                setCustomer('');
+                setCurrency('ZMW');
+                setBillingAddress('');
+                fetchReference();
+                setUseManualRef(false);
+                setDescription('');
+                setTpin('');
+                setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
             }
-        } else {
-            setIssueDate(new Date().toISOString().split('T')[0]);
-            setReference(getNextReference());
-            setUseManualRef(false);
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', account: 'Inventory sales', division: 'Main', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
-        }
+        };
+        loadData();
     }, [id, location.search]);
 
     // Insights Logic
@@ -414,96 +416,56 @@ const NewSalesInvoiceView = () => {
         setItems(newItems);
     };
 
-    const handleSave = () => {
-        const newInvoice: any = {
-            id: isEditing ? id! : `INV-${Date.now()}`,
-            issueDate: issueDate.split('-').reverse().join('.'),
-            dueDate: (() => {
-                if (dueDateType === 'On receipt') return issueDate.split('-').reverse().join('.');
-                const d = new Date(issueDate);
-                d.setDate(d.getDate() + (parseInt(dueDateDays) || 0));
-                return d.toLocaleDateString('en-GB').replace(/\//g, '.');
-            })(),
-            reference: reference || getNextReference(),
-            customer: customer || 'Unknown Customer',
-            description: description,
-            currency: currency,
-            invoiceAmount: calculations.grandTotal,
+    const handleSave = async () => {
+        if (!customer || customer === 'Select Customer' || customer === '') {
+            alert('Please select a customer.');
+            return;
+        }
+
+        const validItems = items.filter(i => i.item && i.item !== 'Select Item' && i.item !== '' && i.itemId);
+        if (validItems.length === 0) {
+            alert('Please select at least one valid item.');
+            return;
+        }
+
+        const selectedCustomer = customers.find(c => c.name === customer);
+        if (!selectedCustomer) {
+            alert('Selected customer not found.');
+            return;
+        }
+
+        const invoiceData = {
+            customerId: selectedCustomer.id,
+            reference: reference,
+            grandTotal: calculations.grandTotal,
             balanceDue: calculations.grandTotal,
-            status: requiresApproval ? 'Pending Approval' : 'Coming due',
+            description: description,
             billingAddress: billingAddress,
-            tpin: tpin,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({
-                item: i.item,
-                description: i.description,
-                account: i.account,
-                division: i.division,
+            issueDate: issueDate,
+            docOptions: options,
+            items: validItems.map(i => ({
+                itemId: i.itemId,
                 qty: parseFloat(i.qty),
                 unitPrice: parseFloat(i.unitPrice),
-                taxCode: i.taxCode
-            })),
-            options: options
+                totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
+            }))
         };
 
-        if (isEditing) {
-            const index = mockInvoices.findIndex(inv => inv.id === id || (inv as any).invoiceId === id);
-            if (index !== -1) mockInvoices[index] = { ...mockInvoices[index], ...newInvoice };
-        } else {
-            mockInvoices.unshift(newInvoice);
-        }
-
-        saveInvoices(mockInvoices);
-        
-        // Auto-create Delivery Note if option is selected
-        if (options.actsAsDeliveryNote) {
-            const formattedDeliveryDate = options.deliveryDate 
-                ? options.deliveryDate.split('-').reverse().join('.') 
-                : newInvoice.issueDate;
-
-            const newDN: any = {
-                id: isEditing ? `DN-${id}` : `DN-${Date.now()}`,
-                deliveryDate: formattedDeliveryDate,
-                reference: newInvoice.reference,
-                customer: newInvoice.customer,
-                description: newInvoice.description || `Delivery for ${newInvoice.reference}`,
-                status: 'Issued',
-                inventoryLocation: options.inventoryLocation || 'Default Inventory Location',
-                timestamp: newInvoice.timestamp,
-                items: newInvoice.items.map((i: any) => ({
-                    id: Math.random(),
-                    item: i.item,
-                    description: i.description,
-                    qty: i.qty.toString(),
-                    unitPrice: '0',
-                    taxCode: 'No tax'
-                }))
-            };
-
-            const existingIndex = mockDeliveryNotes.findIndex(dn => dn.reference === newInvoice.reference);
-            if (existingIndex !== -1) {
-                mockDeliveryNotes[existingIndex] = { ...mockDeliveryNotes[existingIndex], ...newDN };
+        try {
+            if (isEditing) {
+                // await apiService.updateInvoice(id!, invoiceData);
+                alert('Update functionality not fully implemented in API yet.');
             } else {
-                mockDeliveryNotes.unshift(newDN);
+                await apiService.createInvoice(invoiceData);
             }
-            saveDeliveryNotes(mockDeliveryNotes);
+            navigate('/sales-invoices');
+        } catch (err: any) {
+            console.error('Failed to save invoice:', err);
+            const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Failed to save invoice to database: ${errMsg}`);
         }
-
-        // Transition Sales Order status if copied from one
-        if (copyFromId) {
-            const orderIndex = mockSalesOrders.findIndex(o => o.id === copyFromId);
-            if (orderIndex !== -1) {
-                (mockSalesOrders[orderIndex] as any).status = 'Invoiced';
-                saveSalesOrders(mockSalesOrders);
-            }
-        }
-
-        if (requiresApproval) {
-            alert(`Approval Required: ${approvalReason}\n\nSubmitted for review.`);
-        }
-
-        navigate('/sales-invoices');
     };
+
 
     return (
         <div className="p-10 max-w-[1400px] mx-auto space-y-6 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
@@ -596,19 +558,19 @@ const NewSalesInvoiceView = () => {
                             <h2 className="text-lg font-black text-slate-800 tracking-tight">Customer Information</h2>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
-                                const custName = e.target.value;
-                                setCustomer(custName);
-                                const selected = customers.find(c => c.name === custName);
-                                if (selected) {
-                                    setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
-                                    setBillingAddress(selected.billingAddress || '');
-                                    setTpin(selected.tpin || '');
-                                }
-                            }} Icon={User}>
-                                <option value="">Select Target Customer...</option>
-                                {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                            </SelectField>
+                                <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
+                                    const custName = e.target.value;
+                                    setCustomer(custName);
+                                    const selected = customers.find(c => c.name === custName);
+                                    if (selected) {
+                                        setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
+                                        setBillingAddress(selected.billingAddress || '');
+                                        setTpin(selected.tpin || '');
+                                    }
+                                }} Icon={User}>
+                                    <option value="">Select Target Customer...</option>
+                                    {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                </SelectField>
                             <div className="md:col-span-2">
                                 <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="General description of the invoice contents..." Icon={Briefcase} />
                             </div>
@@ -625,9 +587,9 @@ const NewSalesInvoiceView = () => {
                                 </div>
                                 <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Line Items</h2>
                             </div>
-                            <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', account: 'Inventory sales', division: 'Main', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
-                                <Plus size={14} /> <span>Add Item</span>
-                            </button>
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                    <Plus size={14} /> <span>Add Row</span>
+                                </button>
                         </div>
 
                         <div className="overflow-x-auto overflow-y-visible pb-4 font-sans">
@@ -655,29 +617,28 @@ const NewSalesInvoiceView = () => {
                                             <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
                                                 {options.columnLineNumber && <td className="px-4 py-4 text-xs font-bold text-slate-400 text-center">{index + 1}</td>}
                                                 <td className="px-4 py-4">
-                                                    <select
-                                                        value={item.item}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            const invItem = inventoryItems.find(i => i.itemName === val);
-                                                            setItems(prev => {
-                                                                const newItems = prev.map(i => i.id === item.id ? {
+                                                    <div className="relative group/select">
+                                                        <select
+                                                            value={item.item}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                const invItem = inventoryItems.find(i => i.itemName === val);
+                                                                setItems(prev => prev.map(i => i.id === item.id ? {
                                                                     ...i,
                                                                     item: val,
-                                                                    unitPrice: invItem ? invItem.sellingPrice?.toString() : i.unitPrice,
-                                                                    description: invItem ? val : i.description,
-                                                                    unit: invItem ? invItem.unitName : i.unit
-                                                                } : i);
-                                                                return newItems;
-                                                            });
-                                                        }}
-                                                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
-                                                    >
-                                                        <option value="Select Item">Select Item</option>
-                                                        {inventoryItems.map(item => (
-                                                            <option key={item.id} value={item.itemName}>{item.itemName}</option>
-                                                        ))}
-                                                    </select>
+                                                                    itemId: invItem ? invItem.id : '',
+                                                                    unitPrice: invItem ? (invItem.sellingPrice || 0).toString() : i.unitPrice,
+                                                                    description: invItem ? (invItem.description || val) : i.description
+                                                                } : i));
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
+                                                        >
+                                                            <option value="Select Item">Select Item</option>
+                                                            {inventoryItems.map(inv => (
+                                                                <option key={inv.id} value={inv.itemName}>{inv.itemName}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
                                                 </td>
                                                 {options.columnDescription && (
                                                     <td className="px-4 py-4">
@@ -707,9 +668,10 @@ const NewSalesInvoiceView = () => {
                                                         onChange={(e) => setItems(prev => prev.map(i => i.id === item.id ? { ...i, division: e.target.value } : i))}
                                                         className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                     >
-                                                        <option value="Main">Main</option>
-                                                        <option value="Secondary">Secondary</option>
-                                                        <option value="International">International</option>
+                                                        <option value="General">General</option>
+                                                        {availableDivisions.map(div => (
+                                                            <option key={div.id} value={div.name}>{div.name}</option>
+                                                        ))}
                                                     </select>
                                                 </td>
                                                 <td className="px-4 py-4 relative group/qty">

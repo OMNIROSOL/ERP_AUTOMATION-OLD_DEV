@@ -16,6 +16,19 @@ const SalesHistoryView = () => {
     const batchOpsRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [dbQuotes, setDbQuotes] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchDbData = async () => {
+            try {
+                const quotes = await apiService.getQuotes();
+                setDbQuotes(quotes);
+            } catch (err) {
+                console.error('Failed to fetch history from database:', err);
+            }
+        };
+        fetchDbData();
+    }, [refreshTrigger]);
 
     useEffect(() => {
         const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
@@ -43,6 +56,19 @@ const SalesHistoryView = () => {
         const deliveredRefs = new Set(
             deliveryNotes.map((dn: any) => dn.reference || dn.invoiceNumber).filter(Boolean)
         );
+
+        dbQuotes.forEach(q => {
+            history.push({
+                id: q.id,
+                date: new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.'),
+                customer: q.customer?.name || 'Unknown',
+                amount: parseFloat(q.amount) || 0,
+                type: 'Quote',
+                reference: q.reference || '—',
+                status: q.status,
+                timestamp: q.createdAt ? new Date(q.createdAt).toLocaleString() : '—'
+            });
+        });
 
         mockSalesQuotes.forEach(q => {
             let status = q.status;

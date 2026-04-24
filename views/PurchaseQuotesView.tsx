@@ -452,7 +452,7 @@ const PurchaseQuotesView = () => {
     }, [visibleColumns, isSelectionMode, selectedIds, paginatedData]);
 
     return (
-        <div className="p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-700 font-sans">
+        <div className="p-8 space-y-8 animate-in fade-in duration-700 font-sans">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-2">
@@ -517,11 +517,12 @@ const PurchaseQuotesView = () => {
                 </div>
             )}
 
-            <div className="w-fit min-w-full overflow-hidden bg-white border border-slate-100 rounded-2xl shadow-sm">
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm">
                 <DataTable
                     data={paginatedData}
                     columns={columns as any}
                     hideDefaultPagination={true}
+                    disableInternalScroll={true}
                     tableFooter={
                         <tr className="bg-slate-50/50">
                             {columns.map(col => (

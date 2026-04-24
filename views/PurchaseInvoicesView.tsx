@@ -18,6 +18,7 @@ const PurchaseInvoicesView = () => {
     const [pageSize, setPageSize] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
     const [isManagementOpen, setIsManagementOpen] = useState(false);
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
     const managementRef = useRef<HTMLDivElement>(null);
 
     const [columnVisibility, setColumnVisibility] = useState({
@@ -79,6 +80,19 @@ const PurchaseInvoicesView = () => {
     const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
     const displayData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+    const calculateDays = (dueDateStr: string | undefined) => {
+        if (!dueDateStr) return { remaining: '', overdue: '' };
+        const parts = dueDateStr.split('.');
+        if (parts.length !== 3) return { remaining: '', overdue: '' };
+        const due = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+        const today = new Date(); today.setHours(0, 0, 0, 0); due.setHours(0, 0, 0, 0);
+        const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+        return {
+            remaining: diff > 0 ? `${diff} days` : (diff === 0 ? 'Due today' : ''),
+            overdue: diff < 0 ? `${Math.abs(diff)} days` : ''
+        };
+    };
+
     const columns = [
         {
             id: 'Actions',
@@ -93,7 +107,12 @@ const PurchaseInvoicesView = () => {
         {
             id: 'Issue date',
             header: 'Issue Date',
-            accessor: (inv: any) => <span className="font-medium text-[13px] text-slate-800">{inv.issueDate}</span>
+            accessor: (inv: any) => <span className="font-medium text-[13px] text-slate-800 whitespace-nowrap">{inv.issueDate}</span>
+        },
+        {
+            id: 'Due date',
+            header: 'Due Date',
+            accessor: (inv: any) => <span className="font-medium text-[13px] text-slate-800 whitespace-nowrap">{inv.dueDate || '—'}</span>
         },
         {
             id: 'Reference',
@@ -103,21 +122,57 @@ const PurchaseInvoicesView = () => {
                     <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100/50">
                         <FileCheck size={14} />
                     </div>
-                    <span className="font-bold text-slate-900">{inv.reference}</span>
+                    <span className="font-bold text-slate-900 whitespace-nowrap">{inv.reference}</span>
                 </div>
             )
         },
         {
-            id: 'Supplier',
-            header: 'Supplier',
-            accessor: (inv: any) => <span className="font-medium text-slate-600">{inv.supplier}</span>
+            id: 'Purchase Order',
+            header: 'Purchase Order',
+            accessor: (inv: any) => <span className="font-medium text-slate-600 whitespace-nowrap">{inv.purchaseOrder || '—'}</span>
         },
         {
-            id: 'Amount',
-            header: 'Amount',
+            id: 'Supplier',
+            header: 'Supplier',
+            accessor: (inv: any) => <span className="font-medium text-slate-600 truncate max-w-[150px]" title={inv.supplier}>{inv.supplier}</span>
+        },
+        {
+            id: 'Description',
+            header: 'Description',
+            accessor: (inv: any) => <span className="text-xs text-slate-400 truncate max-w-[200px]" title={inv.description}>{inv.description || '—'}</span>
+        },
+        {
+            id: 'Project',
+            header: 'Project',
+            accessor: (inv: any) => <span className="text-xs text-slate-500">{inv.project || '—'}</span>
+        },
+        {
+            id: 'Closed invoice',
+            header: (inv: any) => <div className="text-center">Closed invoice</div>,
+            accessor: (inv: any) => (
+                <div className="flex justify-center">
+                    {inv.balanceDue === 0 ? <Check size={14} className="text-emerald-500" strokeWidth={3} /> : <X size={14} className="text-slate-200" />}
+                </div>
+            )
+        },
+        {
+            id: 'Withholding tax',
+            header: 'Withholding tax',
+            className: 'text-right',
+            accessor: (inv: any) => <span className="text-xs text-slate-400">{(inv.withholdingTax || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+        },
+        {
+            id: 'Discount',
+            header: 'Discount',
+            className: 'text-right',
+            accessor: (inv: any) => <span className="text-xs text-slate-400">{(inv.discount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+        },
+        {
+            id: 'Invoice Amount',
+            header: 'Invoice Amount',
             className: 'text-right',
             accessor: (inv: any) => (
-                <div className="text-right font-black text-slate-900">
+                <div className="text-right font-black text-slate-900 whitespace-nowrap">
                     <span className="text-[10px] text-slate-400 mr-1">{inv.currency}</span>
                     {inv.invoiceAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
@@ -128,24 +183,45 @@ const PurchaseInvoicesView = () => {
             header: 'Balance Due',
             className: 'text-right',
             accessor: (inv: any) => (
-                <div className="text-right font-black text-indigo-600">
+                <div className="text-right font-black text-indigo-600 whitespace-nowrap">
                     {inv.balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
             )
         },
         {
+            id: 'Days to Due Date',
+            header: 'Days to Due Date',
+            accessor: (inv: any) => {
+                const { remaining } = calculateDays(inv.dueDate);
+                return <span className="text-[13px] font-medium text-slate-600">{remaining || '—'}</span>;
+            }
+        },
+        {
+            id: 'Days overdue',
+            header: 'Days overdue',
+            accessor: (inv: any) => {
+                const { overdue } = calculateDays(inv.dueDate);
+                return <span className="text-[13px] font-bold text-rose-500">{overdue || '—'}</span>;
+            }
+        },
+        {
             id: 'Status',
             header: 'Status',
             accessor: (inv: any) => (
-                <Badge variant={inv.status === 'Paid' ? 'success' : 'warning'} className="text-[9px] uppercase tracking-widest font-black">
+                <Badge variant={inv.status === 'Paid' ? 'success' : 'warning'} className="text-[9px] uppercase tracking-widest font-black whitespace-nowrap">
                     {inv.status}
                 </Badge>
             )
+        },
+        {
+            id: 'Timestamp',
+            header: 'Timestamp',
+            accessor: (inv: any) => <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{inv.timestamp || '—'}</span>
         }
     ].filter(col => (columnVisibility as any)[col.id] !== false);
 
     return (
-        <div className="p-8 space-y-6 max-w-[1400px] animate-in fade-in duration-500">
+        <div className="p-8 space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">
@@ -186,12 +262,13 @@ const PurchaseInvoicesView = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden no-print">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm no-print">
                 <DataTable
                     data={displayData}
                     columns={columns as any}
                     tableClassName="min-w-[1000px]"
                     hideDefaultPagination={true}
+                    disableInternalScroll={true}
                 />
             </div>
 
@@ -249,47 +326,34 @@ const PurchaseInvoicesView = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-600 uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
-                        <Copy size={14} /> <span>Export Data</span>
+                <div className="flex items-center gap-4">
+                    <button className="px-8 py-3.5 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm">
+                        <Copy size={16} className="text-slate-400" /> EXPORT DATA
                     </button>
-
-                    <div className="relative" ref={managementRef}>
-                        <button
+                    
+                    <div className="relative group" ref={managementRef}>
+                        <button 
                             onClick={() => setIsManagementOpen(!isManagementOpen)}
-                            className={cn(
-                                "flex items-center gap-2 px-6 py-3 rounded-full text-[11px] font-black uppercase tracking-widest transition-all shadow-lg",
-                                isManagementOpen ? "bg-slate-800 text-white" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200"
-                            )}
+                            className="px-10 py-3.5 bg-indigo-600 text-white rounded-[20px] text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-4"
                         >
-                            <span>Management</span>
-                            <ChevronUp size={14} className={cn("transition-transform duration-300", isManagementOpen ? "" : "rotate-180")} />
+                            MANAGEMENT <ChevronUp size={16} className={cn("transition-transform", isManagementOpen && "rotate-180")} />
                         </button>
-
-                        <AnimatePresence>
-                            {isManagementOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    className="absolute bottom-full right-0 mb-4 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-[100]"
+                        {isManagementOpen && (
+                            <div className="absolute bottom-full right-0 mb-4 w-56 bg-white border border-gray-100 shadow-2xl rounded-2xl py-3 z-[100] animate-in slide-in-from-bottom-2 duration-200 overflow-hidden">
+                                <button 
+                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsManagementOpen(false); }} 
+                                    className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                 >
-                                    <div className="p-3 mb-2 border-b border-slate-50">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Purchase Invoice Portal</p>
-                                    </div>
-                                    <button
-                                        onClick={() => { setIsManagementOpen(false); navigate('/purchase-invoices/columns'); }}
-                                        className="w-full flex items-center gap-3 p-3 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 rounded-xl transition-all group"
-                                    >
-                                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors text-slate-400 group-hover:text-indigo-600">
-                                            <ArrowUpDown size={14} />
-                                        </div>
-                                        <span className="text-[11px] font-black uppercase tracking-wider text-left flex-1">Column Setting</span>
-                                        <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                                    {isSelectionMode ? 'Disable Batch Mode' : 'Enable Batch Actions'}
+                                </button>
+                                <button 
+                                    onClick={() => { navigate('/purchase-invoices/columns'); setIsManagementOpen(false); }}
+                                    className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                                >
+                                    Column Setting
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

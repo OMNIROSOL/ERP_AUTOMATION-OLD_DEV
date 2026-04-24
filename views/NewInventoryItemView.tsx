@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, Package, Trash2, ArrowLeft, HelpCircle } from 'lucide-react';
 import { mockInventoryItems, getInventoryLocations } from '../mockData';
-import { InventoryItem } from '../types';
+import { InventoryItem, Division } from '../types';
+import apiService from '../services/apiService';
 
 const NewInventoryItemView = () => {
   const navigate = useNavigate();
@@ -10,7 +11,7 @@ const NewInventoryItemView = () => {
   const isEdit = !!id;
   const existingItem = isEdit ? mockInventoryItems.find(i => i.id === id) : null;
 
-  const [formData, setFormData] = useState<Partial<InventoryItem>>(existingItem || {
+  const [formData, setFormData] = useState<Partial<InventoryItem>>({
     itemCode: '',
     itemName: '',
     description: '',
@@ -34,16 +35,63 @@ const NewInventoryItemView = () => {
     hideItemName: false
   });
 
+  const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+
+  React.useEffect(() => {
+    const loadData = async () => {
+      try {
+        const divs = await apiService.getDivisions();
+        setAvailableDivisions(divs);
+
+        if (isEdit) {
+          const items = await apiService.getItems();
+          const item = items.find((i: any) => i.id === id);
+          if (item) {
+            setFormData({
+              ...item,
+              qtyOnHand: parseFloat(item.qtyOnHand || 0),
+              sellingPrice: parseFloat(item.sellingPrice || 0),
+              purchasePrice: parseFloat(item.purchasePrice || 0)
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load data:', err);
+      }
+    };
+    loadData();
+  }, [id, isEdit]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
     setFormData(prev => ({ ...prev, [name]: val }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Saving inventory item:', formData);
-    navigate('/inventory-items');
+    try {
+      const dataToSave = {
+        itemCode: formData.itemCode,
+        itemName: formData.itemName,
+        description: formData.description,
+        unitName: formData.unitName,
+        sellingPrice: parseFloat(formData.sellingPrice as any || 0),
+        purchasePrice: parseFloat(formData.purchasePrice as any || 0),
+        qtyOnHand: parseFloat(formData.qtyOnHand as any || 0)
+      };
+
+      if (isEdit) {
+        // await apiService.updateItem(id!, dataToSave);
+        alert('Update functionality not fully implemented in API yet.');
+      } else {
+        await apiService.createItem(dataToSave);
+      }
+      navigate('/inventory-items');
+    } catch (err: any) {
+      console.error('Failed to save item:', err);
+      alert('Failed to save item: ' + (err.response?.data?.error || err.message));
+    }
   };
 
   return (
@@ -173,9 +221,10 @@ const NewInventoryItemView = () => {
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
               >
                 <option value="">Select Division/Location</option>
-                <option value="Ndola">Ndola Warehouse</option>
-                <option value="Kitwe">Kitwe Branch</option>
-                <option value="Lusaka">Lusaka HQ</option>
+                <option value="General">General</option>
+                {availableDivisions.map(div => (
+                  <option key={div.id} value={div.name}>{div.name}</option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">

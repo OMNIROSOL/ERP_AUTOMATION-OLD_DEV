@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
 import {
-    mockSalesQuotes,
     mockSalesOrders,
     mockInvoices,
-    mockInventory,
     mockApprovalRequests,
-    getCustomers,
     getCurrentUser,
-    saveSalesQuotes,
-    getFooters
 } from '../mockData';
-import { SalesQuote, ApprovalRequest, Customer, InventoryItem } from '../types';
-import { useERPStore } from '../store/useERPStore';
+import apiService from '../services/apiService';
+import { SalesQuote, ApprovalRequest, Division } from '../types';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -140,19 +135,6 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
 
-    // Store State
-    const { 
-        customers, 
-        items: inventoryItems, 
-        fetchCustomers, 
-        fetchItems 
-    } = useERPStore();
-
-    useEffect(() => {
-        fetchCustomers();
-        fetchItems();
-    }, [fetchCustomers, fetchItems]);
-
 
     const customerShortName = (name: string) => name ? name.split(' - ')[0] : '';
 
@@ -174,7 +156,10 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
     const [fileName, setFileName] = useState('No file chosen');
     const [marginThreshold] = useState(10); // Default 10% - now a constant for this component
     const [status, setStatus] = useState('Active');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+    const [customers, setCustomers] = useState<any[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+    const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         rounding: false,
@@ -195,86 +180,113 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
 
     const [showOptionsArea, setShowOptionsArea] = useState(false);
 
+    const inventoryMap = useMemo(() => {
+        const map: Record<string, any> = {};
+        inventoryItems.forEach(item => {
+            map[item.itemName] = item;
+        });
+        return map;
+    }, [inventoryItems]);
+
     const requiresApproval = useMemo(() => {
         return items.some(item => {
             if (item.item === 'Select Item') return false;
-            const inv = (mockInventory as any)[item.item];
+            const inv = inventoryMap[item.item];
             if (!inv) return false;
             const qty = parseFloat(item.qty) || 0;
             const price = parseFloat(item.unitPrice) || 0;
-            const minMarginPrice = inv.sellingPrice * (1 - marginThreshold / 100);
-            return price < inv.purchasePrice || price < minMarginPrice || qty > inv.stock;
+            // Map Prisma fields: sellingPrice -> (not present, use avgCost or assume 0), stock -> qtyOnHand
+            const stock = parseFloat(inv.qtyOnHand || 0);
+            const sellingPrice = parseFloat(inv.sellingPrice || 0);
+            const purchasePrice = parseFloat(inv.purchasePrice || 0);
+            const minMarginPrice = sellingPrice * (1 - marginThreshold / 100);
+            return price < purchasePrice || price < minMarginPrice || qty > stock;
         });
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, inventoryMap]);
 
-    const getNextReference = () => {
-        const sqReferences = mockSalesQuotes
-            .map(q => q.reference)
-            .filter(ref => ref && ref.startsWith('SQ-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = sqReferences.length > 0 ? Math.max(...sqReferences) + 1 : 1;
-        return `SQ-${nextNum.toString().padStart(4, '0')}`;
+    const fetchReference = async () => {
+        try {
+            const nextRef = await apiService.getNextReference('quote');
+            setReference(nextRef);
+        } catch (err) {
+            console.error('Failed to get reference:', err);
+        }
     };
 
     useEffect(() => {
-        const searchParams = new URLSearchParams(location.search);
-        const copyFromId = searchParams.get('copyFrom');
-        if (id || copyFromId) {
-            const quoteId = id || copyFromId;
-            const quote = mockSalesQuotes.find(q => q.id === quoteId);
-            if (quote) {
-                setIssueDate(quote.issueDate.split('.').reverse().join('-')); // Convert 16.03.2026 to 2026-03-16
-                setExpiryDays(quote.expiryDays || '30');
-                setCustomer(quote.customer);
-                setCurrency(quote.currency);
-                setBillingAddress(quote.billingAddress || '');
-                if (copyFromId) {
-                    setReference(getNextReference());
-                    setUseManualRef(false);
-                } else {
-                    setReference(quote.reference);
-                    setUseManualRef(true);
-                }
-                setDescription(quote.description || '');
-                setStatus('Active'); // Re-default to active status for copies/new edits if preferred, or maintain quote.status if required.
-                // However generally a copy should be in active status or draft. Let's keep Active or maybe quote.status.
-                // Actually the user didn't specify status, but Active is safer for a new document.
-                // Wait, if it's editing (id exists), it should probably keep the status.
-                if (id) setStatus(quote.status); else setStatus('Active');
-                setItems(quote.items.map(i => ({
-                    id: i.id,
-                    item: i.item,
-                    description: i.description,
-                    qty: i.qty.toString(),
-                    unitPrice: i.unitPrice.toString(),
-                    discount: i.discount || '',
-                    taxCode: i.taxCode || 'VAT 16%',
-                    unit: (i as any).unit || ''
-                })));
-                if (quote.options) {
-                    setOptions(prev => ({ ...prev, ...quote.options }));
-                } else {
-                    if (quote.customTitle) {
-                        setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: quote.customTitle || 'Quote' }));
-                    }
-                    if (quote.footer) {
-                        setOptions(prev => ({ ...prev, footers: true, footerValue: quote.footer || 'Terms & Conditions apply.' }));
-                    }
-                }
+        const loadMasterData = async () => {
+            try {
+                const [custs, itemsData, divs] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getItems(),
+                    apiService.getDivisions()
+                ]);
+                setCustomers(custs);
+                setInventoryItems(itemsData);
+                setAvailableDivisions(divs);
+            } catch (err) {
+                console.error('Failed to load master data:', err);
             }
-        } else {
-            setIssueDate(new Date().toISOString().split('T')[0]);
-            setCustomer('');
-            setCurrency('ZMW');
-            setBillingAddress('');
-            setExpiryDays('30');
-            setReference(getNextReference());
-            setUseManualRef(false); // Default to automatic SQ-XXXX
-            setDescription('');
-            setStatus('Active');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
-        }
+        };
+        loadMasterData();
+    }, []);
+
+    useEffect(() => {
+        const loadQuote = async () => {
+            const searchParams = new URLSearchParams(location.search);
+            const copyFromId = searchParams.get('copyFrom');
+            if (id || copyFromId) {
+                const quoteId = id || copyFromId;
+                try {
+                    const allQuotes = await apiService.getQuotes();
+                    const quote = allQuotes.find((q: any) => q.id === quoteId);
+                    if (quote) {
+                        setIssueDate(new Date(quote.issueDate).toISOString().split('T')[0]);
+                        setExpiryDays(quote.expiryDays?.toString() || '30');
+                        setCustomer(quote.customer?.name || '');
+                        setCurrency(quote.currency || 'ZMW');
+                        setBillingAddress(quote.billingAddress || '');
+                        if (copyFromId) {
+                            fetchReference();
+                            setUseManualRef(false);
+                        } else {
+                            setReference(quote.reference);
+                            setUseManualRef(true);
+                        }
+                        setDescription(quote.description || '');
+                        setStatus(quote.status || 'Active');
+                        setItems(quote.items.map((i: any) => ({
+                            id: i.id,
+                            itemId: i.itemId,
+                            item: i.item?.itemName || 'Unknown Item',
+                            description: i.item?.description || '',
+                            qty: i.qty.toString(),
+                            unitPrice: i.unitPrice.toString(),
+                            division: i.division || 'General',
+                            discount: '',
+                            taxCode: 'VAT 16%'
+                        })));
+                        if (quote.docOptions) {
+                            setOptions(prev => ({ ...prev, ...quote.docOptions }));
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load quote:', err);
+                }
+            } else {
+                setIssueDate(new Date().toISOString().split('T')[0]);
+                setCustomer('');
+                setCurrency('ZMW');
+                setBillingAddress('');
+                setExpiryDays('30');
+                fetchReference();
+                setUseManualRef(false);
+                setDescription('');
+                setStatus('Active');
+                setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            }
+        };
+        loadQuote();
     }, [id, location.search]);
 
     const itemHistory = useMemo(() => {
@@ -309,6 +321,8 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         });
 
         // Process Sales Quotes
+        // (Disabled for now as we transition to database)
+        /*
         mockSalesQuotes.forEach(doc => {
             if (!doc.items) return;
             doc.items.forEach(i => {
@@ -330,6 +344,8 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                 }
             });
         });
+        */
+
 
         const sortAndSlice = (history: Record<string, any[]>) => {
             Object.keys(history).forEach(item => {
@@ -353,26 +369,29 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         const itemsToValidate = items.filter(i => i.item !== 'Select Item');
 
         for (const item of itemsToValidate) {
-            const inventoryItem = (mockInventory as any)[item.item];
+            const inventoryItem = inventoryMap[item.item];
             if (inventoryItem) {
                 const qty = parseFloat(item.qty) || 0;
                 const price = parseFloat(item.unitPrice) || 0;
+                const stock = parseFloat(inventoryItem.qtyOnHand || 0);
+                const sellingPrice = parseFloat(inventoryItem.sellingPrice || 0);
+                const purchasePrice = parseFloat(inventoryItem.purchasePrice || 0);
 
-                if (qty > inventoryItem.stock) {
-                    reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${inventoryItem.stock}). `;
+                if (qty > stock) {
+                    reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${stock}). `;
                 }
 
                 const effectiveThreshold = marginThreshold / 100;
-                const minPrice = inventoryItem.sellingPrice * (1 - effectiveThreshold);
-                if (price < inventoryItem.purchasePrice) {
-                    reason += `Price for ${item.item} (${price}) is below purchase price (${inventoryItem.purchasePrice}). `;
+                const minPrice = sellingPrice * (1 - effectiveThreshold);
+                if (price < purchasePrice) {
+                    reason += `Price for ${item.item} (${price}) is below purchase price (${purchasePrice}). `;
                 } else if (price < minPrice) {
                     reason += `Price for ${item.item} (${price}) is below allowed margin threshold (min: ${minPrice.toFixed(2)}). `;
                 }
             }
         }
         return reason.trim();
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, inventoryMap]);
 
     const calculations = useMemo(() => {
         let subtotal = 0;
@@ -446,126 +465,70 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         setItems(newItems);
     };
 
-    const handleAction = (newStatus: 'Active' | 'Inactive') => {
+    const handleAction = async (newStatus: 'Active' | 'Inactive') => {
         if (!id) return;
-        const index = mockSalesQuotes.findIndex(q => q.id === id);
-        if (index !== -1) {
-            mockSalesQuotes[index].status = newStatus;
-
-            // Also update approval request if it exists
-            const reqIndex = mockApprovalRequests.findIndex(r => r.quoteId === id);
-            if (reqIndex !== -1) {
-                mockApprovalRequests[reqIndex].status = newStatus === 'Active' ? 'Approved' : 'Rejected';
-            }
-
+        try {
+            await apiService.updateQuoteStatus(id, newStatus);
+            // Also update approval request if it exists (Optional for now)
             alert(`Quote ${newStatus === 'Active' ? 'Approved' : 'Rejected'} successfully.`);
             navigate('/sales-quotes');
+        } catch (err) {
+            console.error('Failed to update status:', err);
+            alert('Failed to update status in database.');
         }
     };
 
+
     const handleSave = async (forceManualApproval = false) => {
-        // Validation: Must select customer and at least one item
         if (!customer || customer === 'Select Customer' || customer === '') {
             alert('Please select a customer.');
             return;
         }
 
-        const validItems = items.filter(i => i.item && i.item !== 'Select Item' && i.item !== '');
+        const validItems = items.filter(i => i.item && i.item !== 'Select Item' && i.item !== '' && i.itemId);
         if (validItems.length === 0) {
-            alert('Please select at least one item with a valid product selection.');
+            alert('Please select at least one valid item.');
             return;
         }
 
-        if ((approvalReason || forceManualApproval) && setApprovalRequests) {
-            const quoteId = isEditing ? id! : `Q-${Date.now()}`;
-            const formattedIssueDate = formatDateForSave(issueDate);
-            const newQuote: SalesQuote = {
-                id: quoteId,
-                issueDate: formattedIssueDate,
-                reference: reference || getNextReference(),
-                customer: customer,
-                description: description,
-                currency: currency,
-                amount: calculations.grandTotal,
-                status: 'Pending Approval',
-                billingAddress: billingAddress,
-                expiryDays: expiryDays,
-                timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-                items: items.filter(i => i.item !== 'Select Item').map(i => ({
-                    ...i,
-                    id: Number(i.id)
-                })),
-                customTitle: options.customTitle ? options.customTitleValue : undefined,
-                footer: options.footers ? options.footerValue : undefined
-            };
-
-            const newRequest: ApprovalRequest = {
-                id: `APR-${Date.now()}`,
-                quoteId: quoteId,
-                customer: customer || 'Unknown Customer',
-                amount: calculations.grandTotal,
-                currency: currency,
-                requestedBy: getCurrentUser().name,
-                approver: 'Sales Manager',
-                reason: approvalReason.trim(),
-                status: 'Pending',
-                date: formatDateForSave(issueDate),
-                reference: reference || getNextReference(),
-                timestamp: newQuote.timestamp
-            };
-
-            const finalReason = forceManualApproval
-                ? (approvalReason ? `${approvalReason} (Manual Request)` : 'Manual approval request.')
-                : approvalReason;
-
-            newRequest.reason = finalReason.trim();
-
-            // Save to mock data
-            if (isEditing) {
-                const index = mockSalesQuotes.findIndex(q => q.id === id);
-                if (index !== -1) mockSalesQuotes[index] = newQuote;
-            } else {
-                mockSalesQuotes.unshift(newQuote);
-            }
-
-            setApprovalRequests(prev => [newRequest, ...prev]);
-
-            alert(`Approval Required: ${approvalReason}\n\nYour request has been submitted for approval.`);
-            navigate('/sales-quotes');
+        const selectedCustomer = customers.find(c => c.name === customer);
+        if (!selectedCustomer) {
+            alert('Selected customer not found.');
             return;
         }
 
-        // Normal Save Logic
-        const formattedIssueDate = formatDateForSave(issueDate);
-        const newQuote: SalesQuote = {
-            id: isEditing ? id! : `Q-${Date.now()}`,
-            issueDate: formattedIssueDate,
-            reference: reference || getNextReference(),
-            customer: customer,
-            description: description,
-            currency: currency,
+        const quoteData = {
+            customerId: selectedCustomer.id,
+            reference: reference,
             amount: calculations.grandTotal,
-            status: 'Active',
+            description: description,
             billingAddress: billingAddress,
-            expiryDays: expiryDays,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({
-                ...i,
-                id: Number(i.id)
-            })),
-            customTitle: options.customTitle ? options.customTitleValue : undefined,
-            footer: options.footers ? options.footerValue : undefined,
-            options: options
+            expiryDays: parseInt(expiryDays) || 30,
+            issueDate: issueDate, // Pass the date from state
+            status: isEditing ? status : 'Active',
+            docOptions: options,
+            items: validItems.map(i => ({
+                itemId: i.itemId,
+                qty: parseFloat(i.qty),
+                unitPrice: parseFloat(i.unitPrice),
+                division: i.division,
+                totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
+            }))
         };
 
-        if (isEditing) {
-            const index = mockSalesQuotes.findIndex(q => q.id === id);
-            if (index !== -1) mockSalesQuotes[index] = newQuote;
-        } else {
-            mockSalesQuotes.unshift(newQuote);
+
+        try {
+            if (isEditing) {
+                await apiService.updateQuote(id!, quoteData);
+            } else {
+                await apiService.createQuote(quoteData);
+            }
+            navigate('/sales-quotes');
+        } catch (err: any) {
+            console.error('Failed to save quote:', err);
+            const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Failed to save quote to database: ${errMsg}`);
         }
-        saveSalesQuotes(mockSalesQuotes);
-        navigate('/sales-quotes');
     };
 
     return (
@@ -660,7 +623,6 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                         if (selected) {
                                             const currencyCode = selected.currency?.split(' - ')[0] || 'ZMW';
                                             setCurrency(currencyCode);
-                                            // Synchronize billing address (set to blank if not provided)
                                             setBillingAddress(selected.billingAddress || '');
                                         }
                                     }} Icon={User}>
@@ -682,10 +644,10 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Line Items</h2>
                                 </div>
-                                <button
-                                    onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])}
-                                    className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all"
-                                >
+                                    <button
+                                        onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])}
+                                        className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                                    >
                                     <Plus size={14} /> <span>Add New Row</span>
                                 </button>
                             </div>
@@ -696,6 +658,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                             {options.columnLineNumber && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12 text-center">#</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[200px]">ITEM</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">DIVISION</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">QTY</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">UNIT PRICE</th>
                                             {options.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right whitespace-nowrap">DISCOUNT {options.columnDiscountType === 'Percentage' ? '(%)' : `(${currency})`}</th>}
@@ -722,8 +685,9 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                         const newItems = prev.map(i => i.id === item.id ? {
                                                                             ...i,
                                                                             item: val,
-                                                                            unitPrice: invItem ? invItem.sellingPrice?.toString() : i.unitPrice,
-                                                                            description: invItem ? val : i.description,
+                                                                            itemId: invItem ? invItem.id : '',
+                                                                            unitPrice: invItem ? (invItem.sellingPrice || 0).toString() : i.unitPrice,
+                                                                            description: invItem ? (invItem.description || val) : i.description,
                                                                             unit: invItem ? invItem.unitName : i.unit
                                                                         } : i);
                                                                         return newItems;
@@ -732,8 +696,8 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                 className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                             >
                                                                 <option value="Select Item">Select Item</option>
-                                                                {inventoryItems.map(item => (
-                                                                    <option key={item.id} value={item.itemName}>{item.itemName}</option>
+                                                                {inventoryItems.map(inv => (
+                                                                    <option key={inv.id} value={inv.itemName}>{inv.itemName}</option>
                                                                 ))}
                                                             </select>
                                                         </div>
@@ -750,6 +714,18 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                             placeholder="Add description..."
                                                         />
                                                     </td>
+                                                    <td className="px-4 py-4">
+                                                        <select
+                                                            value={item.division}
+                                                            onChange={(e) => setItems(prev => prev.map(i => i.id === item.id ? { ...i, division: e.target.value } : i))}
+                                                            className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
+                                                        >
+                                                            <option value="General">General</option>
+                                                            {availableDivisions.map(div => (
+                                                                <option key={div.id} value={div.name}>{div.name}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
                                                     <td className="px-4 py-4 relative group/qty">
                                                         <div className="flex flex-col items-end">
                                                             <input
@@ -761,15 +737,15 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                 }}
                                                                 className={cn(
                                                                     "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none",
-                                                                    (parseFloat(item.qty) || 0) > ((mockInventory as any)[item.item]?.stock || 0) ? "text-amber-600" : "text-slate-700"
+                                                                    (parseFloat(item.qty) || 0) > (parseFloat(inventoryMap[item.item]?.qtyOnHand || 0)) ? "text-amber-600" : "text-slate-700"
                                                                 )}
                                                             />
                                                             <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-between w-full">
-                                                                <span>Stock: {((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span>
+                                                                <span>Stock: {(parseFloat(inventoryMap[item.item]?.qtyOnHand || 0)).toLocaleString()}</span>
                                                                 <span className="text-indigo-500 font-black">{item.unit || ''}</span>
                                                             </div>
                                                         </div>
-                                                        {(parseFloat(item.qty) || 0) > ((mockInventory as any)[item.item]?.stock || 0) && (
+                                                        {(parseFloat(item.qty) || 0) > (parseFloat(inventoryMap[item.item]?.qtyOnHand || 0)) && (
                                                             <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                 <TooltipProvider>
                                                                     <Tooltip>
@@ -777,12 +753,13 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                             <AlertTriangle size={12} className="text-amber-500" />
                                                                         </TooltipTrigger>
                                                                         <TooltipContent className="bg-amber-50 border-amber-200 text-amber-800 text-[10px] p-2">
-                                                                            Insufficient stock: {(mockInventory as any)[item.item]?.stock || 0} available. Approval required.
+                                                                            Insufficient stock: {inventoryMap[item.item]?.qtyOnHand || 0} available. Approval required.
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 </TooltipProvider>
                                                             </div>
                                                         )}
+
                                                     </td>
                                                     <td className="px-4 py-4 relative group/price">
                                                         <div className="flex flex-col items-end">
@@ -791,22 +768,23 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                 value={item.unitPrice}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
-                                                                    setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: val } : i));
+                                                                setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: val } : i));
                                                                 }}
                                                                 className={cn(
                                                                     "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none",
-                                                                    (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.purchasePrice || 0) ||
-                                                                        (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.sellingPrice * (1 - marginThreshold / 100))
+                                                                    (parseFloat(item.unitPrice) || 0) < (parseFloat(inventoryMap[item.item]?.purchasePrice || 0)) ||
+                                                                        (parseFloat(item.unitPrice) || 0) < (parseFloat(inventoryMap[item.item]?.sellingPrice || 0) * (1 - marginThreshold / 100))
                                                                         ? "text-amber-600" : "text-slate-700"
                                                                 )}
                                                                 placeholder="0.00"
                                                             />
                                                             <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
-                                                                Selling Price: {((mockInventory as any)[item.item]?.sellingPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                Selling Price: {(parseFloat(inventoryMap[item.item]?.sellingPrice || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                             </div>
                                                         </div>
-                                                        {((parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.purchasePrice || 0) ||
-                                                            (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.sellingPrice * (1 - marginThreshold / 100))) && (
+                                                        {((parseFloat(item.unitPrice) || 0) < (parseFloat(inventoryMap[item.item]?.purchasePrice || 0)) ||
+                                                            (parseFloat(item.unitPrice) || 0) < (parseFloat(inventoryMap[item.item]?.sellingPrice || 0) * (1 - marginThreshold / 100))) && (
+
                                                                 <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                     <TooltipProvider>
                                                                         <Tooltip>

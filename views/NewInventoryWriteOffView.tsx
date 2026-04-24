@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, FileX, ArrowLeft, Trash2 } from 'lucide-react';
 import { mockInventoryWriteOffs, mockInventoryItems, getAccounts, getInventoryLocations } from '../mockData';
-import { InventoryWriteOff } from '../types';
+import { InventoryWriteOff, Division } from '../types';
+import apiService from '../services/apiService';
 
 const NewInventoryWriteOffView = () => {
   const navigate = useNavigate();
@@ -20,6 +21,12 @@ const NewInventoryWriteOffView = () => {
     description: '',
     status: 'Approved'
   });
+
+  const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+
+  React.useEffect(() => {
+    apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -171,8 +178,9 @@ const NewInventoryWriteOffView = () => {
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
                 >
                   <option value="">Select Division...</option>
-                  {getInventoryLocations().map(loc => (
-                    <option key={loc.id} value={loc.name}>{loc.name}</option>
+                  <option value="General">General</option>
+                  {availableDivisions.map(div => (
+                    <option key={div.id} value={div.name}>{div.name}</option>
                   ))}
                 </select>
               </div>

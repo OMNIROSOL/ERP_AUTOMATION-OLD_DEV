@@ -2,7 +2,8 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { User, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, Save, ChevronUp, UserX } from 'lucide-react';
 import { getCustomers, mockInvoices, mockSalesQuotes, mockSalesOrders } from '../mockData';
-import { Customer } from '../types';
+import { Customer, Division } from '../types';
+import apiService from '../services/apiService';
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error }: any) => (
     <div className="space-y-2">
@@ -108,6 +109,11 @@ const EditCustomerView = () => {
     const [emailError, setEmailError] = useState('');
     const [inactive, setInactive] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+
+    useEffect(() => {
+        apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
+    }, []);
 
     const validateEmail = (email: string) => {
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -286,8 +292,10 @@ const EditCustomerView = () => {
                                         className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
                                     >
                                         <option value="Optional">Optional</option>
-                                        <option>General</option>
-                                        <option>Wholesale</option>
+                                        <option value="General">General</option>
+                                        {availableDivisions.map(div => (
+                                            <option key={div.id} value={div.name}>{div.name}</option>
+                                        ))}
                                     </select>
                                     <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                 </div>

@@ -1,33 +1,31 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { getDeliveryNotes, getCustomers, getCustomerDeliveryDetails, mockInventory, mockInvoices, saveInvoices, getInvoices, getFooters } from '../mockData';
-import { Customer, InventoryItem } from '../types';
-import { useERPStore } from '../store/useERPStore';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
-import { 
-  Save, 
-  X, 
-  Calendar, 
-  Hash, 
-  MapPin, 
-  User, 
-  FileText, 
-  Plus, 
-  Trash2, 
-  Copy,
-  ChevronLeft,
-  Briefcase,
-  Layers,
-  ChevronRight,
-  Package,
-  Clock,
-  ChevronDown,
-  ChevronUp,
-  AlertTriangle,
-  CheckCircle2,
-  Settings,
-  Image
+import {
+    Save,
+    X,
+    Calendar,
+    Hash,
+    MapPin,
+    User,
+    FileText,
+    Plus,
+    Trash2,
+    Copy,
+    ChevronLeft,
+    Briefcase,
+    Layers,
+    ChevronRight,
+    Package,
+    Clock,
+    ChevronDown,
+    ChevronUp,
+    AlertTriangle,
+    CheckCircle2,
+    Settings,
+    Image
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -133,29 +131,16 @@ const NewDeliveryNoteView = () => {
     const location = useLocation();
     const isEditing = Boolean(id);
 
-    // Store State
-    const { 
-        customers, 
-        items: inventoryItems, 
-        fetchCustomers, 
-        fetchItems 
-    } = useERPStore();
-
-    useEffect(() => {
-        fetchCustomers();
-        fetchItems();
-    }, [fetchCustomers, fetchItems]);
-    
     const [formData, setFormData] = useState({
-      deliveryDate: new Date().toISOString().split('T')[0],
-      customer: '',
-      deliveryAddress: '',
-      description: '',
-      reference: '',
-      inventoryLocation: 'Default Inventory Location',
-      orderNumber: '',
-      invoiceNumber: '',
-      status: 'Pending',
+        deliveryDate: new Date().toISOString().split('T')[0],
+        customer: '',
+        deliveryAddress: '',
+        description: '',
+        reference: '',
+        inventoryLocation: 'Default Inventory Location',
+        orderNumber: '',
+        invoiceNumber: '',
+        status: 'Pending',
     });
 
     const [useManualRef, setUseManualRef] = useState(false);
@@ -185,7 +170,7 @@ const NewDeliveryNoteView = () => {
         }
     }, [isEditing]);
 
-    const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '0' }]);
 
     // Context fetching from URL
     useEffect(() => {
@@ -197,7 +182,7 @@ const NewDeliveryNoteView = () => {
         if (invoiceId && !isEditing) {
             const invoice = mockInvoices.find(i => i.id === invoiceId || i.reference === invoiceId);
             if (invoice) {
-                const customerData = customers.find(c => c.name === invoice.customer);
+                const customerData = getCustomers().find(c => c.name === invoice.customer);
                 setFormData(prev => ({
                     ...prev,
                     customer: invoice.customer,
@@ -213,8 +198,7 @@ const NewDeliveryNoteView = () => {
                         id: Date.now() + idx,
                         item: it.item,
                         description: it.description || '',
-                        qty: (it.qty || 0).toString(),
-                        unit: it.unit || ''
+                        qty: (it.qty || 0).toString()
                     })));
                 }
                 return;
@@ -222,14 +206,15 @@ const NewDeliveryNoteView = () => {
         }
 
         if (customerId && !isEditing) {
+            const customers = getCustomers();
             const customer = customers.find(c => c.id === customerId);
             if (customer) {
-                setFormData(prev => ({ 
-                    ...prev, 
+                setFormData(prev => ({
+                    ...prev,
                     customer: customer.name,
                     deliveryAddress: `Plot ${Math.floor(Math.random() * 1000)}, Industrial Area, Ndola` // Mock address
                 }));
-                
+
                 if (itemIds && itemIds.length > 0) {
                     const deliveryItems = getCustomerDeliveryDetails(customer.name);
                     const selectedItems = deliveryItems
@@ -238,8 +223,7 @@ const NewDeliveryNoteView = () => {
                             id: Date.now() + idx,
                             item: it.item,
                             description: `Fulfillment: ${it.item}`,
-                            qty: Math.abs(it.qty).toString(),
-                            unit: (it as any).unit || ''
+                            qty: Math.abs(it.qty).toString()
                         }));
                     if (selectedItems.length > 0) {
                         setItems(selectedItems);
@@ -254,43 +238,42 @@ const NewDeliveryNoteView = () => {
             const notes = getDeliveryNotes();
             const note = notes.find((n: any) => n.id === id || n.noteId === id);
             if (note) {
-              setFormData({
-                deliveryDate: convertToInputDate(note.deliveryDate) || new Date().toISOString().split('T')[0],
-                customer: note.customer || '',
-                deliveryAddress: (note as any).deliveryAddress || '',
-                description: note.description || '',
-                reference: note.reference || '',
-                inventoryLocation: (note as any).inventoryLocation || 'Default Inventory Location',
-                orderNumber: (note as any).orderNumber || note.salesOrder || '',
-                invoiceNumber: note.invoiceNumber || '',
-                status: note.status || 'Pending',
-              });
-              setUseManualRef(true); // Default to manual when editing to show original ref
-              if (note.customTitle) {
-                  setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: note.customTitle }));
-              }
-              if (note.footer) {
-                  setOptions(prev => ({ ...prev, footers: true, footerValue: note.footer }));
-              }
-              if (note.columnLineNumber !== undefined) {
-                  setOptions(prev => ({ ...prev, columnLineNumber: note.columnLineNumber }));
-              }
-              if (note.items) {
-                setItems(note.items.map((it: any) => ({
-                  id: it.id || Math.random(),
-                  item: it.item || '',
-                  description: it.description || '',
-                  qty: Math.abs(parseFloat(it.qty) || 0).toString(),
-                  unit: it.unit || ''
-                })));
-              }
+                setFormData({
+                    deliveryDate: convertToInputDate(note.deliveryDate) || new Date().toISOString().split('T')[0],
+                    customer: note.customer || '',
+                    deliveryAddress: (note as any).deliveryAddress || '',
+                    description: note.description || '',
+                    reference: note.reference || '',
+                    inventoryLocation: (note as any).inventoryLocation || 'Default Inventory Location',
+                    orderNumber: (note as any).orderNumber || note.salesOrder || '',
+                    invoiceNumber: note.invoiceNumber || '',
+                    status: note.status || 'Pending',
+                });
+                setUseManualRef(true); // Default to manual when editing to show original ref
+                if (note.customTitle) {
+                    setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: note.customTitle }));
+                }
+                if (note.footer) {
+                    setOptions(prev => ({ ...prev, footers: true, footerValue: note.footer }));
+                }
+                if (note.columnLineNumber !== undefined) {
+                    setOptions(prev => ({ ...prev, columnLineNumber: note.columnLineNumber }));
+                }
+                if (note.items) {
+                    setItems(note.items.map((it: any) => ({
+                        id: it.id || Math.random(),
+                        item: it.item || '',
+                        description: it.description || '',
+                        qty: Math.abs(parseFloat(it.qty) || 0).toString()
+                    })));
+                }
             }
         }
     }, [id]);
 
     const handleInputChange = (e: any) => {
-      const { name, value } = e.target;
-      setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
     };
 
     const updateItem = (itemId: number, field: string, value: string) => {
@@ -298,10 +281,10 @@ const NewDeliveryNoteView = () => {
             if (item.id === itemId) {
                 const updated = { ...item, [field]: value };
                 if (field === 'item') {
-                    const invItem = inventoryItems.find(i => i.itemName === value);
+                    const invItem = (mockInventory as any)[value];
                     if (invItem) {
                         updated.description = value;
-                        updated.unit = invItem.unitName;
+                        updated.unit = invItem.unit;
                     }
                 }
                 return updated;
@@ -330,8 +313,7 @@ const NewDeliveryNoteView = () => {
                 id: it.id,
                 item: it.item,
                 description: it.description,
-                qty: it.qty,
-                unit: it.unit
+                qty: it.qty
             })),
             status: formData.status,
             customTitle: options.customTitle ? options.customTitleValue : undefined,
@@ -341,7 +323,7 @@ const NewDeliveryNoteView = () => {
         };
 
         const existingNotes = JSON.parse(localStorage.getItem('delivery_notes_data') || '[]');
-        
+
         let updatedNotes;
         if (isEditing) {
             updatedNotes = existingNotes.map((n: any) => n.id === id ? newNote : n);
@@ -358,10 +340,10 @@ const NewDeliveryNoteView = () => {
         navigate('/delivery-notes');
     };
 
-    const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
+    const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0' }]);
     const deleteLine = (itemId: number) => items.length > 1 && setItems(items.filter(item => item.id !== itemId));
 
-    const allCustomers = useMemo(() => customers, [customers]);
+    const allCustomers = useMemo(() => getCustomers(), []);
 
     const totalQty = useMemo(() => {
         return items.reduce((sum, item) => {
@@ -422,19 +404,19 @@ const NewDeliveryNoteView = () => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-                            <InputField 
-                                label="Delivery Date" 
-                                type="date" 
+                            <InputField
+                                label="Delivery Date"
+                                type="date"
                                 name="deliveryDate"
-                                value={formData.deliveryDate} 
-                                onChange={handleInputChange} 
-                                Icon={Calendar} 
+                                value={formData.deliveryDate}
+                                onChange={handleInputChange}
+                                Icon={Calendar}
                             />
-                            <SelectField 
-                                label="Current Status" 
+                            <SelectField
+                                label="Current Status"
                                 name="status"
-                                value={formData.status} 
-                                onChange={handleInputChange} 
+                                value={formData.status}
+                                onChange={handleInputChange}
                                 Icon={Clock}
                             >
                                 <option value="Pending">Pending</option>
@@ -469,9 +451,9 @@ const NewDeliveryNoteView = () => {
                                     />
                                 </div>
                             </div>
-                            <SelectField 
-                                label="Inventory Location" 
-                                value={formData.inventoryLocation} 
+                            <SelectField
+                                label="Inventory Location"
+                                value={formData.inventoryLocation}
                                 onChange={(e: any) => handleInputChange({ target: { name: 'inventoryLocation', value: e.target.value } })}
                                 Icon={MapPin}
                             >
@@ -493,10 +475,10 @@ const NewDeliveryNoteView = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-2">
-                                <SelectField 
-                                    label="Customer (To)" 
-                                    value={formData.customer} 
-                                    onChange={(e: any) => handleInputChange({ target: { name: 'customer', value: e.target.value } })} 
+                                <SelectField
+                                    label="Customer (To)"
+                                    value={formData.customer}
+                                    onChange={(e: any) => handleInputChange({ target: { name: 'customer', value: e.target.value } })}
                                     Icon={User}
                                 >
                                     <option value="">Select Customer</option>
@@ -506,17 +488,17 @@ const NewDeliveryNoteView = () => {
                                 </SelectField>
                             </div>
                             <div className="hidden md:block"></div> {/* Spacer for alignment */}
-                            
-                            <TextareaField 
-                                label="Delivery Address" 
-                                value={formData.deliveryAddress} 
+
+                            <TextareaField
+                                label="Delivery Address"
+                                value={formData.deliveryAddress}
                                 onChange={(e: any) => handleInputChange({ target: { name: 'deliveryAddress', value: e.target.value } })}
                                 placeholder="Enter shipping destination information..."
                                 rows={4}
                             />
-                            <TextareaField 
-                                label="Description / Memo" 
-                                value={formData.description} 
+                            <TextareaField
+                                label="Description / Memo"
+                                value={formData.description}
                                 onChange={(e: any) => handleInputChange({ target: { name: 'description', value: e.target.value } })}
                                 placeholder="Overall shipment description..."
                                 rows={4}
@@ -567,8 +549,8 @@ const NewDeliveryNoteView = () => {
                                                     className="w-full bg-transparent border-none p-0 text-sm font-bold text-indigo-600 outline-none appearance-none cursor-pointer"
                                                 >
                                                     <option value="">Select Item...</option>
-                                                    {inventoryItems.map(item => (
-                                                        <option key={item.id} value={item.itemName}>{item.itemName}</option>
+                                                    {Object.keys(mockInventory).map(name => (
+                                                        <option key={name} value={name}>{name}</option>
                                                     ))}
                                                 </select>
                                             </td>
@@ -593,9 +575,9 @@ const NewDeliveryNoteView = () => {
                                                         />
                                                         <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tight">{item.unit || 'PCS'}</span>
                                                     </div>
-                                                    {item.item && inventoryItems.find(i => i.itemName === item.item) && (
+                                                    {item.item && (mockInventory as any)[item.item] && (
                                                         <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] border-t border-slate-100 pt-1 w-full text-right">
-                                                            Available: <span className="text-emerald-500 font-black">{(inventoryItems.find(i => i.itemName === item.item)?.stock || 0).toLocaleString()}</span> {item.unit || 'PCS'}
+                                                            Available: <span className="text-emerald-500 font-black">{((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span> {item.unit || 'PCS'}
                                                         </div>
                                                     )}
                                                 </div>
@@ -647,7 +629,7 @@ const NewDeliveryNoteView = () => {
 
                         {showOptionsArea && (
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-500 pb-4">
-                                <div 
+                                <div
                                     className="flex items-center space-x-3 cursor-pointer group"
                                     onClick={() => setOptions(prev => ({ ...prev, columnLineNumber: !prev.columnLineNumber }))}
                                 >
@@ -660,7 +642,7 @@ const NewDeliveryNoteView = () => {
                                     <span className="text-sm font-semibold text-slate-600">Column — Line number</span>
                                 </div>
                                 <div className="space-y-4">
-                                    <div 
+                                    <div
                                         className="flex items-center space-x-3 cursor-pointer group"
                                         onClick={() => setOptions(prev => ({ ...prev, customTitle: !prev.customTitle }))}
                                     >
@@ -683,7 +665,7 @@ const NewDeliveryNoteView = () => {
                                     )}
                                 </div>
                                 <div className="space-y-4">
-                                    <div 
+                                    <div
                                         className="flex items-center space-x-3 cursor-pointer group"
                                         onClick={() => setOptions(prev => ({ ...prev, footers: !prev.footers }))}
                                     >

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockSalesQuotes, mockSalesOrders, saveSalesQuotes, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
+import { mockSalesOrders, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
+import apiService from '../services/apiService';
 import { SalesQuote, ScreenPermission } from '../types';
 import { useEffect } from 'react';
 import Button from '../components/shared/Button';
@@ -21,6 +22,8 @@ const SalesQuotesView = () => {
     const [pageSize, setPageSize] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
     const [copiedNotification, setCopiedNotification] = useState(false);
+    const [quotes, setQuotes] = useState<SalesQuote[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [sortColumn, setSortColumn] = useState<string>('Issue Date');
@@ -42,6 +45,29 @@ const SalesQuotesView = () => {
 
         return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
     }, [currentUser]);
+
+    useEffect(() => {
+        const fetchQuotes = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getQuotes();
+                // Map API data to match view expectations
+                const mappedQuotes = data.map((q: any) => ({
+                    ...q,
+                    customer: q.customer?.name || 'Unknown',
+                    issueDate: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    // Ensure numeric fields are correctly handled
+                    amount: parseFloat(q.amount || 0)
+                }));
+                setQuotes(mappedQuotes);
+            } catch (err) {
+                console.error('Failed to fetch quotes:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchQuotes();
+    }, [refreshTrigger]);
 
     React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -109,32 +135,20 @@ const SalesQuotesView = () => {
         window.dispatchEvent(new Event('storage'));
     };
 
-    const handleStatusChange = (id: string, newStatus: SalesQuote['status']) => {
-        const index = mockSalesQuotes.findIndex(q => q.id === id);
-        if (index !== -1) {
-            const quote = mockSalesQuotes[index];
-            quote.status = newStatus;
+    const handleStatusChange = async (id: string, newStatus: SalesQuote['status']) => {
+        try {
+            await apiService.updateQuoteStatus(id, newStatus);
             if (newStatus === 'Accepted') {
-                const newOrder = {
-                    id: `so-${Date.now()}`,
-                    orderDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                    reference: quote.reference,
-                    customer: quote.customer,
-                    description: quote.description || `Converted from Quote ${quote.reference}`,
-                    currency: quote.currency,
-                    amount: quote.amount,
-                    status: 'Ordered' as any,
-                    billingAddress: quote.billingAddress || '',
-                    timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-                    items: quote.items ? [...quote.items] : []
-                };
-                mockSalesOrders.unshift(newOrder);
-                saveSalesQuotes(mockSalesQuotes);
+                // For now, conversion to order still uses mock logic or we could implement it in backend
+                // Since user asked for database, we'll just refresh for now
+                setRefreshTrigger(prev => prev + 1);
                 navigate('/sales-orders');
                 return;
             }
-            saveSalesQuotes(mockSalesQuotes);
             setRefreshTrigger(prev => prev + 1);
+        } catch (err) {
+            console.error('Failed to update status:', err);
+            alert('Failed to update status');
         }
     };
 
@@ -194,12 +208,12 @@ const SalesQuotesView = () => {
     const handleCopyToClipboard = () => copyToClipboard(filteredData);
 
     const handleBatchCopy = () => {
-        const selectedQuotes = mockSalesQuotes.filter(q => selectedIds.includes(q.id));
+        const selectedQuotes = quotes.filter(q => selectedIds.includes(q.id));
         copyToClipboard(selectedQuotes);
     };
 
     const filteredData = useMemo(() => {
-        let result = [...mockSalesQuotes].filter(q => {
+        let result = [...quotes].filter(q => {
             if (q.status === 'Accepted' || q.status === 'Rejected') return false;
             
             // Filter out Expired quotes
@@ -502,7 +516,7 @@ const SalesQuotesView = () => {
     }, [visibleColumns, isSelectionMode, selectedIds, paginatedData]);
 
     return (
-        <div className="p-8 space-y-8 max-w-[1600px] mx-auto animate-in fade-in duration-700 font-sans">
+        <div className="p-8 space-y-8 animate-in fade-in duration-700 font-sans">
             {copiedNotification && (
                 <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-8 py-4 rounded-[20px] shadow-2xl z-[9999] animate-in slide-in-from-top-4 duration-500">
                     <p className="font-black uppercase tracking-widest text-[11px]">Data Copied to Clipboard</p>
@@ -609,13 +623,14 @@ const SalesQuotesView = () => {
             )}
 
             {/* Table Container - Invoice Style */}
-            <div className="w-fit min-w-full overflow-visible mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 overflow-hidden bg-white">
+            <div className="mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 bg-white">
                 <DataTable
                     data={paginatedData}
                     columns={columns as any}
                     tableClassName="w-full"
                     className="border-none shadow-none bg-transparent"
                     hideDefaultPagination={true}
+                    disableInternalScroll={true}
                     tableFooter={
                         <tr className="bg-slate-50/50">
                             {columns.map((col: any) => {

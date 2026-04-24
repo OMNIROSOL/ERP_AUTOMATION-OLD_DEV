@@ -288,7 +288,7 @@ const PurchaseOrdersView = () => {
     ];
 
     return (
-        <div className="p-8 space-y-6 max-w-[1400px] animate-in fade-in duration-500">
+        <div className="p-8 space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">
@@ -329,12 +329,13 @@ const PurchaseOrdersView = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
                 <DataTable
                     data={displayData}
                     columns={columns.filter(c => visibleColumns[c.id]) as any}
                     tableClassName="min-w-[1000px]"
                     hideDefaultPagination={true}
+                    disableInternalScroll={true}
                 />
             </div>
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, Link, useParams } from 'react-router-dom';
 import { mockSalesOrders, mockInvoices, saveSalesOrders, saveInvoices, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import { SalesOrder, Invoice, ScreenPermission } from '../types';
+import apiService from '../services/apiService';
 import DataTable from '../components/shared/DataTable';
 import Badge from '../components/shared/Badge';
 import BatchActionBar from '../components/shared/BatchActionBar';
@@ -40,6 +41,30 @@ const SalesOrdersView = () => {
 
         return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
     }, [currentUser]);
+
+    const [orders, setOrders] = useState<SalesOrder[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchOrders = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getOrders();
+                // Map API data if needed (e.g. date formatting)
+                const mappedOrders = data.map((o: any) => ({
+                    ...o,
+                    customer: o.customer?.name || o.customer || 'Unknown',
+                    orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : ''
+                }));
+                setOrders(mappedOrders);
+            } catch (err) {
+                console.error('Failed to fetch orders:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchOrders();
+    }, [refreshTrigger]);
 
     const handleStatusChange = (id: string, newStatus: string, shouldNavigate: boolean = false) => {
         const index = mockSalesOrders.findIndex(o => o.id === id);
@@ -116,7 +141,7 @@ const SalesOrdersView = () => {
     }, []);
 
     const filteredData = useMemo(() => {
-        let result = [...mockSalesOrders].filter(o => (o as any).status !== 'Invoiced' && (o as any).status !== 'Rejected');
+        let result = [...orders].filter(o => (o as any).status !== 'Invoiced' && (o as any).status !== 'Rejected');
 
         // 1. Exact Customer Filter from URL Path
         if (customerName) {
@@ -403,7 +428,7 @@ const SalesOrdersView = () => {
     }, [visibleColumns, isSelectionMode, selectedIds, displayData]);
 
     return (
-        <div className="p-8 space-y-6 max-w-[1400px] ml-0 mr-auto animate-in fade-in duration-500 font-sans">
+        <div className="p-8 space-y-6 animate-in fade-in duration-500 font-sans">
             {customerName && (
                 <div className="flex items-center space-x-2 text-[11px] font-bold text-slate-400 uppercase tracking-widest bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
                     <span
@@ -497,15 +522,23 @@ const SalesOrdersView = () => {
                 ]}
             />
 
-            <div className="w-fit min-w-full overflow-visible mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50">
+            <div className="mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50">
                 <DataTable
-                    data={displayData}
+                    data={isLoading ? [] : displayData}
                     columns={columns as any}
                     tableClassName="min-w-[1440px]"
                     className="border-none shadow-none bg-transparent"
                     hideDefaultPagination={true}
                     stickyHeader={true}
                     disableInternalScroll={true}
+                    emptyMessage={
+                        isLoading ? (
+                            <div className="flex flex-col items-center justify-center space-y-4 py-20">
+                                <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading sales orders...</p>
+                            </div>
+                        ) : "No sales orders found."
+                    }
                     tableFooter={
                         <tr>
                             {columns.map((col: any) => {

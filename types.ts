@@ -1,4 +1,11 @@
 
+export interface Division {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+
 export interface Transaction {
   id: string;
   date: string;
@@ -246,10 +253,6 @@ export interface InventoryItem {
   autoFillTaxCode?: boolean;
   hideItemName?: boolean;
   inactive?: boolean;
-  sellingPrice?: number;
-  purchasePrice?: number;
-  stock?: number;
-  unit?: string;
 }
 
 export interface InventoryTransfer {

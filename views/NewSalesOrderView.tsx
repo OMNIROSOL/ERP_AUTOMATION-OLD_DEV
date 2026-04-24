@@ -10,8 +10,8 @@ import {
     saveSalesOrders,
     getFooters
 } from '../mockData';
-import { SalesOrder, ApprovalRequest, Customer, InventoryItem } from '../types';
-import { useERPStore } from '../store/useERPStore';
+import apiService from '../services/apiService';
+import { SalesOrder, ApprovalRequest, Division } from '../types';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -139,19 +139,6 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
 
-    // Store State
-    const { 
-        customers, 
-        items: inventoryItems, 
-        fetchCustomers, 
-        fetchItems 
-    } = useERPStore();
-
-    useEffect(() => {
-        fetchCustomers();
-        fetchItems();
-    }, [fetchCustomers, fetchItems]);
-
     const [issueDate, setIssueDate] = useState('');
     const [customer, setCustomer] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -162,7 +149,10 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const [fileName, setFileName] = useState('No file chosen');
     const [marginThreshold] = useState(10);
     const [status, setStatus] = useState('Ordered');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+    const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+    const [customers, setCustomers] = useState<any[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         rounding: false,
@@ -183,26 +173,51 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
 
     const [showOptionsArea, setShowOptionsArea] = useState(false);
 
+    const inventoryMap = useMemo(() => {
+        const map: Record<string, any> = {};
+        inventoryItems.forEach(item => {
+            map[item.itemName] = item;
+        });
+        return map;
+    }, [inventoryItems]);
+
     const requiresApproval = useMemo(() => {
         return items.some(item => {
             if (item.item === 'Select Item') return false;
-            const inv = (mockInventory as any)[item.item];
+            const inv = inventoryMap[item.item];
             if (!inv) return false;
             const price = parseFloat(item.unitPrice) || 0;
             const minMarginPrice = inv.sellingPrice * (1 - marginThreshold / 100);
             return price < inv.purchasePrice || price < minMarginPrice;
         });
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, inventoryMap]);
 
-    const getNextReference = () => {
-        const refs = mockSalesOrders
-            .map(o => o.reference)
-            .filter(ref => ref && ref.startsWith('SO-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1005;
-        return `SO-${nextNum.toString().padStart(4, '0')}`;
+    const fetchReference = async () => {
+        try {
+            const nextRef = await apiService.getNextReference('order');
+            setReference(nextRef);
+        } catch (err) {
+            console.error('Failed to get reference:', err);
+        }
     };
+
+    useEffect(() => {
+        const loadMasterData = async () => {
+            try {
+                const [custs, itemsData, divs] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getItems(),
+                    apiService.getDivisions()
+                ]);
+                setCustomers(custs);
+                setInventoryItems(itemsData);
+                setAvailableDivisions(divs);
+            } catch (err) {
+                console.error('Failed to load master data:', err);
+            }
+        };
+        loadMasterData();
+    }, []);
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
@@ -230,8 +245,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                     qty: i.qty ? i.qty.toString() : '1',
                     unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                     discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax',
-                    unit: (i as any).unit || ''
+                    taxCode: i.taxCode || 'No tax'
                 })));
                 if (order.customTitle) {
                     setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: order.customTitle || 'Sales Order' }));
@@ -245,11 +259,11 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             setCustomer('');
             setCurrency('ZMW');
             setBillingAddress('');
-            setReference(getNextReference());
+            fetchReference();
             setUseManualRef(false);
             setDescription('');
             setStatus('Ordered');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
         }
     }, [id, location.search]);
 
@@ -363,57 +377,57 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     };
 
     const handleSave = async (forceManualApproval = false) => {
-        const newOrder: SalesOrder = {
-            id: isEditing ? id! : `SO-${Date.now()}`,
-            orderDate: issueDate.split('-').reverse().join('.'),
-            reference: reference || getNextReference(),
-            customer: customer,
-            description: description,
-            currency: currency,
+        if (!customer || customer === 'Select Customer' || customer === '') {
+            alert('Please select a customer.');
+            return;
+        }
+
+        const validItems = items.filter(i => i.item && i.item !== 'Select Item' && i.item !== '' && i.itemId);
+        if (validItems.length === 0) {
+            alert('Please select at least one valid item.');
+            return;
+        }
+
+        const selectedCustomer = customers.find(c => c.name === customer);
+        if (!selectedCustomer) {
+            alert('Selected customer not found.');
+            return;
+        }
+
+        const orderData = {
+            customerId: selectedCustomer.id,
+            reference: reference,
             amount: calculations.grandTotal,
-            status: (approvalReason || forceManualApproval) ? 'Pending Approval' : 'Ordered',
+            description: description,
             billingAddress: billingAddress,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) })),
-            customTitle: options.customTitle ? options.customTitleValue : undefined,
-            footer: options.footers ? options.footerValue : undefined
+            issueDate: issueDate,
+            status: isEditing ? status : 'Ordered',
+            docOptions: options,
+            items: validItems.map(i => ({
+                itemId: i.itemId,
+                qty: parseFloat(i.qty),
+                unitPrice: parseFloat(i.unitPrice),
+                division: i.division,
+                totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
+            }))
         };
 
-        if (isEditing) {
-            const index = mockSalesOrders.findIndex(o => o.id === id);
-            if (index !== -1) mockSalesOrders[index] = newOrder;
-        } else {
-            mockSalesOrders.unshift(newOrder);
-        }
-
-        saveSalesOrders(mockSalesOrders);
-
-        if ((approvalReason || forceManualApproval) && setApprovalRequests) {
-            const newRequest: ApprovalRequest = {
-                id: `APR-${Date.now()}`,
-                quoteId: newOrder.id,
-                customer: customer || 'Unknown Customer',
-                amount: calculations.grandTotal,
-                currency: currency,
-                requestedBy: 'Current User',
-                approver: 'Sales Manager',
-                reason: forceManualApproval ? (approvalReason ? `${approvalReason} (Manual)` : 'Manual request') : approvalReason,
-                status: 'Pending',
-                date: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                reference: newOrder.reference,
-                timestamp: newOrder.timestamp
-            };
-            setApprovalRequests(prev => [newRequest, ...prev]);
-            alert(`Approval Required: ${newRequest.reason}\n\nSubmitted for review.`);
-        }
-
-        if (isEditing) {
+        try {
+            if (isEditing) {
+                // await apiService.updateOrder(id!, orderData);
+                alert('Update functionality not fully implemented in API yet.');
+            } else {
+                await apiService.createOrder(orderData);
+            }
             navigate('/sales-orders');
-        } else {
-            // Automatically flow to Sales Invoice for new confirmed orders
-            navigate(`/sales-invoices/new?copyFrom=${newOrder.id}`);
+        } catch (err: any) {
+            console.error('Failed to save order:', err);
+            const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Failed to save order to database: ${errMsg}`);
         }
     };
+
+
 
     return (
         <div className="p-10 max-w-[1400px] mx-auto space-y-6 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
@@ -504,7 +518,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Order Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -515,6 +529,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                             {options.columnLineNumber && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12 text-center">#</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[200px]">ITEM</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">DIVISION</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">QTY</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">UNIT PRICE</th>
                                             {options.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right whitespace-nowrap">DISCOUNT {options.columnDiscountType === 'Percentage' ? '(%)' : `(${currency})`}</th>}
@@ -537,27 +552,24 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
                                                                     const invItem = inventoryItems.find(i => i.itemName === val);
-                                                                    setItems(prev => {
-                                                                        const newItems = prev.map(i => i.id === item.id ? {
-                                                                            ...i,
-                                                                            item: val,
-                                                                            unitPrice: invItem ? invItem.sellingPrice?.toString() : i.unitPrice,
-                                                                            description: invItem ? val : i.description,
-                                                                            unit: invItem ? invItem.unitName : i.unit
-                                                                        } : i);
-                                                                        return newItems;
-                                                                    });
+                                                                    setItems(prev => prev.map(i => i.id === item.id ? {
+                                                                        ...i,
+                                                                        item: val,
+                                                                        itemId: invItem ? invItem.id : '',
+                                                                        unitPrice: invItem ? (invItem.sellingPrice || 0).toString() : i.unitPrice,
+                                                                        description: invItem ? (invItem.description || val) : i.description
+                                                                    } : i));
                                                                 }}
                                                                 className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                             >
                                                                 <option value="Select Item">Select Item</option>
-                                                                {inventoryItems.map(item => (
-                                                                    <option key={item.id} value={item.itemName}>{item.itemName}</option>
+                                                                {inventoryItems.map(inv => (
+                                                                    <option key={inv.id} value={inv.itemName}>{inv.itemName}</option>
                                                                 ))}
                                                             </select>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-4">
+                                                     <td className="px-4 py-4">
                                                         <input
                                                             type="text"
                                                             value={item.description}
@@ -568,6 +580,18 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                             className="w-full bg-transparent border-none p-0 text-sm text-slate-600 outline-none placeholder:text-slate-300"
                                                             placeholder="Add description..."
                                                         />
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <select
+                                                            value={item.division}
+                                                            onChange={(e) => setItems(prev => prev.map(i => i.id === item.id ? { ...i, division: e.target.value } : i))}
+                                                            className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
+                                                        >
+                                                            <option value="General">General</option>
+                                                            {availableDivisions.map(div => (
+                                                                <option key={div.id} value={div.name}>{div.name}</option>
+                                                            ))}
+                                                        </select>
                                                     </td>
                                                     <td className="px-4 py-4 relative group/qty">
                                                         <div className="flex flex-col items-end">
