@@ -12,7 +12,7 @@ import { useERPStore } from '../store/useERPStore';
 
 const CustomersView = () => {
     const navigate = useNavigate();
-    const customers = useERPStore((state) => state.customers);
+    const { customers, invoices, fetchInvoices, fetchCustomers } = useERPStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [copiedNotification, setCopiedNotification] = useState(false);
     const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(new Set());
@@ -37,10 +37,16 @@ const CustomersView = () => {
     }, []);
 
     useEffect(() => {
-        const handleFocus = () => setRefreshTrigger(prev => prev + 1);
+        fetchCustomers();
+        fetchInvoices();
+        const handleFocus = () => {
+            fetchCustomers();
+            fetchInvoices();
+            setRefreshTrigger(prev => prev + 1);
+        };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, []);
+    }, [fetchCustomers, fetchInvoices]);
 
     useEffect(() => {
         localStorage.setItem('is_batch_view_mode', isBatchViewMode.toString());
@@ -471,7 +477,7 @@ const CustomersView = () => {
                                             }).length;
                                         }
                                         if (col.id === 'salesOrders') count = mockSalesOrders.filter(o => o.customer === customer.name && o.status !== 'Invoiced' && o.status !== 'Rejected').length;
-                                        if (col.id === 'salesInvoices') count = mockInvoices.filter(i => i.customer === customer.name && i.status !== 'Delivered').length;
+                                        if (col.id === 'salesInvoices') count = (invoices || []).filter(i => i.customer === customer.name && i.status !== 'Delivered').length;
                                         if (col.id === 'deliveryNotes') count = mockDeliveryNotes.filter(d => d.customer === customer.name && (d.status || 'Pending') === 'Pending').length;
 
                                         if (['receipts', 'salesQuotes', 'salesOrders', 'salesInvoices', 'deliveryNotes', 'payments'].includes(col.id) && count > 0) {
