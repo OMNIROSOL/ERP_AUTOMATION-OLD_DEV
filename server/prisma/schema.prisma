@@ -1,0 +1,199 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["admin", "finance", "inventory", "master", "purchase", "sales"]
+}
+
+model Customer {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code           String    @unique
+  name           String
+  email          String?
+  currency       String?   @default("USD")
+  billingAddress String?   @map("billing_address")
+  status         String?   @default("Active")
+  createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  salesInvoices  Invoice[]
+
+  @@map("customers")
+  @@schema("master")
+}
+
+model Item {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemCode        String        @unique @map("item_code")
+  itemName        String        @map("item_name")
+  description     String?
+  unitName        String?       @default("Pcs") @map("unit_name")
+  valuationMethod String?       @default("FIFO") @map("valuation_method")
+  isInactive      Boolean?      @default(false) @map("is_inactive")
+  createdAt       DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  stockLedger     StockLedger[]
+  invoiceItems    InvoiceItem[]
+
+  @@map("items")
+  @@schema("master")
+}
+
+model Invoice {
+  id         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reference  String        @unique
+  issueDate  DateTime      @default(dbgenerated("CURRENT_DATE")) @map("issue_date") @db.Date
+  dueDate    DateTime?     @map("due_date") @db.Date
+  customerId String        @map("customer_id") @db.Uuid
+  grandTotal Decimal?      @default(0) @map("grand_total") @db.Decimal(15, 2)
+  balanceDue Decimal?      @default(0) @map("balance_due") @db.Decimal(15, 2)
+  status     String?       @default("Unpaid")
+  docOptions Json?         @default("{}") @map("doc_options")
+  createdAt  DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  items      InvoiceItem[]
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("invoices")
+  @@schema("sales")
+}
+
+model InvoiceItem {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoiceId   String     @map("invoice_id") @db.Uuid
+  itemId      String     @map("item_id") @db.Uuid
+  qty         Decimal    @db.Decimal(12, 4)
+  unitPrice   Decimal    @map("unit_price") @db.Decimal(15, 2)
+  tax_code_id String?    @db.Uuid
+  totalAmount Decimal    @map("total_amount") @db.Decimal(15, 2)
+  invoice     Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  item        Item       @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tax_codes   tax_codes? @relation(fields: [tax_code_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("invoice_items")
+  @@schema("sales")
+}
+
+model Location {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String        @unique
+  code        String?       @unique
+  createdAt   DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)
+  stockLedger StockLedger[]
+
+  @@map("locations")
+  @@schema("inventory")
+}
+
+model StockLedger {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemId           String    @map("item_id") @db.Uuid
+  locationId       String    @map("location_id") @db.Uuid
+  qtyChange        Decimal   @map("qty_change") @db.Decimal(12, 4)
+  transactionType  String    @map("transaction_type")
+  sourceDocumentId String?   @map("source_document_id") @db.Uuid
+  createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  item             Item      @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  location         Location  @relation(fields: [locationId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([itemId, locationId], map: "idx_stock_master")
+  @@map("stock_ledger")
+  @@schema("inventory")
+}
+
+model ChartOfAccount {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code             String        @unique
+  name             String
+  accountType      String        @map("account_type")
+  isPaymentAccount Boolean?      @default(false) @map("is_payment_account")
+  ledgerEntries    LedgerEntry[]
+
+  @@map("chart_of_accounts")
+  @@schema("finance")
+}
+
+model LedgerEntry {
+  id                 String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId          String         @map("account_id") @db.Uuid
+  transactionDate    DateTime?      @default(dbgenerated("CURRENT_DATE")) @map("transaction_date") @db.Date
+  debit              Decimal?       @default(0) @db.Decimal(15, 2)
+  credit             Decimal?       @default(0) @db.Decimal(15, 2)
+  transactionType    String?        @map("transaction_type")
+  source_document_id String?        @db.Uuid
+  account            ChartOfAccount @relation(fields: [accountId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([accountId], map: "idx_ledger_account")
+  @@map("ledger_entries")
+  @@schema("finance")
+}
+
+model permissions {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role_id    String   @db.Uuid
+  screen_id  String
+  can_view   Boolean? @default(false)
+  can_add    Boolean? @default(false)
+  can_edit   Boolean? @default(false)
+  can_delete Boolean? @default(false)
+  roles      roles    @relation(fields: [role_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([role_id, screen_id])
+  @@schema("admin")
+}
+
+model profiles {
+  id         String    @id @db.Uuid
+  email      String    @unique
+  full_name  String?
+  role_id    String?   @db.Uuid
+  is_active  Boolean?  @default(true)
+  created_at DateTime? @default(now()) @db.Timestamptz(6)
+  roles      roles?    @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@schema("admin")
+}
+
+model roles {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String        @unique
+  description String?
+  permissions permissions[]
+  profiles    profiles[]
+
+  @@schema("admin")
+}
+
+model suppliers {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code       String     @unique
+  name       String
+  email      String?
+  currency   String?    @default("USD")
+  status     String?    @default("Active")
+  created_at DateTime?  @default(now()) @db.Timestamptz(6)
+  invoices   invoices[]
+
+  @@schema("master")
+}
+
+model tax_codes {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name          String        @unique
+  rate          Decimal       @default(0) @db.Decimal(5, 2)
+  created_at    DateTime?     @default(now()) @db.Timestamptz(6)
+  invoice_items InvoiceItem[]
+
+  @@schema("master")
+}
+
+model invoices {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reference   String
+  supplier_id String    @db.Uuid
+  grand_total Decimal?  @default(0) @db.Decimal(15, 2)
+  status      String?   @default("Unpaid")
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  suppliers   suppliers @relation(fields: [supplier_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@schema("purchase")
+}

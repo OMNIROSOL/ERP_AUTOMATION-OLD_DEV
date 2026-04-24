@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, ChevronUp } from 'lucide-react';
 import { getCustomers, saveCustomers, getInventoryLocations } from '../mockData';
 import { Customer } from '../types';
+import { useERPStore } from '../store/useERPStore';
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error }: any) => (
     <div className="space-y-2">
@@ -57,6 +58,8 @@ const NumericInputField = ({ label, value, onChange, placeholder, onIncrement, o
 
 const NewCustomerView = () => {
     const navigate = useNavigate();
+    const createCustomer = useERPStore((state) => state.createCustomer);
+    const customers = useERPStore((state) => state.customers);
     const [name, setName] = useState('');
     const [creditLimit, setCreditLimit] = useState('');
     const [currency, setCurrency] = useState('ZMW - Zambian Kwacha');
@@ -258,20 +261,13 @@ const NewCustomerView = () => {
                             Discard
                         </button>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 if (email && !validateEmail(email)) {
                                     setEmailError('Invalid email format');
                                     return;
                                 }
-                                const allCustomers = getCustomers();
-                                const nextNumber = allCustomers.reduce((max, c) => {
-                                    const match = c.code?.match(/\d+/);
-                                    if (match) {
-                                        const num = parseInt(match[0]);
-                                        return num > max ? num : max;
-                                    }
-                                    return max;
-                                }, 0) + 1;
+
+                                const nextNumber = customers.length + 1;
                                 const newCode = `CUST-${nextNumber.toString().padStart(4, '0')}`;
 
                                 const currencyCode = currency.split(' ')[0];
@@ -279,37 +275,16 @@ const NewCustomerView = () => {
                                     ? `${name} - ${currencyCode}` 
                                     : name;
 
-                                const newCustomer: Customer = {
-                                    id: `cust-gen-${Date.now()}`,
+                                const payload = {
                                     name: finalName || 'Unnamed Customer',
                                     code: newCode,
-                                    division: division !== 'Optional' ? division : 'General',
-                                    qtyToDeliver: 0,
-                                    uninvoiced: 0,
-                                    status: 'Unpaid',
-                                    tpin: tpin,
-                                    salesPerson: salesPerson,
-                                    creditDays: parseInt(creditDays) || 30,
-                                    balance: 0,
                                     email: email,
+                                    currency: currencyCode,
                                     billingAddress: billingAddress,
-                                    deliveryAddress: deliveryAddress,
-                                    currency: currency,
-                                    creditLimit: creditLimit,
-                                    documentation: fileName !== 'No file chosen' ? fileName : undefined
+                                    status: 'Unpaid',
                                 };
-                                let persistentCustomers = [];
-                                try {
-                                    const saved = localStorage.getItem('customers_data');
-                                    persistentCustomers = saved ? JSON.parse(saved) : [];
-                                    if (!Array.isArray(persistentCustomers)) persistentCustomers = [];
-                                } catch (e) {
-                                    console.error('Error parsing customer data:', e);
-                                    persistentCustomers = [];
-                                }
 
-                                persistentCustomers.unshift(newCustomer);
-                                localStorage.setItem('customers_data', JSON.stringify(persistentCustomers));
+                                await createCustomer(payload);
                                 alert('Customer profile finalized successfully!');
                                 navigate('/customers');
                             }}

@@ -5,12 +5,14 @@ import {
     ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Printer, HelpCircle
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getCustomers, mockInvoices, mockSalesQuotes, mockSalesOrders, mockDeliveryNotes, mockReceipts } from '../mockData';
+import { mockInvoices, mockSalesQuotes, mockSalesOrders, mockDeliveryNotes, mockReceipts } from '../mockData';
 import { Customer } from '../types';
 import { cn } from '../utils/cn';
+import { useERPStore } from '../store/useERPStore';
 
 const CustomersView = () => {
     const navigate = useNavigate();
+    const { customers, invoices, fetchInvoices, fetchCustomers } = useERPStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [copiedNotification, setCopiedNotification] = useState(false);
     const [selectedCustomerIds, setSelectedCustomerIds] = useState<Set<string>>(new Set());
@@ -22,6 +24,7 @@ const CustomersView = () => {
     const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
     const [showInactive, setShowInactive] = useState(false);
     const [showEditColumns, setShowEditColumns] = useState(false);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -33,19 +36,22 @@ const CustomersView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    // Force refresh when component gains focus or mount
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
     useEffect(() => {
-        const handleFocus = () => setRefreshTrigger(prev => prev + 1);
+        fetchCustomers();
+        fetchInvoices();
+        const handleFocus = () => {
+            fetchCustomers();
+            fetchInvoices();
+            setRefreshTrigger(prev => prev + 1);
+        };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, []);
+    }, []); // Removed fetch functions from dependencies to avoid loops
 
     useEffect(() => {
         localStorage.setItem('is_batch_view_mode', isBatchViewMode.toString());
     }, [isBatchViewMode]);
 
-    const customers = useMemo(() => getCustomers(), [refreshTrigger]);
 
     const defaultColumns = [
         { id: 'name', label: 'Customer Name', visible: true },
@@ -471,7 +477,7 @@ const CustomersView = () => {
                                             }).length;
                                         }
                                         if (col.id === 'salesOrders') count = mockSalesOrders.filter(o => o.customer === customer.name && o.status !== 'Invoiced' && o.status !== 'Rejected').length;
-                                        if (col.id === 'salesInvoices') count = mockInvoices.filter(i => i.customer === customer.name && i.status !== 'Delivered').length;
+                                        if (col.id === 'salesInvoices') count = (invoices || []).filter(i => i.customer === customer.name && i.status !== 'Delivered').length;
                                         if (col.id === 'deliveryNotes') count = mockDeliveryNotes.filter(d => d.customer === customer.name && (d.status || 'Pending') === 'Pending').length;
 
                                         if (['receipts', 'salesQuotes', 'salesOrders', 'salesInvoices', 'deliveryNotes', 'payments'].includes(col.id) && count > 0) {

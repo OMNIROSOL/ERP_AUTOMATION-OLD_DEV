@@ -2,7 +2,8 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Plus, Eye, Edit, FileText, Check, X, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Printer, Search, ArrowUpDown, ChevronUp, ChevronDown, Copy, Calendar, Clock, Package } from 'lucide-react';
 import { cn } from '../utils/cn';
-import { mockInvoices, saveInvoices, mockCustomers, mockInventory, getCurrentUser, getRoleById, initialRoleDefinitions, getDeliveryNotes, saveDeliveryNotes, getCustomers, getInvoices } from '../mockData';
+import { mockInventory, getCurrentUser, getRoleById, initialRoleDefinitions, getDeliveryNotes, saveDeliveryNotes, saveInvoices } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 import { ScreenPermission } from '../types';
 import DataTable from '../components/shared/DataTable';
 import Button from '../components/shared/Button';
@@ -12,6 +13,10 @@ import BatchActionBar from '../components/shared/BatchActionBar';
 const InvoicesView = () => {
     const navigate = useNavigate();
     const { customerName } = useParams();
+    const invoices = useERPStore(state => state.invoices);
+    const customers = useERPStore(state => state.customers);
+    const fetchInvoices = useERPStore(state => state.fetchInvoices);
+    const fetchCustomers = useERPStore(state => state.fetchCustomers);
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -27,8 +32,13 @@ const InvoicesView = () => {
     const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
     useEffect(() => {
+        fetchInvoices();
+        fetchCustomers();
         const handleUserUpdate = () => setCurrentUser(getCurrentUser());
-        const handleInvoicesUpdate = () => setRefreshTrigger(prev => prev + 1);
+        const handleInvoicesUpdate = () => {
+            fetchInvoices();
+            setRefreshTrigger(prev => prev + 1);
+        };
 
         window.addEventListener('user_sim_updated', handleUserUpdate);
         window.addEventListener('invoices_updated', handleInvoicesUpdate);
@@ -44,7 +54,7 @@ const InvoicesView = () => {
             window.removeEventListener('invoices_updated', handleInvoicesUpdate);
             window.removeEventListener('delivery_notes_updated', handleDNUpdate);
         };
-    }, [currentUser]);
+    }, [currentUser]); // Removed fetch functions from dependencies to avoid loops
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -142,7 +152,7 @@ const InvoicesView = () => {
     const deliveryNotes = useMemo(() => getDeliveryNotes(), [refreshTrigger]);
 
     const filteredData = useMemo(() => {
-        let result = getInvoices().filter((inv: any) => inv.status !== 'Delivered');
+        let result = (invoices || []).filter((inv: any) => inv.status !== 'Delivered');
 
         // 1. Exact Customer Filter from URL Path
         if (customerName) {
@@ -151,17 +161,21 @@ const InvoicesView = () => {
 
         const query = searchQuery.toLowerCase();
         result = result.filter(inv => {
+            const customerNameStr = String(inv.customer || '').toLowerCase();
+            const referenceStr = String(inv.reference || '').toLowerCase();
+            const statusStr = String(inv.status || '').toLowerCase();
+            
             return (
-                inv.customer.toLowerCase().includes(query) ||
-                inv.reference.toLowerCase().includes(query) ||
-                inv.status.toLowerCase().includes(query) ||
-                (inv.description && inv.description.toLowerCase().includes(query)) ||
-                (inv.salesOrder && inv.salesOrder.toLowerCase().includes(query)) ||
-                (inv.tpin && inv.tpin.toLowerCase().includes(query)) ||
-                (inv.timestamp && inv.timestamp.toLowerCase().includes(query)) ||
+                customerNameStr.includes(query) ||
+                referenceStr.includes(query) ||
+                statusStr.includes(query) ||
+                (inv.description && String(inv.description).toLowerCase().includes(query)) ||
+                (inv.salesOrder && String(inv.salesOrder).toLowerCase().includes(query)) ||
+                (inv.tpin && String(inv.tpin).toLowerCase().includes(query)) ||
+                (inv.timestamp && String(inv.timestamp).toLowerCase().includes(query)) ||
                 (inv.items && inv.items.some((item: any) =>
-                    item.item.toLowerCase().includes(query) ||
-                    item.description.toLowerCase().includes(query)
+                    String(item.item || '').toLowerCase().includes(query) ||
+                    String(item.description || '').toLowerCase().includes(query)
                 ))
             );
         });
@@ -618,7 +632,7 @@ const InvoicesView = () => {
 
         const nextRef = inv.reference;
 
-        const customerInfo = getCustomers().find(c => c.name === inv.customer);
+        const customerInfo = customers.find(c => c.name === inv.customer);
         const newId = Date.now().toString();
 
         const newNote = {
@@ -646,8 +660,7 @@ const InvoicesView = () => {
         saveDeliveryNotes([newNote, ...notes]);
 
         // 2. Mark as delivered (to hide from list but keep in history)
-        const allInvoices = getInvoices();
-        const updatedInvoices = allInvoices.map(i => i.id === inv.id ? { ...i, status: 'Delivered' } : i);
+        const updatedInvoices = invoices.map(i => i.id === inv.id ? { ...i, status: 'Delivered' } : i);
         saveInvoices(updatedInvoices);
 
         // 3. Update local state & move

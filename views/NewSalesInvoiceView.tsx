@@ -12,7 +12,8 @@ import {
     saveDeliveryNotes,
     getFooters
 } from '../mockData';
-import { Invoice } from '../types';
+import { Invoice, Customer, InventoryItem } from '../types';
+import { useERPStore } from '../store/useERPStore';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -141,6 +142,19 @@ const NewSalesInvoiceView = () => {
     const dateInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
+    
+    // Store State
+    const { 
+        customers, 
+        items: inventoryItems, 
+        fetchCustomers, 
+        fetchItems 
+    } = useERPStore();
+
+    useEffect(() => {
+        fetchCustomers();
+        fetchItems();
+    }, [fetchCustomers, fetchItems]);
 
     // Form State
     const [issueDate, setIssueDate] = useState('');
@@ -153,8 +167,9 @@ const NewSalesInvoiceView = () => {
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
     const [tpin, setTpin] = useState('');
-    const [status, setStatus] = useState('Coming due');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', account: 'Inventory sales', division: 'Main', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [status, setStatus] = useState('Draft');
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', account: 'Sales', division: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
+    const addLine = () => setItems([...items, { id: Date.now(), item: 'Select Item', description: '', account: 'Sales', division: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
     const [copyFromId, setCopyFromId] = useState<string | null>(null);
 
     // UI State
@@ -206,9 +221,9 @@ const NewSalesInvoiceView = () => {
         withholdingTaxValue: '0',
         hideTotalAmount: false,
         customTitle: false,
-        customTitleValue: 'Sales Invoice',
+        customTitleValue: 'Tax Invoice',
         footers: false,
-        footerValue: 'Thank you for your business.',
+        footerValue: '',
         earlyPaymentDiscount: false,
         earlyPaymentType: 'Percentage',
         earlyPaymentValue: '0',
@@ -216,6 +231,7 @@ const NewSalesInvoiceView = () => {
         latePaymentFees: false,
         latePaymentFeePercentage: '0',
         actsAsDeliveryNote: false,
+        deliveryDate: new Date().toISOString().split('T')[0],
         inventoryLocation: 'Default Inventory Location'
     });
 
@@ -285,7 +301,8 @@ const NewSalesInvoiceView = () => {
                         qty: i.qty ? i.qty.toString() : '1',
                         unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                         discount: i.discount || '',
-                        taxCode: i.taxCode || 'VAT 16%'
+                        taxCode: i.taxCode || 'VAT 16%',
+                        unit: (i as any).unit || ''
                     })));
                 }
 
@@ -297,7 +314,7 @@ const NewSalesInvoiceView = () => {
             setIssueDate(new Date().toISOString().split('T')[0]);
             setReference(getNextReference());
             setUseManualRef(false);
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', account: 'Inventory sales', division: 'Main', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', description: '', account: 'Inventory sales', division: 'Main', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
         }
     }, [id, location.search]);
 
@@ -582,15 +599,15 @@ const NewSalesInvoiceView = () => {
                             <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
                                 const custName = e.target.value;
                                 setCustomer(custName);
-                                const selected = getCustomers().find(c => c.name === custName);
+                                const selected = customers.find(c => c.name === custName);
                                 if (selected) {
-                                    setCurrency(selected.currency.split(' - ')[0]);
+                                    setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
                                     setBillingAddress(selected.billingAddress || '');
                                     setTpin(selected.tpin || '');
                                 }
                             }} Icon={User}>
                                 <option value="">Select Target Customer...</option>
-                                {getCustomers().map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                             </SelectField>
                             <div className="md:col-span-2">
                                 <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="General description of the invoice contents..." Icon={Briefcase} />
@@ -608,7 +625,7 @@ const NewSalesInvoiceView = () => {
                                 </div>
                                 <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Line Items</h2>
                             </div>
-                            <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', account: 'Inventory sales', division: 'Main', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                            <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', account: 'Inventory sales', division: 'Main', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                 <Plus size={14} /> <span>Add Item</span>
                             </button>
                         </div>
@@ -642,14 +659,14 @@ const NewSalesInvoiceView = () => {
                                                         value={item.item}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            const invItem = (mockInventory as any)[val];
+                                                            const invItem = inventoryItems.find(i => i.itemName === val);
                                                             setItems(prev => {
                                                                 const newItems = prev.map(i => i.id === item.id ? {
                                                                     ...i,
                                                                     item: val,
-                                                                    unitPrice: invItem ? invItem.sellingPrice.toString() : i.unitPrice,
+                                                                    unitPrice: invItem ? invItem.sellingPrice?.toString() : i.unitPrice,
                                                                     description: invItem ? val : i.description,
-                                                                    unit: invItem ? invItem.unit : i.unit
+                                                                    unit: invItem ? invItem.unitName : i.unit
                                                                 } : i);
                                                                 return newItems;
                                                             });
@@ -657,8 +674,8 @@ const NewSalesInvoiceView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                     >
                                                         <option value="Select Item">Select Item</option>
-                                                        {Object.keys(mockInventory).map(name => (
-                                                            <option key={name} value={name}>{name}</option>
+                                                        {inventoryItems.map(item => (
+                                                            <option key={item.id} value={item.itemName}>{item.itemName}</option>
                                                         ))}
                                                     </select>
                                                 </td>

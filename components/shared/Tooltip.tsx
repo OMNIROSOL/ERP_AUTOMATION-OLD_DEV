@@ -5,19 +5,19 @@ interface TooltipProps {
   children: React.ReactNode;
 }
 
-export const TooltipProvider: React.FC<TooltipProps> = ({ children }) => {
-  return <div className="relative group/tooltip-provider">{children}</div>;
+export const TooltipProvider: React.FC<TooltipProps & { className?: string }> = ({ children, className }) => {
+  return <div className={cn("relative group/tooltip-provider", className)}>{children}</div>;
 };
 
 export const Tooltip: React.FC<TooltipProps> = ({ children }) => {
   return <>{children}</>;
 };
 
-export const TooltipTrigger: React.FC<{ asChild?: boolean; children: React.ReactNode }> = ({ children }) => {
-  return <div>{children}</div>;
+export const TooltipTrigger: React.FC<{ asChild?: boolean; children: React.ReactNode; className?: string }> = ({ children, className }) => {
+  return <div className={className}>{children}</div>;
 };
 
-export const TooltipContent: React.FC<{ children: React.ReactNode; side?: 'top' | 'bottom' | 'left' | 'right' }> = ({ children, side = 'top' }) => {
+export const TooltipContent: React.FC<{ children: React.ReactNode; side?: 'top' | 'bottom' | 'left' | 'right'; className?: string }> = ({ children, side = 'top', className }) => {
   const sideClasses = {
     top: 'bottom-full left-1/2 -translate-x-1/2 mb-2',
     bottom: 'top-full left-1/2 -translate-x-1/2 mt-2',
@@ -28,7 +28,8 @@ export const TooltipContent: React.FC<{ children: React.ReactNode; side?: 'top' 
   return (
     <div className={cn(
       "absolute z-50 px-2 py-1 text-[10px] font-bold text-white bg-slate-900 rounded shadow-lg whitespace-nowrap opacity-0 pointer-events-none group-hover/tooltip-provider:opacity-100 transition-opacity",
-      sideClasses[side]
+      sideClasses[side],
+      className
     )}>
       {children}
       <div className={cn(

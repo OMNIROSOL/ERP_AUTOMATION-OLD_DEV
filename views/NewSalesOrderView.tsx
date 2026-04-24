@@ -10,7 +10,8 @@ import {
     saveSalesOrders,
     getFooters
 } from '../mockData';
-import { SalesOrder, ApprovalRequest } from '../types';
+import { SalesOrder, ApprovalRequest, Customer, InventoryItem } from '../types';
+import { useERPStore } from '../store/useERPStore';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -138,6 +139,19 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
 
+    // Store State
+    const { 
+        customers, 
+        items: inventoryItems, 
+        fetchCustomers, 
+        fetchItems 
+    } = useERPStore();
+
+    useEffect(() => {
+        fetchCustomers();
+        fetchItems();
+    }, [fetchCustomers, fetchItems]);
+
     const [issueDate, setIssueDate] = useState('');
     const [customer, setCustomer] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -148,7 +162,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const [fileName, setFileName] = useState('No file chosen');
     const [marginThreshold] = useState(10);
     const [status, setStatus] = useState('Ordered');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         rounding: false,
@@ -216,7 +230,8 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                     qty: i.qty ? i.qty.toString() : '1',
                     unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                     discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax'
+                    taxCode: i.taxCode || 'No tax',
+                    unit: (i as any).unit || ''
                 })));
                 if (order.customTitle) {
                     setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: order.customTitle || 'Sales Order' }));
@@ -234,7 +249,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             setUseManualRef(false);
             setDescription('');
             setStatus('Ordered');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
         }
     }, [id, location.search]);
 
@@ -467,14 +482,14 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                     <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
                                         const custName = e.target.value;
                                         setCustomer(custName);
-                                        const selected = getCustomers().find(c => c.name === custName);
+                                        const selected = customers.find(c => c.name === custName);
                                         if (selected) {
-                                            setCurrency(selected.currency.split(' - ')[0]);
+                                            setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
                                             setBillingAddress(selected.billingAddress || '');
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Customer...</option>
-                                        {getCustomers().map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                     </SelectField>
                                 </div>
                                 <TextareaField label="Billing Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address for delivery..." rows={3} />
@@ -489,7 +504,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Order Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -521,14 +536,14 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                 value={item.item}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
-                                                                    const invItem = (mockInventory as any)[val];
+                                                                    const invItem = inventoryItems.find(i => i.itemName === val);
                                                                     setItems(prev => {
                                                                         const newItems = prev.map(i => i.id === item.id ? {
                                                                             ...i,
                                                                             item: val,
-                                                                            unitPrice: invItem ? invItem.sellingPrice.toString() : i.unitPrice,
+                                                                            unitPrice: invItem ? invItem.sellingPrice?.toString() : i.unitPrice,
                                                                             description: invItem ? val : i.description,
-                                                                            unit: invItem ? invItem.unit : i.unit
+                                                                            unit: invItem ? invItem.unitName : i.unit
                                                                         } : i);
                                                                         return newItems;
                                                                     });
@@ -536,11 +551,8 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                 className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                             >
                                                                 <option value="Select Item">Select Item</option>
-                                                                {item.item && item.item !== 'Select Item' && !Object.keys(mockInventory).includes(item.item) && (
-                                                                    <option value={item.item}>{item.item}</option>
-                                                                )}
-                                                                {Object.keys(mockInventory).map(name => (
-                                                                    <option key={name} value={name}>{name}</option>
+                                                                {inventoryItems.map(item => (
+                                                                    <option key={item.id} value={item.itemName}>{item.itemName}</option>
                                                                 ))}
                                                             </select>
                                                         </div>
