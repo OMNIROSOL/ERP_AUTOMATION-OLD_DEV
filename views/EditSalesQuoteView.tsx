@@ -11,7 +11,8 @@ import {
     saveSalesQuotes,
     getFooters
 } from '../mockData';
-import { SalesQuote, ApprovalRequest } from '../types';
+import { SalesQuote, ApprovalRequest, Customer, InventoryItem } from '../types';
+import { useERPStore } from '../store/useERPStore';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -139,6 +140,19 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
 
+    // Store State
+    const { 
+        customers, 
+        items: inventoryItems, 
+        fetchCustomers, 
+        fetchItems 
+    } = useERPStore();
+
+    useEffect(() => {
+        fetchCustomers();
+        fetchItems();
+    }, [fetchCustomers, fetchItems]);
+
 
     const customerShortName = (name: string) => name ? name.split(' - ')[0] : '';
 
@@ -160,7 +174,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
     const [fileName, setFileName] = useState('No file chosen');
     const [marginThreshold] = useState(10); // Default 10% - now a constant for this component
     const [status, setStatus] = useState('Active');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         rounding: false,
@@ -235,7 +249,8 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                     qty: i.qty.toString(),
                     unitPrice: i.unitPrice.toString(),
                     discount: i.discount || '',
-                    taxCode: i.taxCode || 'VAT 16%'
+                    taxCode: i.taxCode || 'VAT 16%',
+                    unit: (i as any).unit || ''
                 })));
                 if (quote.options) {
                     setOptions(prev => ({ ...prev, ...quote.options }));
@@ -258,7 +273,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
             setUseManualRef(false); // Default to automatic SQ-XXXX
             setDescription('');
             setStatus('Active');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
         }
     }, [id, location.search]);
 
@@ -641,16 +656,16 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                     <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
                                         const custName = e.target.value;
                                         setCustomer(custName);
-                                        const selected = getCustomers().find(c => c.name === custName);
+                                        const selected = customers.find(c => c.name === custName);
                                         if (selected) {
-                                            const currencyCode = selected.currency.split(' - ')[0];
+                                            const currencyCode = selected.currency?.split(' - ')[0] || 'ZMW';
                                             setCurrency(currencyCode);
                                             // Synchronize billing address (set to blank if not provided)
                                             setBillingAddress(selected.billingAddress || '');
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Customer...</option>
-                                        {getCustomers().map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                     </SelectField>
                                     <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="Overall scope of work..." Icon={Briefcase} />
                                 </div>
@@ -668,7 +683,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Line Items</h2>
                                 </div>
                                 <button
-                                    onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])}
+                                    onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])}
                                     className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all"
                                 >
                                     <Plus size={14} /> <span>Add New Row</span>
@@ -702,14 +717,14 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                 value={item.item}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
-                                                                    const invItem = (mockInventory as any)[val];
+                                                                    const invItem = inventoryItems.find(i => i.itemName === val);
                                                                     setItems(prev => {
                                                                         const newItems = prev.map(i => i.id === item.id ? {
                                                                             ...i,
                                                                             item: val,
-                                                                            unitPrice: invItem ? invItem.sellingPrice.toString() : i.unitPrice,
+                                                                            unitPrice: invItem ? invItem.sellingPrice?.toString() : i.unitPrice,
                                                                             description: invItem ? val : i.description,
-                                                                            unit: invItem ? invItem.unit : i.unit
+                                                                            unit: invItem ? invItem.unitName : i.unit
                                                                         } : i);
                                                                         return newItems;
                                                                     });
@@ -717,10 +732,8 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                 className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                             >
                                                                 <option value="Select Item">Select Item</option>
-                                                                <option value="Steel Rod 12mm">Steel Rod 12mm</option>
-                                                                <option value="Cement Bag (50kg)">Cement Bag (50kg)</option>
-                                                                {Object.keys(mockInventory).map(name => (
-                                                                    <option key={name} value={name}>{name}</option>
+                                                                {inventoryItems.map(item => (
+                                                                    <option key={item.id} value={item.itemName}>{item.itemName}</option>
                                                                 ))}
                                                             </select>
                                                         </div>

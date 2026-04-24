@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { getDeliveryNotes, getCustomers, getCustomerDeliveryDetails, mockInventory, mockInvoices, saveInvoices, getInvoices, getFooters } from '../mockData';
+import { Customer, InventoryItem } from '../types';
+import { useERPStore } from '../store/useERPStore';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import { 
@@ -130,6 +132,19 @@ const NewDeliveryNoteView = () => {
     const { id } = useParams();
     const location = useLocation();
     const isEditing = Boolean(id);
+
+    // Store State
+    const { 
+        customers, 
+        items: inventoryItems, 
+        fetchCustomers, 
+        fetchItems 
+    } = useERPStore();
+
+    useEffect(() => {
+        fetchCustomers();
+        fetchItems();
+    }, [fetchCustomers, fetchItems]);
     
     const [formData, setFormData] = useState({
       deliveryDate: new Date().toISOString().split('T')[0],
@@ -170,7 +185,7 @@ const NewDeliveryNoteView = () => {
         }
     }, [isEditing]);
 
-    const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '0' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
 
     // Context fetching from URL
     useEffect(() => {
@@ -182,7 +197,7 @@ const NewDeliveryNoteView = () => {
         if (invoiceId && !isEditing) {
             const invoice = mockInvoices.find(i => i.id === invoiceId || i.reference === invoiceId);
             if (invoice) {
-                const customerData = getCustomers().find(c => c.name === invoice.customer);
+                const customerData = customers.find(c => c.name === invoice.customer);
                 setFormData(prev => ({
                     ...prev,
                     customer: invoice.customer,
@@ -198,7 +213,8 @@ const NewDeliveryNoteView = () => {
                         id: Date.now() + idx,
                         item: it.item,
                         description: it.description || '',
-                        qty: (it.qty || 0).toString()
+                        qty: (it.qty || 0).toString(),
+                        unit: it.unit || ''
                     })));
                 }
                 return;
@@ -206,7 +222,6 @@ const NewDeliveryNoteView = () => {
         }
 
         if (customerId && !isEditing) {
-            const customers = getCustomers();
             const customer = customers.find(c => c.id === customerId);
             if (customer) {
                 setFormData(prev => ({ 
@@ -223,7 +238,8 @@ const NewDeliveryNoteView = () => {
                             id: Date.now() + idx,
                             item: it.item,
                             description: `Fulfillment: ${it.item}`,
-                            qty: Math.abs(it.qty).toString()
+                            qty: Math.abs(it.qty).toString(),
+                            unit: (it as any).unit || ''
                         }));
                     if (selectedItems.length > 0) {
                         setItems(selectedItems);
@@ -264,7 +280,8 @@ const NewDeliveryNoteView = () => {
                   id: it.id || Math.random(),
                   item: it.item || '',
                   description: it.description || '',
-                  qty: Math.abs(parseFloat(it.qty) || 0).toString()
+                  qty: Math.abs(parseFloat(it.qty) || 0).toString(),
+                  unit: it.unit || ''
                 })));
               }
             }
@@ -281,10 +298,10 @@ const NewDeliveryNoteView = () => {
             if (item.id === itemId) {
                 const updated = { ...item, [field]: value };
                 if (field === 'item') {
-                    const invItem = (mockInventory as any)[value];
+                    const invItem = inventoryItems.find(i => i.itemName === value);
                     if (invItem) {
                         updated.description = value;
-                        updated.unit = invItem.unit;
+                        updated.unit = invItem.unitName;
                     }
                 }
                 return updated;
@@ -313,7 +330,8 @@ const NewDeliveryNoteView = () => {
                 id: it.id,
                 item: it.item,
                 description: it.description,
-                qty: it.qty
+                qty: it.qty,
+                unit: it.unit
             })),
             status: formData.status,
             customTitle: options.customTitle ? options.customTitleValue : undefined,
@@ -340,10 +358,10 @@ const NewDeliveryNoteView = () => {
         navigate('/delivery-notes');
     };
 
-    const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0' }]);
+    const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
     const deleteLine = (itemId: number) => items.length > 1 && setItems(items.filter(item => item.id !== itemId));
 
-    const allCustomers = useMemo(() => getCustomers(), []);
+    const allCustomers = useMemo(() => customers, [customers]);
 
     const totalQty = useMemo(() => {
         return items.reduce((sum, item) => {
@@ -549,8 +567,8 @@ const NewDeliveryNoteView = () => {
                                                     className="w-full bg-transparent border-none p-0 text-sm font-bold text-indigo-600 outline-none appearance-none cursor-pointer"
                                                 >
                                                     <option value="">Select Item...</option>
-                                                    {Object.keys(mockInventory).map(name => (
-                                                        <option key={name} value={name}>{name}</option>
+                                                    {inventoryItems.map(item => (
+                                                        <option key={item.id} value={item.itemName}>{item.itemName}</option>
                                                     ))}
                                                 </select>
                                             </td>
@@ -575,9 +593,9 @@ const NewDeliveryNoteView = () => {
                                                         />
                                                         <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tight">{item.unit || 'PCS'}</span>
                                                     </div>
-                                                    {item.item && (mockInventory as any)[item.item] && (
+                                                    {item.item && inventoryItems.find(i => i.itemName === item.item) && (
                                                         <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] border-t border-slate-100 pt-1 w-full text-right">
-                                                            Available: <span className="text-emerald-500 font-black">{((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span> {item.unit || 'PCS'}
+                                                            Available: <span className="text-emerald-500 font-black">{(inventoryItems.find(i => i.itemName === item.item)?.stock || 0).toLocaleString()}</span> {item.unit || 'PCS'}
                                                         </div>
                                                     )}
                                                 </div>

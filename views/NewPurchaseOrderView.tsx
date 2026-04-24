@@ -113,11 +113,16 @@ const NewPurchaseOrderView = () => {
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
     const [status, setStatus] = useState('Ordered');
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
     const [showOptionsArea, setShowOptionsArea] = useState(false);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         columnLineNumber: true,
+        columnDiscount: false,
+        columnDiscountType: 'Percentage',
+        withholdingTax: false,
+        withholdingTaxType: 'Rate',
+        withholdingTaxValue: '0',
         customTitle: false,
         customTitleValue: 'Purchase Order',
         footers: false,
@@ -185,7 +190,8 @@ const NewPurchaseOrderView = () => {
                     qty: i.qty ? i.qty.toString() : '1',
                     unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                     discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax'
+                    taxCode: i.taxCode || 'No tax',
+                    unit: i.unit || ''
                 })));
             }
         } else {
@@ -197,7 +203,7 @@ const NewPurchaseOrderView = () => {
             setUseManualRef(false);
             setDescription('');
             setStatus('Ordered');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
             setOptions({
                 amountsAreTaxInclusive: false,
                 columnLineNumber: true,
@@ -380,7 +386,7 @@ const NewPurchaseOrderView = () => {
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Order Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -416,7 +422,8 @@ const NewPurchaseOrderView = () => {
                                                                     ...i,
                                                                     item: val,
                                                                     unitPrice: invItem ? invItem.purchasePrice.toString() : i.unitPrice,
-                                                                    description: invItem ? val : i.description
+                                                                    description: invItem ? val : i.description,
+                                                                    unit: invItem ? (invItem as any).unit : i.unit
                                                                 } : i));
                                                             }}
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"

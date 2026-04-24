@@ -246,6 +246,10 @@ export interface InventoryItem {
   autoFillTaxCode?: boolean;
   hideItemName?: boolean;
   inactive?: boolean;
+  sellingPrice?: number;
+  purchasePrice?: number;
+  stock?: number;
+  unit?: string;
 }
 
 export interface InventoryTransfer {
