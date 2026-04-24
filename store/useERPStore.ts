@@ -66,8 +66,19 @@ export const useERPStore = create<ERPState>((set, get) => ({
   fetchInvoices: async () => {
     try {
       const res = await fetch(`${API_BASE}/invoices`);
-      const data = await res.json();
-      set({ invoices: data });
+      const rawData = await res.json();
+      
+      // Transform backend data to match UI expectations (flattening customer object)
+      const mappedData = rawData.map((inv: any) => ({
+        ...inv,
+        customer: inv.customer?.name || 'Unknown Customer',
+        issueDate: inv.issueDate || new Date(inv.createdAt).toLocaleDateString('en-GB').replace(/\//g, '.'),
+        invoiceAmount: inv.grandTotal,
+        balanceDue: inv.balanceDue,
+        status: inv.status || (inv.balanceDue === 0 ? 'Paid' : 'Unpaid')
+      }));
+      
+      set({ invoices: mappedData });
     } catch (err) {
       set({ error: 'Failed to fetch invoices' });
     }

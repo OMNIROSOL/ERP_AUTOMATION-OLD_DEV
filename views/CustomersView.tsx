@@ -46,7 +46,7 @@ const CustomersView = () => {
         };
         window.addEventListener('focus', handleFocus);
         return () => window.removeEventListener('focus', handleFocus);
-    }, [fetchCustomers, fetchInvoices]);
+    }, []); // Removed fetch functions from dependencies to avoid loops
 
     useEffect(() => {
         localStorage.setItem('is_batch_view_mode', isBatchViewMode.toString());
