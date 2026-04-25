@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Building2, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, Save, ChevronUp, UserX } from 'lucide-react';
-import { getSuppliers, saveSuppliers, getInventoryLocations } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 import { Supplier } from '../types';
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error }: any) => (
@@ -59,7 +59,11 @@ const EditSupplierView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const allSuppliers = useMemo(() => getSuppliers(), []);
+    const { suppliers: allSuppliers, fetchSuppliers, updateSupplier } = useERPStore();
+
+    useEffect(() => {
+        fetchSuppliers();
+    }, []);
 
     const existingSupplier = useMemo(() => {
         return allSuppliers.find(s => s.id === id) || allSuppliers.find(s => s.code === id);
@@ -209,9 +213,6 @@ const EditSupplierView = () => {
                                         className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
                                     >
                                         <option value="General">General</option>
-                                        {getInventoryLocations().map(loc => (
-                                            <option key={loc.id} value={loc.name}>{loc.name}</option>
-                                        ))}
                                     </select>
                                     <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                 </div>
@@ -247,7 +248,7 @@ const EditSupplierView = () => {
                             Discard Changes
                         </button>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 if (email && !validateEmail(email)) {
                                     setEmailError('Invalid email format');
                                     return;
@@ -262,21 +263,24 @@ const EditSupplierView = () => {
                                     ? `${name} - ${currencyCode}` 
                                     : name;
 
-                                const updatedSupplier: Supplier = {
-                                    ...existingSupplier,
+                                const updatedSupplier = {
                                     name: finalName || 'Unnamed Supplier',
                                     division: division,
                                     email: email,
                                     billingAddress: address,
                                     currency: currency,
-                                    documentation: fileName !== 'No file chosen' ? fileName : undefined,
-                                    inactive: inactive
+                                    inactive: inactive,
+                                    status: inactive ? 'Inactive' : (existingSupplier.status || 'Active'),
                                 };
 
-                                const updatedSuppliers = allSuppliers.map(s => s.id === existingSupplier.id ? updatedSupplier : s);
-                                saveSuppliers(updatedSuppliers);
-                                alert('Supplier profile updated successfully!');
-                                navigate('/suppliers');
+                                try {
+                                    await updateSupplier(existingSupplier.id, updatedSupplier);
+                                    alert('Supplier profile updated successfully!');
+                                    navigate('/suppliers');
+                                } catch (err) {
+                                    console.error('Update failed:', err);
+                                    alert('Failed to update supplier. Please try again.');
+                                }
                             }}
                             className="bg-indigo-600 text-white px-12 py-4 rounded-2xl text-[14px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 uppercase tracking-[0.2em] flex items-center gap-2"
                         >

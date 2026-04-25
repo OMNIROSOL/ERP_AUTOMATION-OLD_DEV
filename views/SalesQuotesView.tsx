@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockSalesQuotes, mockSalesOrders, saveSalesQuotes, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import { SalesQuote, ScreenPermission } from '../types';
 import { useEffect } from 'react';
+import { useERPStore } from '../store/useERPStore';
 import Button from '../components/shared/Button';
 import Badge from '../components/shared/Badge';
 import Card from '../components/shared/Card';
@@ -29,19 +29,20 @@ const SalesQuotesView = () => {
     const [showEditColumns, setShowEditColumns] = useState(false);
     const [isBatchOpsOpen, setIsBatchOpsOpen] = useState(false);
     const batchOpsRef = React.useRef<HTMLDivElement>(null);
-    const [currentUser, setCurrentUser] = useState(getCurrentUser());
-    const [perms, setPerms] = useState<ScreenPermission | null>(null);
+    const { 
+        quotes: mockSalesQuotes, 
+        fetchQuotes,
+        fetchOrders,
+        createOrder,
+        updateQuoteStatus
+    } = useERPStore();
 
     useEffect(() => {
-        const handleUserUpdate = () => setCurrentUser(getCurrentUser());
-        window.addEventListener('user_sim_updated', handleUserUpdate);
+        fetchQuotes();
+        fetchOrders();
+    }, [fetchQuotes, fetchOrders]);
 
-        const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
-        const screenPerm = role?.permissions.find(p => p.screenId === 'sales-quotes');
-        setPerms(screenPerm || null);
-
-        return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
-    }, [currentUser]);
+    const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
     React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -109,32 +110,31 @@ const SalesQuotesView = () => {
         window.dispatchEvent(new Event('storage'));
     };
 
-    const handleStatusChange = (id: string, newStatus: SalesQuote['status']) => {
-        const index = mockSalesQuotes.findIndex(q => q.id === id);
-        if (index !== -1) {
-            const quote = mockSalesQuotes[index];
-            quote.status = newStatus;
+    const handleStatusChange = async (id: string, newStatus: SalesQuote['status']) => {
+        try {
+            await updateQuoteStatus(id, newStatus);
             if (newStatus === 'Accepted') {
-                const newOrder = {
-                    id: `so-${Date.now()}`,
-                    orderDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                    reference: quote.reference,
-                    customer: quote.customer,
-                    description: quote.description || `Converted from Quote ${quote.reference}`,
-                    currency: quote.currency,
-                    amount: quote.amount,
-                    status: 'Ordered' as any,
-                    billingAddress: quote.billingAddress || '',
-                    timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-                    items: quote.items ? [...quote.items] : []
-                };
-                mockSalesOrders.unshift(newOrder);
-                saveSalesQuotes(mockSalesQuotes);
-                navigate('/sales-orders');
-                return;
+                const quote = mockSalesQuotes.find(q => q.id === id);
+                if (quote) {
+                    const orderData = {
+                        customerId: quote.customerId,
+                        reference: quote.reference,
+                        amount: quote.amount,
+                        description: quote.description || `Converted from Quote ${quote.reference}`,
+                        items: quote.items.map((i: any) => ({
+                            itemId: i.itemId,
+                            qty: i.qty,
+                            unitPrice: i.unitPrice,
+                            totalAmount: i.totalAmount
+                        }))
+                    };
+                    await createOrder(orderData);
+                    navigate('/sales-orders');
+                }
             }
-            saveSalesQuotes(mockSalesQuotes);
             setRefreshTrigger(prev => prev + 1);
+        } catch (err) {
+            alert('Failed to update status: ' + (err as Error).message);
         }
     };
 
@@ -425,7 +425,7 @@ const SalesQuotesView = () => {
                 return (
                     <div className="flex items-center gap-4">
                         <Badge variant={
-                            isExpired ? 'danger' :
+                            isExpired ? 'error' :
                             displayStatus === 'Active' || displayStatus === 'Accepted' ? 'success' : 
                             displayStatus === 'Pending Approval' ? 'warning' : 
                             displayStatus === 'Rejected' ? 'error' : 

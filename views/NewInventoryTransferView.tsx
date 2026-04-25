@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, ArrowRightLeft, Plus, Trash2, ArrowLeft } from 'lucide-react';
-import { mockInventoryTransfers, mockInventoryItems, getInventoryLocations } from '../mockData';
+import { mockInventoryTransfers } from '../mockData';
 import { InventoryTransfer } from '../types';
+import { useERPStore } from '../store/useERPStore';
+import { useEffect } from 'react';
 
 const NewInventoryTransferView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
   const existingTransfer = isEdit ? mockInventoryTransfers.find(t => t.id === id) : null;
+  const { inventoryLocations, fetchInventoryLocations, items, fetchItems, createInventoryTransfer } = useERPStore();
+
+  useEffect(() => {
+    fetchInventoryLocations();
+    fetchItems();
+  }, []);
 
   const [formData, setFormData] = useState<Partial<InventoryTransfer>>(existingTransfer || {
     date: new Date().toISOString().split('T')[0],
@@ -45,10 +53,30 @@ const NewInventoryTransferView = () => {
     setFormData(prev => ({ ...prev, items: newItems }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Post/Saving inventory transfer:', formData);
-    navigate('/inventory-transfers');
+    try {
+      const payload = {
+        ...formData,
+        items: formData.items?.map(item => {
+          const itemObj = items.find(i => `${i.itemCode} - ${i.itemName}` === item.inventoryItem);
+          return {
+            itemId: itemObj?.id || '',
+            qty: item.qty
+          };
+        }).filter(i => i.itemId !== '')
+      };
+      
+      if (!payload.fromLocation || !payload.toLocation) {
+        alert('Please select both source and destination locations.');
+        return;
+      }
+
+      await createInventoryTransfer(payload);
+      navigate('/inventory-transfers');
+    } catch (err) {
+      alert('Failed to save transfer: ' + (err as Error).message);
+    }
   };
 
   return (
@@ -157,7 +185,7 @@ const NewInventoryTransferView = () => {
                 required
               >
                 <option value="">Select Source...</option>
-                {getInventoryLocations().map(loc => (
+                {inventoryLocations.map(loc => (
                   <option key={loc.id} value={loc.name}>{loc.name}</option>
                 ))}
               </select>
@@ -172,7 +200,7 @@ const NewInventoryTransferView = () => {
                 required
               >
                 <option value="">Select Destination...</option>
-                {getInventoryLocations().map(loc => (
+                {inventoryLocations.map(loc => (
                   <option key={loc.id} value={loc.name}>{loc.name}</option>
                 ))}
               </select>
@@ -225,9 +253,9 @@ const NewInventoryTransferView = () => {
                     required
                   >
                     <option value="">Select Item...</option>
-                    {mockInventoryItems.map(mi => (
+                    {items.map(mi => (
                       <option key={mi.id} value={`${mi.itemCode} - ${mi.itemName}`}>
-                        {mi.itemCode} - {mi.itemName} ({mi.qtyOnHand} available)
+                        {mi.itemCode} - {mi.itemName} ({mi.qtyOnHand || 0} available)
                       </option>
                     ))}
                   </select>

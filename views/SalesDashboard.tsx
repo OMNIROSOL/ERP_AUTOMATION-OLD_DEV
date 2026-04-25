@@ -1,13 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  mockSalesQuotes, 
-  mockSalesOrders, 
-  mockInvoices, 
-  mockInventory,
-  mockDeliveryNotes
-} from '../mockData';
+import { mockInventory } from '../mockData';
 import { SalesQuote, SalesOrder, Invoice, Transaction } from '../types';
+import { useERPStore } from '../store/useERPStore';
 
 import { 
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, 
@@ -61,6 +56,18 @@ const SalesDashboard: React.FC = () => {
   const [filterType, setFilterType] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
   const [selectedDate, setSelectedDate] = useState('2026-03'); 
   const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
+
+  const { 
+    invoices, orders, quotes, deliveryNotes, 
+    fetchInvoices, fetchOrders, fetchQuotes, fetchDeliveryNotes 
+  } = useERPStore();
+
+  useEffect(() => {
+    fetchInvoices();
+    fetchOrders();
+    fetchQuotes();
+    fetchDeliveryNotes();
+  }, []);
 
   // Sync date format
   useEffect(() => {
@@ -138,20 +145,20 @@ const SalesDashboard: React.FC = () => {
 
   // Filtered Datasets
   const filteredInvoices = useMemo(() => {
-    return mockInvoices.filter(inv => isDateInFilter(inv.issueDate));
-  }, [filterType, selectedDate, today]);
+    return invoices.filter((inv: any) => isDateInFilter(inv.issueDate));
+  }, [filterType, selectedDate, today, invoices]);
 
   const filteredOrders = useMemo(() => {
-    return mockSalesOrders.filter(o => isDateInFilter(o.orderDate));
-  }, [filterType, selectedDate, today]);
+    return orders.filter((o: any) => isDateInFilter(o.orderDate));
+  }, [filterType, selectedDate, today, orders]);
 
   const filteredQuotes = useMemo(() => {
-    return mockSalesQuotes.filter(q => isDateInFilter(q.issueDate || q.timestamp?.split(' ')[0] || ''));
-  }, [filterType, selectedDate, today]);
+    return quotes.filter((q: any) => isDateInFilter(q.issueDate || q.timestamp?.split(' ')[0] || ''));
+  }, [filterType, selectedDate, today, quotes]);
 
   const filteredDeliveries = useMemo(() => {
-    return mockDeliveryNotes.filter(d => isDateInFilter(d.deliveryDate || d.timestamp?.split(' ')[0] || ''));
-  }, [filterType, selectedDate, today]);
+    return deliveryNotes.filter((d: any) => isDateInFilter(d.deliveryDate || d.timestamp?.split(' ')[0] || ''));
+  }, [filterType, selectedDate, today, deliveryNotes]);
 
   // --- ANALYTICS LOGIC ---
   const lowStock = useMemo(() => 
@@ -160,10 +167,10 @@ const SalesDashboard: React.FC = () => {
       .map(([name, data]) => ({ name, stock: data.stock })), []);
 
   const overduePayments = useMemo(() => 
-    mockInvoices.filter(inv => {
+    invoices.filter((inv: any) => {
       const dueDate = parseDate(inv.dueDate || '');
       return inv.balanceDue > 0 && dueDate < today;
-    }), [today]);
+    }), [today, invoices]);
 
   const productIntelligence = useMemo(() => {
     const products: Record<string, { revenue: number, sales: number }> = {};
@@ -172,7 +179,7 @@ const SalesDashboard: React.FC = () => {
         const name = item.item;
         if (!products[name]) products[name] = { revenue: 0, sales: 0 };
         const qty = parseFloat(item.qty) || 0;
-        const price = parseFloat(item.unitPrice) || 0;
+        const price = parseFloat(item.unitPrice || item.price) || 0;
         products[name].revenue += qty * price;
         products[name].sales += qty;
       });
@@ -185,25 +192,23 @@ const SalesDashboard: React.FC = () => {
   }, [filteredInvoices]);
 
   const metrics = useMemo(() => {
-    const dailyTotal = mockInvoices
-        .filter(inv => inv.issueDate === todayStr)
-        .reduce((s, i) => s + (i.invoiceAmount || 0), 0);
-    const totalRev = filteredInvoices.reduce((s, i) => s + (i.invoiceAmount || 0), 0);
+    const totalSalesPeriod = filteredOrders.reduce((s: number, o: any) => s + (parseFloat(o.amount) || 0), 0);
+    const totalRev = filteredInvoices.reduce((s: number, i: any) => s + (parseFloat(i.invoiceAmount) || 0), 0);
     return {
-      totalSalesToday: dailyTotal || 3209, // Fallback to reference if mock date matches
+      totalSalesPeriod: totalSalesPeriod, 
       totalRevenue: totalRev,
-      pendingQuotes: mockSalesQuotes.filter(q => q.status === 'Active').length,
-      confirmedOrders: mockSalesOrders.filter(o => o.status === 'Processed').length,
+      pendingQuotes: quotes.filter((q: any) => q.status === 'Active').length,
+      confirmedOrders: orders.filter((o: any) => o.status === 'Processed').length,
       totalQuotation: filteredQuotes.length,
       totalOrder: filteredOrders.length,
       totalInvoice: filteredInvoices.length,
       totalDelivery: filteredDeliveries.length
     };
-  }, [filteredInvoices, filteredOrders, filteredQuotes, filteredDeliveries]);
+  }, [filteredInvoices, filteredOrders, filteredQuotes, filteredDeliveries, quotes, orders]);
 
   const kpis = [
-      { label: 'TOTAL SALES', val: `$${metrics.totalSalesToday.toLocaleString()}`, dot: 'bg-blue-600', badge: '+12%', badgeColor: 'text-green-600 bg-green-50' },
-      { label: 'TOTAL REVENUE', val: `$${metrics.totalRevenue.toLocaleString()}`, dot: 'bg-green-600', badge: '+8%', badgeColor: 'text-green-600 bg-green-50' },
+      { label: 'TOTAL SALES', val: `$${metrics.totalSalesPeriod.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, dot: 'bg-blue-600', badge: 'Orders', badgeColor: 'text-blue-600 bg-blue-50' },
+      { label: 'TOTAL REVENUE', val: `$${metrics.totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, dot: 'bg-green-600', badge: 'Invoices', badgeColor: 'text-green-600 bg-green-50' },
       { label: 'PENDING QUOTES', val: metrics.pendingQuotes, dot: 'bg-orange-600', badge: '-2', badgeColor: 'text-slate-600 bg-slate-50' },
       { label: 'CONFIRMED ORDERS', val: metrics.confirmedOrders, dot: 'bg-purple-600', badge: '+5', badgeColor: 'text-emerald-600 bg-emerald-50' },
       { label: 'TOTAL QUOTATION', val: metrics.totalQuotation, dot: 'bg-teal-600', badge: 'Total', badgeColor: 'text-slate-500 bg-slate-50' },
@@ -465,7 +470,7 @@ const SalesDashboard: React.FC = () => {
               <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
                   <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] mb-8">Pending approvals</h3>
                   <div className="space-y-4 text-center">
-                    {mockSalesQuotes.filter(q => q.status === 'Active').slice(0, 5).map((q, i) => (
+                    {quotes.filter((q: any) => q.status === 'Active').slice(0, 5).map((q: any, i: number) => (
                         <div key={i} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-left hover:shadow-md transition-all">
                             <div className="flex justify-between items-center mb-2">
                                 <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">REF: {q.reference}</p>

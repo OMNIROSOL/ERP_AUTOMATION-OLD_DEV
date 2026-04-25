@@ -48,6 +48,24 @@ const SettingsView = () => {
           color: 'text-rose-600',
           bgColor: 'bg-rose-50'
         },
+        { 
+          id: 'item-categories', 
+          label: 'Inventory Item Categories', 
+          description: 'Manage categories for grouping inventory items',
+          icon: Database, 
+          path: '/settings/item-categories',
+          color: 'text-indigo-600',
+          bgColor: 'bg-indigo-50'
+        },
+        { 
+          id: 'item-units', 
+          label: 'Inventory Item Units', 
+          description: 'Manage units of measure for inventory items',
+          icon: Package, 
+          path: '/settings/item-units',
+          color: 'text-sky-600',
+          bgColor: 'bg-sky-50'
+        },
         ...(isAdmin ? [{ 
           id: 'inventory-unit-costs', 
           label: 'Inventory Unit Costs', 

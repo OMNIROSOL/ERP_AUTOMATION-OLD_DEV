@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Eye, Edit, ChevronRight, LayoutGrid, Printer, FileText, Mail, Copy, ChevronLeft, ChevronsLeft, ChevronsRight, FolderOpen, Building2, ChevronDown } from 'lucide-react';
-import { getSuppliers } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 
 const ViewSupplierView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const allSuppliers = useMemo(() => getSuppliers(), []);
+    const { suppliers: allSuppliers, fetchSuppliers } = useERPStore();
+
+    useEffect(() => {
+        fetchSuppliers();
+    }, []);
 
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);

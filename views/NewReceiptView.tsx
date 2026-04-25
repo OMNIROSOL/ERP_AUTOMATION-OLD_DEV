@@ -11,6 +11,8 @@ import { mockReceipts, mockInventory, mockAccounts } from '../mockData';
 import { cn } from '../utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { useERPStore } from '../store/useERPStore';
+
 const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, readOnly }: any) => (
     <div className="space-y-2">
         <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
@@ -76,8 +78,24 @@ const NewReceiptView = () => {
     const location = useLocation();
     const dateInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { 
+        customers, 
+        accounts,
+        items: inventoryItems,
+        fetchCustomers, 
+        fetchAccounts,
+        fetchItems,
+        createReceipt,
+        getNextReference: getNextRefFromStore
+    } = useERPStore();
 
-    const [date, setDate] = useState('2026-02-27');
+    useEffect(() => {
+        fetchCustomers();
+        fetchAccounts();
+        fetchItems();
+    }, [fetchCustomers, fetchAccounts, fetchItems]);
+
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [customTitleText, setCustomTitleText] = useState('');
     const [fixedTotalValue, setFixedTotalValue] = useState('');
     const [footerText, setFooterText] = useState('');
@@ -110,28 +128,25 @@ const NewReceiptView = () => {
     const [withholdingTaxRate, setWithholdingTaxRate] = useState('10');
     const [withholdingTaxMethod, setWithholdingTaxMethod] = useState('Rate');
 
-    const getNextReference = () => {
-        const refs = mockReceipts
-            .map(r => r.reference)
-            .filter(ref => ref && ref.startsWith('REC-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1000;
-        return `REC-${nextNum.toString().padStart(4, '0')}`;
-    };
-
     useEffect(() => {
-        if (!id && !reference) {
-            setReference(getNextReference());
-        }
+        const initRef = async () => {
+            if (!id && !reference) {
+                const nextRef = await getNextRefFromStore('receipt');
+                setReference(nextRef);
+            }
+        };
+        initRef();
     }, [id]);
 
     const updateItem = (itemId: number, field: string, value: string) => {
         setItems(items.map(item => {
             if (item.id === itemId) {
                 const newItem = { ...item, [field]: value };
-                if (field === 'item' && value && (mockInventory as any)[value]) {
-                    newItem.amount = (mockInventory as any)[value].sellingPrice.toString();
+                if (field === 'item' && value) {
+                    const invItem = inventoryItems.find(i => i.itemName === value);
+                    if (invItem) {
+                        newItem.amount = invItem.sellingPrice?.toString() || '0';
+                    }
                 }
                 const q = parseFloat(newItem.qty) || 0;
                 const a = parseFloat(newItem.amount) || 0;
@@ -167,82 +182,43 @@ const NewReceiptView = () => {
         }
     }, [location.search]);
 
-    useEffect(() => {
-        if (id) {
-            const receipt = mockReceipts.find(r => r.id === id);
-            if (receipt) {
-                setDate(receipt.date.split('.').reverse().join('-'));
-                setReference(receipt.reference);
-                setUseManualRef(true);
-                setPaidByContact(receipt.paidByContact || 'Customer');
-                setPaidByOptional(receipt.paidByOptional || '');
-                setReceivedInAccount(receipt.receivedInAccount);
-                setDescription(receipt.description);
-                setCustomTitleText(receipt.customTitle || '');
-                if (receipt.items) {
-                    setItems(receipt.items.map(it => ({
-                        id: it.id || Date.now() + Math.random(),
-                        item: it.item || '',
-                        account: it.account || 'Suspense',
-                        description: it.description || '',
-                        qty: it.qty || '1',
-                        discount: it.discount || '',
-                        amount: it.unitPrice || '',
-                        total: it.total || (parseFloat(it.unitPrice || '0') * parseFloat(it.qty || '0')).toString()
-                    })));
-                } else {
-                    setItems([{ id: Date.now(), item: '', account: 'Suspense', description: '', qty: '1', discount: '', amount: receipt.amount.toString(), total: receipt.amount.toString() }]);
-                }
-                if (receipt.customTitle) setOptions(prev => ({ ...prev, customTitle: true }));
-                if (receipt.footers) {
-                    setOptions(prev => ({ ...prev, footers: true }));
-                    setFooterText(receipt.footers);
-                }
-            }
-        }
-    }, [id]);
-
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         setFileName(file ? file.name : 'No file chosen');
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+        
         const receiptData = {
-            id: id || `REC-${Date.now()}`,
-            date: date.split('-').reverse().join('.'),
-            reference: reference || getNextReference(),
-            paidBy,
+            date: date,
+            reference: reference,
             paidByContact,
             paidByOptional,
-            receivedIn,
-            receivedInAccount: receivedInAccount || 'Suspense',
+            receivedInAccount: receivedInAccount,
             description,
             amount: totalAmount || (parseFloat(fixedTotalValue) || 0),
-            currency: 'ZMW',
-            items: items.map(it => ({
-                id: it.id,
-                item: it.item,
-                description: it.description,
-                qty: it.qty,
-                unitPrice: it.amount,
-                total: it.total,
-                account: it.account
-            })),
-            status: 'Completed',
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            customTitle: customTitleText,
-            footers: footerText
+            items: items.map(it => {
+                const invItem = inventoryItems.find(inv => inv.itemName === it.item);
+                return {
+                    itemId: invItem?.id,
+                    description: it.description,
+                    qty: parseFloat(it.qty) || 1,
+                    unitPrice: parseFloat(it.amount) || 0,
+                    total: parseFloat(it.total) || 0,
+                    account: it.account
+                };
+            }),
+            customTitle: options.customTitle ? customTitleText : undefined,
+            footer: options.footers ? footerText : undefined
         };
 
-        if (id) {
-            const index = mockReceipts.findIndex(r => r.id === id);
-            if (index !== -1) mockReceipts[index] = receiptData as any;
-        } else {
-            mockReceipts.unshift(receiptData as any);
+        try {
+            await createReceipt(receiptData);
+            navigate('/receipts');
+        } catch (err) {
+            alert('Failed to save receipt: ' + (err as Error).message);
         }
-        navigate('/receipts');
     };
 
     const calculations = useMemo(() => {
@@ -356,7 +332,7 @@ const NewReceiptView = () => {
                                             className="w-full h-full bg-transparent pl-4 pr-8 py-3 text-[13px] font-semibold text-slate-700 outline-none appearance-none cursor-pointer"
                                         >
                                             <option value="">Select Account...</option>
-                                            {mockAccounts.filter(a => a.isPaymentAccount).map(acc => (
+                                            {accounts.filter(a => a.isPaymentAccount).map(acc => (
                                                 <option key={acc.name} value={acc.name}>{acc.name}</option>
                                             ))}
                                         </select>
@@ -408,8 +384,8 @@ const NewReceiptView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-indigo-600 outline-none appearance-none cursor-pointer"
                                                     >
                                                         <option value="">Select Item...</option>
-                                                        {Object.keys(mockInventory).map(invName => (
-                                                            <option key={invName} value={invName}>{invName}</option>
+                                                        {inventoryItems.map(inv => (
+                                                            <option key={inv.itemName} value={inv.itemName}>{inv.itemName}</option>
                                                         ))}
                                                     </select>
                                                 </div>
@@ -422,7 +398,7 @@ const NewReceiptView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                     >
                                                         <option value="Suspense">Suspense</option>
-                                                        {mockAccounts.map(acc => (
+                                                        {accounts.map(acc => (
                                                             <option key={acc.name} value={acc.name}>{acc.name}</option>
                                                         ))}
                                                     </select>

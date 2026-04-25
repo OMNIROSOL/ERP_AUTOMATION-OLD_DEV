@@ -1,31 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit2, Calendar, Package, DollarSign, ArrowLeft, Settings } from 'lucide-react';
-import { getInventoryUnitCosts } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 import { InventoryUnitCost } from '../types';
 
 const InventoryUnitCostsView = () => {
   const navigate = useNavigate();
-  const [unitCosts, setUnitCosts] = useState<InventoryUnitCost[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-
-  const loadData = () => {
-    setUnitCosts(getInventoryUnitCosts());
-  };
+  const { inventoryUnitCosts, fetchInventoryUnitCosts } = useERPStore();
 
   useEffect(() => {
-    loadData();
-    window.addEventListener('inventory_unit_costs_updated', loadData);
-    return () => window.removeEventListener('inventory_unit_costs_updated', loadData);
+    fetchInventoryUnitCosts();
   }, []);
 
-  const filteredCosts = unitCosts.filter(cost => 
+  const filteredCosts = inventoryUnitCosts.filter((cost: any) => 
     (cost.itemName || '').toLowerCase().includes(searchTerm.toLowerCase())
   ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const formatDate = (dateStr: string) => {
-    const [year, month, day] = dateStr.split('-');
-    return `${day}.${month}.${year}`;
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toISOString().split('T')[0].split('-').reverse().join('.');
   };
 
   return (

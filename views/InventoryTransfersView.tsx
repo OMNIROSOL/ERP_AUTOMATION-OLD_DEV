@@ -5,15 +5,21 @@ import {
   ChevronDown, ChevronUp, Printer, Calendar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { mockInventoryTransfers } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 import { InventoryTransfer } from '../types';
+import { useEffect } from 'react';
 
 const InventoryTransfersView = () => {
   const navigate = useNavigate();
+  const { inventoryTransfers, fetchInventoryTransfers } = useERPStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof InventoryTransfer | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
+
+  useEffect(() => {
+    fetchInventoryTransfers();
+  }, []);
 
   const columns = [
     { id: 'date', label: 'Date', visible: true },
@@ -32,7 +38,7 @@ const InventoryTransfersView = () => {
 
   const filteredTransfers = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    let result = mockInventoryTransfers.filter(tr => {
+    let result = (inventoryTransfers || []).filter(tr => {
       const searchStr = `${tr.reference} ${tr.fromLocation} ${tr.toLocation} ${tr.description}`.toLowerCase();
       return searchStr.includes(query);
     });

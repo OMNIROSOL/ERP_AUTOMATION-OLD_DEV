@@ -5,11 +5,18 @@ import {
   ChevronDown, ChevronUp, Printer, Calendar, FileX
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { mockInventoryWriteOffs } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
+import { useEffect } from 'react';
 import { InventoryWriteOff } from '../types';
 
 const InventoryWriteOffsView = () => {
   const navigate = useNavigate();
+  const { inventoryWriteOffs, fetchInventoryWriteOffs } = useERPStore();
+
+  useEffect(() => {
+    fetchInventoryWriteOffs();
+  }, []);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,7 +40,7 @@ const InventoryWriteOffsView = () => {
 
   const filteredWriteOffs = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    let result = mockInventoryWriteOffs.filter(wo => {
+    let result = inventoryWriteOffs.filter((wo: any) => {
       const searchStr = `${wo.reference} ${wo.inventoryItem} ${wo.description} ${wo.account}`.toLowerCase();
       return searchStr.includes(query);
     });
@@ -55,7 +62,7 @@ const InventoryWriteOffsView = () => {
       });
     }
     return result;
-  }, [searchQuery, sortConfig]);
+  }, [searchQuery, sortConfig, inventoryWriteOffs]);
 
   const totalPages = Math.ceil(filteredWriteOffs.length / pageSize) || 1;
   const currentSlice = filteredWriteOffs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -147,7 +154,9 @@ const InventoryWriteOffsView = () => {
                     </button>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-[12px] font-semibold text-gray-900">{wo.date}</td>
+                <td className="px-6 py-4 text-[12px] font-semibold text-gray-900">
+                  {wo.date ? new Date(wo.date).toISOString().split('T')[0] : ''}
+                </td>
                 <td className="px-6 py-4 text-[12px] font-bold text-rose-600">{wo.reference}</td>
                 <td className="px-6 py-4 text-[12px] font-bold text-gray-700">{wo.inventoryItem}</td>
                 <td className="px-6 py-4 text-[12px] font-black text-gray-900">{wo.qty}</td>

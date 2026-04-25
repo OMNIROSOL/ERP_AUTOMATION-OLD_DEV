@@ -6,35 +6,28 @@ import {
   Edit, 
   ChevronRight, 
   HelpCircle,
-  MoreVertical,
   Clipboard,
   Package,
   ArrowRight,
   Settings,
-  ChevronLeft
 } from 'lucide-react';
-import { getInventoryLocations, saveInventoryLocations } from '../mockData';
-import { InventoryLocation } from '../types';
+import { useERPStore } from '../store/useERPStore';
 
 const InventoryLocationsView = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [locations, setLocations] = useState<InventoryLocation[]>(getInventoryLocations());
+  const { inventoryLocations, fetchInventoryLocations } = useERPStore();
 
   useEffect(() => {
-    const handleUpdate = () => {
-      setLocations(getInventoryLocations());
-    };
-    window.addEventListener('inventory_locations_updated', handleUpdate);
-    return () => window.removeEventListener('inventory_locations_updated', handleUpdate);
+    fetchInventoryLocations();
   }, []);
 
   const filteredLocations = useMemo(() => {
-    return locations.filter(loc => 
+    return inventoryLocations.filter((loc: any) => 
       loc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (loc.description || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [locations, searchQuery]);
+  }, [inventoryLocations, searchQuery]);
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500">
@@ -75,9 +68,6 @@ const InventoryLocationsView = () => {
             <HelpCircle size={14} className="opacity-50" />
           </div>
           <div className="flex items-center gap-3">
-            <button className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-indigo-600 transition-all flex items-center gap-1">
-              Advanced Queries
-            </button>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
               <input
@@ -88,9 +78,6 @@ const InventoryLocationsView = () => {
                 className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all w-64"
               />
             </div>
-            <button className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all">
-              Search
-            </button>
           </div>
         </div>
 
@@ -105,29 +92,39 @@ const InventoryLocationsView = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredLocations.map((loc) => (
-                <tr key={loc.id} className="group hover:bg-indigo-50/30 transition-all">
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => navigate(`/settings/inventory-locations/edit/${loc.id}`)}
-                      className="px-3 py-1.5 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 hover:bg-white hover:border-indigo-400 hover:text-indigo-600 transition-all shadow-sm"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{loc.name}</div>
-                    {loc.description && <div className="text-xs text-gray-400 font-medium">{loc.description}</div>}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                      loc.inactive ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-600'
-                    }`}>
-                      {loc.inactive ? 'Inactive' : 'Active'}
-                    </span>
+              {filteredLocations.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-6 py-16 text-center">
+                    <Package size={40} className="mx-auto text-slate-200 mb-4" />
+                    <p className="text-sm font-bold text-slate-400">No locations defined yet</p>
+                    <p className="text-xs text-slate-300 mt-1">Click "New Custom Inventory Location" to create one</p>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                filteredLocations.map((loc: any) => (
+                  <tr key={loc.id} className="group hover:bg-indigo-50/30 transition-all">
+                    <td className="px-6 py-4">
+                      <button
+                        onClick={() => navigate(`/settings/inventory-locations/edit/${loc.id}`)}
+                        className="px-3 py-1.5 border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 hover:bg-white hover:border-indigo-400 hover:text-indigo-600 transition-all shadow-sm"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">{loc.name}</div>
+                      {loc.description && <div className="text-xs text-gray-400 font-medium">{loc.description}</div>}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                        loc.inactive ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-600'
+                      }`}>
+                        {loc.inactive ? 'Inactive' : 'Active'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -138,15 +135,6 @@ const InventoryLocationsView = () => {
             {filteredLocations.length}
           </div>
           <div className="flex items-center gap-2">
-            <button className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm">
-              Form Defaults
-            </button>
-            <button className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm">
-              Edit columns
-            </button>
-            <button className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2">
-              <ArrowRight size={12} className="rotate-[-45deg]" /> Batch Operations
-            </button>
             <button className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-[10px] font-black text-gray-500 uppercase tracking-widest hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2">
               <Clipboard size={12} /> Copy to clipboard
             </button>

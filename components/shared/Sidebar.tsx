@@ -180,6 +180,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, setIsCollapsed }) => {
       ]
     },
     {
+      label: 'Procurement',
+      icon: ShoppingCart,
+      path: '/procurement-planning',
+      id: 'procurement',
+      submenu: [
+        { label: 'Planning Sheet', path: '/procurement-planning', id: 'procurement-planning' },
+        { label: 'What to Order', path: '/procurement-planning', id: 'procurement-planning' },
+      ]
+    },
+    {
       label: 'Inventory',
       icon: Package,
       path: '/inventory-items',

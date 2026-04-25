@@ -1,15 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, ArrowLeft, Package, Calendar, DollarSign, ShieldAlert, Database } from 'lucide-react';
-import { getInventoryUnitCosts, saveInventoryUnitCosts, mockInventoryItems } from '../mockData';
 import { InventoryUnitCost } from '../types';
+import { useERPStore } from '../store/useERPStore';
+import { useEffect } from 'react';
 
 const NewInventoryUnitCostView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const unitCosts = getInventoryUnitCosts();
-  const existingCost = isEdit ? unitCosts.find(c => c.id === id) : null;
+  const { 
+    items, fetchItems, 
+    inventoryLocations, fetchInventoryLocations,
+    inventoryUnitCosts, fetchInventoryUnitCosts,
+    createInventoryUnitCost, updateInventoryUnitCost
+  } = useERPStore();
+
+  useEffect(() => {
+    fetchItems();
+    fetchInventoryLocations();
+    fetchInventoryUnitCosts();
+  }, []);
+
+  const existingCost = isEdit ? inventoryUnitCosts.find((c: any) => c.id === id) : null;
 
   const [formData, setFormData] = useState<Partial<InventoryUnitCost>>(existingCost || {
     date: new Date().toISOString().split('T')[0],
@@ -28,7 +41,7 @@ const NewInventoryUnitCostView = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.itemId || !formData.date || formData.unitCost === undefined || !formData.division) {
@@ -36,24 +49,16 @@ const NewInventoryUnitCostView = () => {
       return;
     }
 
-    let updatedCosts;
-    if (isEdit) {
-      updatedCosts = unitCosts.map(c => c.id === id ? { ...c, ...formData } as InventoryUnitCost : c);
-    } else {
-      const newCost: InventoryUnitCost = {
-        id: Date.now().toString(),
-        date: formData.date!,
-        itemId: formData.itemId!,
-        itemName: formData.itemName!,
-        unitCost: formData.unitCost!,
-        minSellingPrice: formData.minSellingPrice || 0,
-        division: formData.division!
-      };
-      updatedCosts = [newCost, ...unitCosts];
+    try {
+      if (isEdit && id) {
+        await updateInventoryUnitCost(id, formData);
+      } else {
+        await createInventoryUnitCost(formData);
+      }
+      navigate('/settings/inventory-unit-costs');
+    } catch (err) {
+      alert('Failed to save unit cost');
     }
-
-    saveInventoryUnitCosts(updatedCosts);
-    navigate('/settings/inventory-unit-costs');
   };
 
   return (
@@ -104,7 +109,7 @@ const NewInventoryUnitCostView = () => {
                 name="itemId"
                 value={formData.itemId}
                 onChange={(e) => {
-                  const item = mockInventoryItems.find(i => i.id === e.target.value);
+                  const item = items.find((i: any) => i.id === e.target.value);
                   setFormData(prev => ({ 
                     ...prev, 
                     itemId: e.target.value,
@@ -115,7 +120,7 @@ const NewInventoryUnitCostView = () => {
                 required
               >
                 <option value="">Select Item...</option>
-                {mockInventoryItems.map(item => (
+                {items.map((item: any) => (
                   <option key={item.id} value={item.id}>
                     {item.itemCode} - {item.itemName}
                   </option>
@@ -183,10 +188,11 @@ const NewInventoryUnitCostView = () => {
                   required
                 >
                   <option value="">Select Division...</option>
-                  <option value="WAREHOUSE">WAREHOUSE</option>
-                  <option value="KITWE">KITWE</option>
-                  <option value="NDOLA">NDOLA</option>
-                  <option value="LUSAKA">LUSAKA</option>
+                  {inventoryLocations.map((loc: any) => (
+                    <option key={loc.id} value={loc.name}>
+                      {loc.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

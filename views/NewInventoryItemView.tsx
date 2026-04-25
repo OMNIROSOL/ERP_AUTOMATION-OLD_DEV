@@ -1,14 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, Package, Trash2, ArrowLeft, HelpCircle } from 'lucide-react';
-import { mockInventoryItems, getInventoryLocations } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 import { InventoryItem } from '../types';
 
 const NewInventoryItemView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const existingItem = isEdit ? mockInventoryItems.find(i => i.id === id) : null;
+  const { 
+    items, fetchItems, createItem, updateItem, 
+    itemUnits, fetchItemUnits,
+    itemCategories, fetchItemCategories
+  } = useERPStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    fetchItems();
+    fetchItemUnits();
+    fetchItemCategories();
+  }, []);
+
+  const existingItem = isEdit ? items.find((i: any) => i.id === id) : null;
 
   const [formData, setFormData] = useState<Partial<InventoryItem>>(existingItem || {
     itemCode: '',
@@ -34,16 +47,37 @@ const NewInventoryItemView = () => {
     hideItemName: false
   });
 
+  // Populate form when existing item loads
+  useEffect(() => {
+    if (existingItem && isEdit) {
+      setFormData(existingItem);
+    }
+  }, [existingItem, isEdit]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
     setFormData(prev => ({ ...prev, [name]: val }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Saving inventory item:', formData);
-    navigate('/inventory-items');
+    setIsSubmitting(true);
+    try {
+      if (isEdit && existingItem) {
+        await updateItem(existingItem.id, formData);
+        alert('Inventory item updated successfully!');
+      } else {
+        await createItem(formData);
+        alert('Inventory item created successfully!');
+      }
+      navigate('/inventory-items');
+    } catch (err) {
+      console.error('Save item failed:', err);
+      alert('Failed to save inventory item. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -142,14 +176,26 @@ const NewInventoryItemView = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Unit Name</label>
-              <input
-                type="text"
+              <select
                 name="unitName"
                 value={formData.unitName}
                 onChange={handleChange}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
                 required
-              />
+              >
+                <option value="">Select Unit</option>
+                {itemUnits.map((unit: any) => (
+                  <option key={unit.id} value={unit.name}>{unit.name} ({unit.code})</option>
+                ))}
+                {/* Fallback if no units exist yet */}
+                {itemUnits.length === 0 && (
+                  <>
+                    <option value="Each">Each</option>
+                    <option value="Set">Set</option>
+                    <option value="Pcs">Pcs</option>
+                  </>
+                )}
+              </select>
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Valuation Method</label>
@@ -180,14 +226,17 @@ const NewInventoryItemView = () => {
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Category</label>
-              <input
-                type="text"
+              <select
                 name="category"
                 value={formData.category}
                 onChange={handleChange}
-                placeholder="e.g. Spares"
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
-              />
+              >
+                <option value="">No Category</option>
+                {itemCategories?.map((cat: any) => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
