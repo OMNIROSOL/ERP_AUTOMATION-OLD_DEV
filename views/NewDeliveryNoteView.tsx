@@ -138,14 +138,17 @@ const NewDeliveryNoteView = () => {
         customers, 
         items: inventoryItems, 
         fetchCustomers, 
-        fetchItems 
+        fetchItems,
+        createDeliveryNote,
+        getNextReference: getNextRefFromStore,
+        invoices: mockInvoices 
     } = useERPStore();
 
     useEffect(() => {
         fetchCustomers();
         fetchItems();
     }, [fetchCustomers, fetchItems]);
-    
+
     const [formData, setFormData] = useState({
       deliveryDate: new Date().toISOString().split('T')[0],
       customer: '',
@@ -168,21 +171,14 @@ const NewDeliveryNoteView = () => {
     });
     const [showOptionsArea, setShowOptionsArea] = useState(false);
 
-    const getNextReference = () => {
-        const notes = getDeliveryNotes();
-        const refs = notes
-            .map((n: any) => n.reference)
-            .filter((ref: string) => ref && ref.startsWith('DN-'))
-            .map((ref: string) => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1000;
-        return `DN-${nextNum.toString().padStart(4, '0')}`;
-    };
-
     useEffect(() => {
-        if (!isEditing && !formData.reference) {
-            setFormData(prev => ({ ...prev, reference: getNextReference() }));
-        }
+        const initRef = async () => {
+            if (!isEditing && !formData.reference) {
+                const nextRef = await getNextRefFromStore('delivery');
+                setFormData(prev => ({ ...prev, reference: nextRef }));
+            }
+        };
+        initRef();
     }, [isEditing]);
 
     const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
@@ -204,10 +200,10 @@ const NewDeliveryNoteView = () => {
                     deliveryAddress: (invoice as any).billingAddress || customerData?.billingAddress || '',
                     invoiceNumber: invoice.reference,
                     orderNumber: invoice.salesOrder || '',
-                    reference: invoice.reference, // Auto-filling reference from invoice
+                    reference: invoice.reference, 
                     description: `Shipment for Invoice ${invoice.reference}`
                 }));
-                setUseManualRef(true); // Ensure manual ref is enabled so the pre-filled reference is displayed
+                setUseManualRef(true); 
                 if (invoice.items) {
                     setItems(invoice.items.map((it: any, idx: number) => ({
                         id: Date.now() + idx,
@@ -227,27 +223,11 @@ const NewDeliveryNoteView = () => {
                 setFormData(prev => ({ 
                     ...prev, 
                     customer: customer.name,
-                    deliveryAddress: `Plot ${Math.floor(Math.random() * 1000)}, Industrial Area, Ndola` // Mock address
+                    deliveryAddress: customer.billingAddress || '' 
                 }));
-                
-                if (itemIds && itemIds.length > 0) {
-                    const deliveryItems = getCustomerDeliveryDetails(customer.name);
-                    const selectedItems = deliveryItems
-                        .filter(it => itemIds.includes(it.item))
-                        .map((it, idx) => ({
-                            id: Date.now() + idx,
-                            item: it.item,
-                            description: `Fulfillment: ${it.item}`,
-                            qty: Math.abs(it.qty).toString(),
-                            unit: (it as any).unit || ''
-                        }));
-                    if (selectedItems.length > 0) {
-                        setItems(selectedItems);
-                    }
-                }
             }
         }
-    }, [location.search, isEditing]);
+    }, [location.search, isEditing, mockInvoices, customers]);
 
     useEffect(() => {
         if (id) {
@@ -310,52 +290,39 @@ const NewDeliveryNoteView = () => {
         }));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.customer) {
             alert('Please select a customer');
             return;
         }
 
-        const newNote = {
-            id: id || Date.now().toString(),
-            deliveryDate: convertToDisplayDate(formData.deliveryDate),
-            customer: formData.customer,
-            deliveryAddress: formData.deliveryAddress,
-            description: formData.description,
-            reference: formData.reference || getNextReference(),
-            inventoryLocation: formData.inventoryLocation,
-            orderNumber: formData.orderNumber,
-            invoiceNumber: formData.invoiceNumber,
-            items: items.map(it => ({
-                id: it.id,
-                item: it.item,
-                description: it.description,
-                qty: it.qty,
-                unit: it.unit
-            })),
-            status: formData.status,
-            customTitle: options.customTitle ? options.customTitleValue : undefined,
-            footer: options.footers ? options.footerValue : undefined,
-            columnLineNumber: options.columnLineNumber,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase()
-        };
-
-        const existingNotes = JSON.parse(localStorage.getItem('delivery_notes_data') || '[]');
-        
-        let updatedNotes;
-        if (isEditing) {
-            updatedNotes = existingNotes.map((n: any) => n.id === id ? newNote : n);
-            // If not found in localStorage (it's from mockData), add to localStorage
-            if (!existingNotes.some((n: any) => n.id === id)) {
-                updatedNotes = [newNote, ...existingNotes];
-            }
-        } else {
-            updatedNotes = [newNote, ...existingNotes];
+        const selectedCustomer = customers.find(c => c.name === formData.customer);
+        if (!selectedCustomer) {
+            alert('Customer not found in database');
+            return;
         }
 
-        localStorage.setItem('delivery_notes_data', JSON.stringify(updatedNotes));
-        window.dispatchEvent(new Event('storage'));
-        navigate('/delivery-notes');
+        const noteData = {
+            customerId: selectedCustomer.id,
+            reference: formData.reference || await getNextRefFromStore('delivery'),
+            deliveryDate: formData.deliveryDate,
+            description: formData.description,
+            inventoryLocation: formData.inventoryLocation,
+            items: items.filter(it => it.item !== '').map(it => {
+                const invItem = inventoryItems.find(inv => inv.itemName === it.item);
+                return {
+                    itemId: invItem?.id,
+                    qty: parseFloat(it.qty)
+                };
+            })
+        };
+
+        try {
+            await createDeliveryNote(noteData);
+            navigate('/delivery-notes');
+        } catch (err) {
+            alert('Failed to save delivery note: ' + (err as Error).message);
+        }
     };
 
     const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);

@@ -144,7 +144,10 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
         customers, 
         items: inventoryItems, 
         fetchCustomers, 
-        fetchItems 
+        fetchItems,
+        createOrder,
+        getNextReference: getNextRefFromStore,
+        orders: mockSalesOrders
     } = useERPStore();
 
     useEffect(() => {
@@ -186,23 +189,25 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const requiresApproval = useMemo(() => {
         return items.some(item => {
             if (item.item === 'Select Item') return false;
-            const inv = (mockInventory as any)[item.item];
+            const inv = inventoryItems.find(i => i.itemName === item.item);
             if (!inv) return false;
             const price = parseFloat(item.unitPrice) || 0;
-            const minMarginPrice = inv.sellingPrice * (1 - marginThreshold / 100);
-            return price < inv.purchasePrice || price < minMarginPrice;
+            const sellingPrice = inv.sellingPrice || 0;
+            const purchasePrice = inv.purchasePrice || 0;
+            const minMarginPrice = sellingPrice * (1 - marginThreshold / 100);
+            return price < purchasePrice || price < minMarginPrice;
         });
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, inventoryItems]);
 
-    const getNextReference = () => {
-        const refs = mockSalesOrders
-            .map(o => o.reference)
-            .filter(ref => ref && ref.startsWith('SO-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1005;
-        return `SO-${nextNum.toString().padStart(4, '0')}`;
-    };
+    useEffect(() => {
+        const initRef = async () => {
+            if (!isEditing && !reference) {
+                const nextRef = await getNextRefFromStore('order');
+                setReference(nextRef);
+            }
+        };
+        initRef();
+    }, [isEditing]);
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
@@ -214,9 +219,9 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                 setIssueDate(order.orderDate.split('.').reverse().join('-'));
                 setCustomer(order.customer);
                 setCurrency(order.currency);
-                setBillingAddress((order as any).billingAddress || getCustomers().find(c => c.name === order.customer)?.billingAddress || '');
-                setReference(order.reference);
-                setUseManualRef(true);
+                setBillingAddress((order as any).billingAddress || customers.find(c => c.name === order.customer)?.billingAddress || '');
+                setReference(isEditing ? order.reference : '');
+                if (isEditing) setUseManualRef(true);
                 setDescription(order.description || '');
                 setStatus(order.status);
                 const itemsToSet = order.items && order.items.length > 0
@@ -245,13 +250,12 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             setCustomer('');
             setCurrency('ZMW');
             setBillingAddress('');
-            setReference(getNextReference());
             setUseManualRef(false);
             setDescription('');
             setStatus('Ordered');
             setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
         }
-    }, [id, location.search]);
+    }, [id, mockSalesOrders, customers, location.search]);
 
     const itemHistory = useMemo(() => {
         const global: Record<string, any[]> = {};
@@ -363,55 +367,68 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     };
 
     const handleSave = async (forceManualApproval = false) => {
-        const newOrder: SalesOrder = {
-            id: isEditing ? id! : `SO-${Date.now()}`,
-            orderDate: issueDate.split('-').reverse().join('.'),
-            reference: reference || getNextReference(),
-            customer: customer,
-            description: description,
-            currency: currency,
+        if (!customer) {
+            alert('Please select a customer');
+            return;
+        }
+
+        const selectedCustomer = customers.find(c => c.name === customer);
+        if (!selectedCustomer) {
+            alert('Customer not found in database');
+            return;
+        }
+
+        const orderData = {
+            customerId: selectedCustomer.id,
+            reference: reference,
             amount: calculations.grandTotal,
-            status: (approvalReason || forceManualApproval) ? 'Pending Approval' : 'Ordered',
+            description: description,
             billingAddress: billingAddress,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) })),
-            customTitle: options.customTitle ? options.customTitleValue : undefined,
-            footer: options.footers ? options.footerValue : undefined
+            docOptions: {
+                customTitle: options.customTitle ? options.customTitleValue : undefined,
+                footer: options.footers ? options.footerValue : undefined,
+                ...options
+            },
+            items: items.filter(i => i.item !== 'Select Item').map(i => {
+                const invItem = inventoryItems.find(inv => inv.itemName === i.item);
+                return {
+                    itemId: invItem?.id,
+                    qty: parseFloat(i.qty),
+                    unitPrice: parseFloat(i.unitPrice),
+                    totalAmount: (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0)
+                };
+            })
         };
 
-        if (isEditing) {
-            const index = mockSalesOrders.findIndex(o => o.id === id);
-            if (index !== -1) mockSalesOrders[index] = newOrder;
-        } else {
-            mockSalesOrders.unshift(newOrder);
-        }
+        try {
+            await createOrder(orderData);
 
-        saveSalesOrders(mockSalesOrders);
+            if ((approvalReason || forceManualApproval) && setApprovalRequests) {
+                const newRequest: ApprovalRequest = {
+                    id: `APR-${Date.now()}`,
+                    quoteId: `SO-${Date.now()}`,
+                    customer: customer || 'Unknown Customer',
+                    amount: calculations.grandTotal,
+                    currency: currency,
+                    requestedBy: 'Current User',
+                    approver: 'Sales Manager',
+                    reason: forceManualApproval ? (approvalReason ? `${approvalReason} (Manual)` : 'Manual request') : approvalReason,
+                    status: 'Pending',
+                    date: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
+                    reference: reference,
+                    timestamp: new Date().toISOString()
+                };
+                setApprovalRequests(prev => [newRequest, ...prev]);
+                alert(`Approval Required: ${newRequest.reason}\n\nSubmitted for review.`);
+            }
 
-        if ((approvalReason || forceManualApproval) && setApprovalRequests) {
-            const newRequest: ApprovalRequest = {
-                id: `APR-${Date.now()}`,
-                quoteId: newOrder.id,
-                customer: customer || 'Unknown Customer',
-                amount: calculations.grandTotal,
-                currency: currency,
-                requestedBy: 'Current User',
-                approver: 'Sales Manager',
-                reason: forceManualApproval ? (approvalReason ? `${approvalReason} (Manual)` : 'Manual request') : approvalReason,
-                status: 'Pending',
-                date: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                reference: newOrder.reference,
-                timestamp: newOrder.timestamp
-            };
-            setApprovalRequests(prev => [newRequest, ...prev]);
-            alert(`Approval Required: ${newRequest.reason}\n\nSubmitted for review.`);
-        }
-
-        if (isEditing) {
-            navigate('/sales-orders');
-        } else {
-            // Automatically flow to Sales Invoice for new confirmed orders
-            navigate(`/sales-invoices/new?copyFrom=${newOrder.id}`);
+            if (isEditing) {
+                navigate('/sales-orders');
+            } else {
+                navigate(`/sales-orders`);
+            }
+        } catch (err) {
+            alert('Failed to save order: ' + (err as Error).message);
         }
     };
 

@@ -1,14 +1,29 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, FileX, ArrowLeft, Trash2 } from 'lucide-react';
-import { mockInventoryWriteOffs, mockInventoryItems, getAccounts, getInventoryLocations } from '../mockData';
 import { InventoryWriteOff } from '../types';
+import { useERPStore } from '../store/useERPStore';
+import { useEffect } from 'react';
 
 const NewInventoryWriteOffView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const existingWriteOff = isEdit ? mockInventoryWriteOffs.find(wo => wo.id === id) : null;
+  const { 
+    inventoryWriteOffs, fetchInventoryWriteOffs, createInventoryWriteOff, updateInventoryWriteOff, deleteInventoryWriteOff,
+    items, fetchItems,
+    accounts, fetchAccounts,
+    inventoryLocations, fetchInventoryLocations
+  } = useERPStore();
+
+  useEffect(() => {
+    fetchInventoryWriteOffs();
+    fetchItems();
+    fetchAccounts();
+    fetchInventoryLocations();
+  }, []);
+
+  const existingWriteOff = isEdit ? inventoryWriteOffs.find((wo: any) => wo.id === id) : null;
 
   const [formData, setFormData] = useState<Partial<InventoryWriteOff>>(existingWriteOff || {
     date: new Date().toISOString().split('T')[0],
@@ -28,7 +43,7 @@ const NewInventoryWriteOffView = () => {
 
   const handleItemSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedItemName = e.target.value;
-    const item = mockInventoryItems.find(mi => `${mi.itemCode} - ${mi.itemName}` === selectedItemName);
+    const item = items.find((mi: any) => `${mi.itemCode} - ${mi.itemName}` === selectedItemName);
     setFormData(prev => ({
       ...prev,
       inventoryItem: selectedItemName,
@@ -38,7 +53,7 @@ const NewInventoryWriteOffView = () => {
 
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const qty = Number(e.target.value);
-    const item = mockInventoryItems.find(mi => `${mi.itemCode} - ${mi.itemName}` === formData.inventoryItem);
+    const item = items.find((mi: any) => `${mi.itemCode} - ${mi.itemName}` === formData.inventoryItem);
     setFormData(prev => ({
       ...prev,
       qty,
@@ -46,10 +61,31 @@ const NewInventoryWriteOffView = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Saving inventory write-off:', formData);
-    navigate('/inventory-write-offs');
+    try {
+      if (isEdit) {
+        await updateInventoryWriteOff(id!, formData);
+      } else {
+        await createInventoryWriteOff(formData);
+      }
+      navigate('/inventory-write-offs');
+    } catch (err) {
+      console.error('Failed to save write-off:', err);
+      alert('Failed to save write-off.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (window.confirm('Are you sure you want to void this write-off?')) {
+      try {
+        await deleteInventoryWriteOff(id!);
+        navigate('/inventory-write-offs');
+      } catch (err) {
+        console.error('Failed to delete write-off:', err);
+        alert('Failed to delete write-off.');
+      }
+    }
   };
 
   return (
@@ -128,9 +164,9 @@ const NewInventoryWriteOffView = () => {
                   required
                 >
                   <option value="">Select Item to Write-off</option>
-                  {mockInventoryItems.map(mi => (
+                  {items.map((mi: any) => (
                     <option key={mi.id} value={`${mi.itemCode} - ${mi.itemName}`}>
-                      {mi.itemCode} - {mi.itemName} (Available: {mi.qtyOnHand})
+                      {mi.itemCode} - {mi.itemName} (Available: {mi.qtyOnHand || 0})
                     </option>
                   ))}
                 </select>
@@ -171,7 +207,7 @@ const NewInventoryWriteOffView = () => {
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
                 >
                   <option value="">Select Division...</option>
-                  {getInventoryLocations().map(loc => (
+                  {inventoryLocations.map((loc: any) => (
                     <option key={loc.id} value={loc.name}>{loc.name}</option>
                   ))}
                 </select>
@@ -189,7 +225,7 @@ const NewInventoryWriteOffView = () => {
                   required
                 >
                   <option value="">Select Expense Account</option>
-                  {getAccounts().filter(a => a.type === 'Expense').map(acc => (
+                  {accounts.filter((a: any) => a.type === 'Expense').map((acc: any) => (
                     <option key={acc.id} value={acc.name}>{acc.name}</option>
                   ))}
                 </select>
@@ -253,6 +289,7 @@ const NewInventoryWriteOffView = () => {
           <div className="flex justify-end pt-4">
             <button
               type="button"
+              onClick={handleDelete}
               className="flex items-center gap-2 text-rose-500 font-bold text-[11px] uppercase tracking-widest hover:text-rose-600 transition-colors"
             >
               <Trash2 size={16} /> Void Write-off

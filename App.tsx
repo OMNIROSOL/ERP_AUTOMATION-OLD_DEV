@@ -116,6 +116,12 @@ import EditSupplierColumnsView from './views/EditSupplierColumnsView';
 import NewSupplierView from './views/NewSupplierView';
 import EditSupplierView from './views/EditSupplierView';
 import ViewSupplierView from './views/ViewSupplierView';
+import ProcurementPlanningView from './views/ProcurementPlanningView';
+import ItemUnitsView from './views/ItemUnitsView';
+import ItemLedgerView from './views/ItemLedgerView';
+import ItemAllocationsView from './views/ItemAllocationsView';
+import ItemCategoriesView from './views/ItemCategoriesView';
+import NewItemCategoryView from './views/NewItemCategoryView';
 
 import { mockApprovalRequests } from './mockData';
 import { ApprovalRequest } from './types';
@@ -194,12 +200,18 @@ const App = () => {
           <Route path="/settings/withholding-taxes" element={<WithholdingTaxView />} />
           <Route path="/settings/role-management" element={<RoleManagementView />} />
           <Route path="/settings/footers" element={<SettingsFootersView />} />
+          <Route path="/settings/item-units" element={<ItemUnitsView />} />
+          <Route path="/settings/item-categories" element={<ItemCategoriesView />} />
+          <Route path="/settings/item-categories/new" element={<NewItemCategoryView />} />
+          <Route path="/settings/item-categories/edit/:id" element={<NewItemCategoryView />} />
 
           {/* Inventory Routes */}
           <Route path="/inventory-items" element={<InventoryItemsView />} />
           <Route path="/inventory-items/new" element={<NewInventoryItemView />} />
           <Route path="/inventory-items/edit/:id" element={<NewInventoryItemView />} />
           <Route path="/inventory-items/view/:id" element={<ViewInventoryItemView />} />
+          <Route path="/inventory-items/transactions/:id" element={<ItemLedgerView />} />
+          <Route path="/inventory-items/locations/:id" element={<ItemAllocationsView />} />
 
           <Route path="/inventory-transfers" element={<InventoryTransfersView />} />
           <Route path="/inventory-transfers/new" element={<NewInventoryTransferView />} />
@@ -291,6 +303,9 @@ const App = () => {
           <Route path="/suppliers/view/:id" element={<ViewSupplierView />} />
           <Route path="/suppliers/edit-columns" element={<EditSupplierColumnsView />} />
           <Route path="/suppliers/print-batch" element={<BatchPrintView />} />
+
+          {/* Procurement Routes */}
+          <Route path="/procurement-planning" element={<ProcurementPlanningView />} />
 
           {/* Purchase History Routes */}
           <Route path="/purchase-history" element={<PurchaseHistoryView />} />

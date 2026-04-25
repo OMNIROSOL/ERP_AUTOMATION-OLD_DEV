@@ -1,12 +1,19 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, FileX, Calendar, Package, Trash2, AlertCircle, TrendingDown } from 'lucide-react';
-import { mockInventoryWriteOffs } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
+import { useEffect } from 'react';
 
 const ViewInventoryWriteOffView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const writeOff = mockInventoryWriteOffs.find(wo => wo.id === id);
+  const { inventoryWriteOffs, fetchInventoryWriteOffs } = useERPStore();
+
+  useEffect(() => {
+    fetchInventoryWriteOffs();
+  }, []);
+
+  const writeOff = inventoryWriteOffs.find((wo: any) => wo.id === id);
 
   if (!writeOff) {
     return (
@@ -39,7 +46,7 @@ const ViewInventoryWriteOffView = () => {
               <span>Inventory Write-off Details</span>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">{writeOff.reference}</h1>
-            <p className="text-sm text-gray-400 font-medium">{writeOff.date}</p>
+            <p className="text-sm text-gray-400 font-medium">{writeOff.date ? new Date(writeOff.date).toISOString().split('T')[0] : ''}</p>
           </div>
         </div>
         <button
@@ -81,7 +88,7 @@ const ViewInventoryWriteOffView = () => {
                   </div>
                   <div>
                     <label className="text-[9px] font-black uppercase tracking-widest text-slate-300 block mb-0.5">Date Created</label>
-                    <div className="text-sm font-bold text-slate-700">{writeOff.date}</div>
+                    <div className="text-sm font-bold text-slate-700">{writeOff.date ? new Date(writeOff.date).toISOString().split('T')[0] : ''}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">

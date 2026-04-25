@@ -145,7 +145,11 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         customers, 
         items: inventoryItems, 
         fetchCustomers, 
-        fetchItems 
+        fetchItems,
+        createQuote,
+        getNextReference: getNextRefFromStore,
+        quotes: mockSalesQuotes,
+        invoices: mockInvoices
     } = useERPStore();
 
     useEffect(() => {
@@ -153,26 +157,16 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         fetchItems();
     }, [fetchCustomers, fetchItems]);
 
-
-    const customerShortName = (name: string) => name ? name.split(' - ')[0] : '';
-
-    const formatDateForSave = (dateStr: string) => {
-        if (!dateStr) return new Date().toLocaleDateString('en-GB').replace(/\//g, '.');
-        if (dateStr.includes('.')) return dateStr; // Already formatted
-        const [year, month, day] = dateStr.split('-');
-        return `${day}.${month}.${year}`;
-    };
-
     const [issueDate, setIssueDate] = useState('');
-    const [expiryDays, setExpiryDays] = useState('30');
     const [customer, setCustomer] = useState('');
     const [currency, setCurrency] = useState('ZMW');
     const [billingAddress, setBillingAddress] = useState('');
     const [description, setDescription] = useState('');
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
+    const [expiryDays, setExpiryDays] = useState(30);
     const [fileName, setFileName] = useState('No file chosen');
-    const [marginThreshold] = useState(10); // Default 10% - now a constant for this component
+    const [marginThreshold] = useState(10);
     const [status, setStatus] = useState('Active');
     const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%', unit: '' }]);
     const [options, setOptions] = useState({
@@ -187,10 +181,9 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         withholdingTaxValue: '0',
         hideTotalAmount: false,
         customTitle: false,
-        customTitleValue: 'Quote',
+        customTitleValue: 'Sales Quote',
         footers: false,
-        footerValue: 'Terms & Conditions apply.',
-        cancelled: false
+        footerValue: 'This quotation is valid for 30 days from the date of issue.'
     });
 
     const [showOptionsArea, setShowOptionsArea] = useState(false);
@@ -198,24 +191,25 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
     const requiresApproval = useMemo(() => {
         return items.some(item => {
             if (item.item === 'Select Item') return false;
-            const inv = (mockInventory as any)[item.item];
+            const inv = inventoryItems.find(i => i.itemName === item.item);
             if (!inv) return false;
-            const qty = parseFloat(item.qty) || 0;
             const price = parseFloat(item.unitPrice) || 0;
-            const minMarginPrice = inv.sellingPrice * (1 - marginThreshold / 100);
-            return price < inv.purchasePrice || price < minMarginPrice || qty > inv.stock;
+            const sellingPrice = inv.sellingPrice || 0;
+            const purchasePrice = inv.purchasePrice || 0;
+            const minMarginPrice = sellingPrice * (1 - marginThreshold / 100);
+            return price < purchasePrice || price < minMarginPrice;
         });
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, inventoryItems]);
 
-    const getNextReference = () => {
-        const sqReferences = mockSalesQuotes
-            .map(q => q.reference)
-            .filter(ref => ref && ref.startsWith('SQ-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = sqReferences.length > 0 ? Math.max(...sqReferences) + 1 : 1;
-        return `SQ-${nextNum.toString().padStart(4, '0')}`;
-    };
+    useEffect(() => {
+        const initRef = async () => {
+            if (!isEditing && !reference) {
+                const nextRef = await getNextRefFromStore('quote');
+                setReference(nextRef);
+            }
+        };
+        initRef();
+    }, [isEditing]);
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
@@ -224,58 +218,41 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
             const quoteId = id || copyFromId;
             const quote = mockSalesQuotes.find(q => q.id === quoteId);
             if (quote) {
-                setIssueDate(quote.issueDate.split('.').reverse().join('-')); // Convert 16.03.2026 to 2026-03-16
-                setExpiryDays(quote.expiryDays || '30');
+                setIssueDate(quote.issueDate.split('.').reverse().join('-'));
                 setCustomer(quote.customer);
                 setCurrency(quote.currency);
-                setBillingAddress(quote.billingAddress || '');
-                if (copyFromId) {
-                    setReference(getNextReference());
-                    setUseManualRef(false);
-                } else {
-                    setReference(quote.reference);
-                    setUseManualRef(true);
-                }
+                setBillingAddress((quote as any).billingAddress || customers.find(c => c.name === quote.customer)?.billingAddress || '');
+                setReference(isEditing ? quote.reference : '');
+                if (isEditing) setUseManualRef(true);
                 setDescription(quote.description || '');
-                setStatus('Active'); // Re-default to active status for copies/new edits if preferred, or maintain quote.status if required.
-                // However generally a copy should be in active status or draft. Let's keep Active or maybe quote.status.
-                // Actually the user didn't specify status, but Active is safer for a new document.
-                // Wait, if it's editing (id exists), it should probably keep the status.
-                if (id) setStatus(quote.status); else setStatus('Active');
-                setItems(quote.items.map(i => ({
-                    id: i.id,
-                    item: i.item,
-                    description: i.description,
-                    qty: i.qty.toString(),
-                    unitPrice: i.unitPrice.toString(),
+                setExpiryDays(quote.expiryDays || 30);
+                setStatus(quote.status || 'Active');
+                const itemsToSet = quote.items && quote.items.length > 0
+                    ? quote.items
+                    : [{ id: Date.now(), item: 'General Item', description: quote.description || '', qty: 1, unitPrice: quote.amount || 0, discount: '', taxCode: 'No tax' }];
+
+                setItems(itemsToSet.map((i: any) => ({
+                    id: i.id || Date.now() + Math.random(),
+                    item: i.item || 'Select Item',
+                    description: i.description || '',
+                    qty: i.qty ? i.qty.toString() : '1',
+                    unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                     discount: i.discount || '',
-                    taxCode: i.taxCode || 'VAT 16%',
+                    taxCode: i.taxCode || 'No tax',
                     unit: (i as any).unit || ''
                 })));
-                if (quote.options) {
-                    setOptions(prev => ({ ...prev, ...quote.options }));
-                } else {
-                    if (quote.customTitle) {
-                        setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: quote.customTitle || 'Quote' }));
-                    }
-                    if (quote.footer) {
-                        setOptions(prev => ({ ...prev, footers: true, footerValue: quote.footer || 'Terms & Conditions apply.' }));
-                    }
-                }
             }
         } else {
             setIssueDate(new Date().toISOString().split('T')[0]);
             setCustomer('');
             setCurrency('ZMW');
             setBillingAddress('');
-            setExpiryDays('30');
-            setReference(getNextReference());
-            setUseManualRef(false); // Default to automatic SQ-XXXX
+            setUseManualRef(false);
+            setExpiryDays(30);
             setDescription('');
             setStatus('Active');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%', unit: '' }]);
         }
-    }, [id, location.search]);
+    }, [id, mockSalesQuotes, customers, location.search]);
 
     const itemHistory = useMemo(() => {
         const global: Record<string, any[]> = {};
@@ -353,26 +330,25 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         const itemsToValidate = items.filter(i => i.item !== 'Select Item');
 
         for (const item of itemsToValidate) {
-            const inventoryItem = (mockInventory as any)[item.item];
+            const inventoryItem = inventoryItems.find(i => i.itemName === item.item);
             if (inventoryItem) {
                 const qty = parseFloat(item.qty) || 0;
                 const price = parseFloat(item.unitPrice) || 0;
 
-                if (qty > inventoryItem.stock) {
-                    reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${inventoryItem.stock}). `;
-                }
-
                 const effectiveThreshold = marginThreshold / 100;
-                const minPrice = inventoryItem.sellingPrice * (1 - effectiveThreshold);
-                if (price < inventoryItem.purchasePrice) {
-                    reason += `Price for ${item.item} (${price}) is below purchase price (${inventoryItem.purchasePrice}). `;
+                const sellingPrice = inventoryItem.sellingPrice || 0;
+                const purchasePrice = inventoryItem.purchasePrice || 0;
+                const minPrice = sellingPrice * (1 - effectiveThreshold);
+                
+                if (price < purchasePrice) {
+                    reason += `Price for ${item.item} (${price}) is below purchase price (${purchasePrice}). `;
                 } else if (price < minPrice) {
                     reason += `Price for ${item.item} (${price}) is below allowed margin threshold (min: ${minPrice.toFixed(2)}). `;
                 }
             }
         }
         return reason.trim();
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, inventoryItems]);
 
     const calculations = useMemo(() => {
         let subtotal = 0;
@@ -470,102 +446,66 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
             return;
         }
 
-        const validItems = items.filter(i => i.item && i.item !== 'Select Item' && i.item !== '');
-        if (validItems.length === 0) {
-            alert('Please select at least one item with a valid product selection.');
+        if (!customer) {
+            alert('Please select a customer');
             return;
         }
 
-        if ((approvalReason || forceManualApproval) && setApprovalRequests) {
-            const quoteId = isEditing ? id! : `Q-${Date.now()}`;
-            const formattedIssueDate = formatDateForSave(issueDate);
-            const newQuote: SalesQuote = {
-                id: quoteId,
-                issueDate: formattedIssueDate,
-                reference: reference || getNextReference(),
-                customer: customer,
-                description: description,
-                currency: currency,
-                amount: calculations.grandTotal,
-                status: 'Pending Approval',
-                billingAddress: billingAddress,
-                expiryDays: expiryDays,
-                timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-                items: items.filter(i => i.item !== 'Select Item').map(i => ({
-                    ...i,
-                    id: Number(i.id)
-                })),
-                customTitle: options.customTitle ? options.customTitleValue : undefined,
-                footer: options.footers ? options.footerValue : undefined
-            };
-
-            const newRequest: ApprovalRequest = {
-                id: `APR-${Date.now()}`,
-                quoteId: quoteId,
-                customer: customer || 'Unknown Customer',
-                amount: calculations.grandTotal,
-                currency: currency,
-                requestedBy: getCurrentUser().name,
-                approver: 'Sales Manager',
-                reason: approvalReason.trim(),
-                status: 'Pending',
-                date: formatDateForSave(issueDate),
-                reference: reference || getNextReference(),
-                timestamp: newQuote.timestamp
-            };
-
-            const finalReason = forceManualApproval
-                ? (approvalReason ? `${approvalReason} (Manual Request)` : 'Manual approval request.')
-                : approvalReason;
-
-            newRequest.reason = finalReason.trim();
-
-            // Save to mock data
-            if (isEditing) {
-                const index = mockSalesQuotes.findIndex(q => q.id === id);
-                if (index !== -1) mockSalesQuotes[index] = newQuote;
-            } else {
-                mockSalesQuotes.unshift(newQuote);
-            }
-
-            setApprovalRequests(prev => [newRequest, ...prev]);
-
-            alert(`Approval Required: ${approvalReason}\n\nYour request has been submitted for approval.`);
-            navigate('/sales-quotes');
+        const selectedCustomer = customers.find(c => c.name === customer);
+        if (!selectedCustomer) {
+            alert('Customer not found in database');
             return;
         }
 
-        // Normal Save Logic
-        const formattedIssueDate = formatDateForSave(issueDate);
-        const newQuote: SalesQuote = {
-            id: isEditing ? id! : `Q-${Date.now()}`,
-            issueDate: formattedIssueDate,
-            reference: reference || getNextReference(),
-            customer: customer,
-            description: description,
-            currency: currency,
+        const quoteData = {
+            customerId: selectedCustomer.id,
+            reference: reference,
             amount: calculations.grandTotal,
-            status: 'Active',
+            description: description,
             billingAddress: billingAddress,
             expiryDays: expiryDays,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({
-                ...i,
-                id: Number(i.id)
-            })),
-            customTitle: options.customTitle ? options.customTitleValue : undefined,
-            footer: options.footers ? options.footerValue : undefined,
-            options: options
+            docOptions: {
+                customTitle: options.customTitle ? options.customTitleValue : undefined,
+                footer: options.footers ? options.footerValue : undefined,
+                ...options
+            },
+            items: items.filter(i => i.item !== 'Select Item').map(i => {
+                const invItem = inventoryItems.find(inv => inv.itemName === i.item);
+                return {
+                    itemId: invItem?.id,
+                    qty: parseFloat(i.qty),
+                    unitPrice: parseFloat(i.unitPrice),
+                    totalAmount: (parseFloat(i.qty) || 0) * (parseFloat(i.unitPrice) || 0)
+                };
+            })
         };
 
-        if (isEditing) {
-            const index = mockSalesQuotes.findIndex(q => q.id === id);
-            if (index !== -1) mockSalesQuotes[index] = newQuote;
-        } else {
-            mockSalesQuotes.unshift(newQuote);
+        try {
+            await createQuote(quoteData);
+
+            if ((approvalReason || forceManualApproval) && setApprovalRequests) {
+                const newRequest: ApprovalRequest = {
+                    id: `APR-${Date.now()}`,
+                    quoteId: `QT-${Date.now()}`,
+                    customer: customer || 'Unknown Customer',
+                    amount: calculations.grandTotal,
+                    currency: currency,
+                    requestedBy: 'Current User',
+                    approver: 'Sales Manager',
+                    reason: forceManualApproval ? (approvalReason ? `${approvalReason} (Manual)` : 'Manual request') : approvalReason,
+                    status: 'Pending',
+                    date: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
+                    reference: reference,
+                    timestamp: new Date().toISOString()
+                };
+                setApprovalRequests(prev => [newRequest, ...prev]);
+                alert(`Approval Required: ${newRequest.reason}\n\nSubmitted for review.`);
+            }
+
+            navigate('/sales-quotes');
+        } catch (err) {
+            alert('Failed to save quote: ' + (err as Error).message);
         }
-        saveSalesQuotes(mockSalesQuotes);
-        navigate('/sales-quotes');
     };
 
     return (
@@ -605,10 +545,10 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[0.7fr_0.7fr_1.6fr] gap-8">
                                 <InputField label="Issue Date" type="date" value={issueDate} onChange={(e: any) => setIssueDate(e.target.value)} Icon={Calendar} />
                                 <div className="space-y-2">
-                                    <NumericInputField label="Expiry Days" value={expiryDays} onChange={(e: any) => setExpiryDays(e.target.value)} Icon={Clock} />
-                                    {issueDate && expiryDays && (
+                                    <NumericInputField label="Expiry Days" value={expiryDays.toString()} onChange={(e: any) => setExpiryDays(parseInt(e.target.value) || 0)} Icon={Clock} />
+                                    {issueDate && expiryDays !== undefined && (
                                         <p className="text-[10px] font-bold text-slate-400 ml-1 text-right">
-                                            Valid until: <span className="text-indigo-500">{new Date(new Date(issueDate).getTime() + (parseInt(expiryDays) || 0) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</span>
+                                            Valid until: <span className="text-indigo-500">{new Date(new Date(issueDate).getTime() + (expiryDays || 0) * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB')}</span>
                                         </p>
                                     )}
                                 </div>

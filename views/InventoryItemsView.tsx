@@ -5,9 +5,10 @@ import {
   ChevronDown, ChevronUp, Printer, HelpCircle
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { mockInventoryItems, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
+import { getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import { InventoryItem, ScreenPermission } from '../types';
 import { useEffect } from 'react';
+import { useERPStore } from '../store/useERPStore';
 
 const InventoryItemsView = () => {
   const navigate = useNavigate();
@@ -45,7 +46,18 @@ const InventoryItemsView = () => {
 
   const [columns, setColumns] = useState(() => {
     const saved = localStorage.getItem('inventory_item_column_settings');
-    return saved ? JSON.parse(saved) : defaultColumns;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Merge in any new default columns that might not be in saved state
+      const merged = [...parsed];
+      defaultColumns.forEach(defCol => {
+        if (!merged.find((c: any) => c.id === defCol.id)) {
+          merged.push(defCol);
+        }
+      });
+      return merged;
+    }
+    return defaultColumns;
   });
 
   const toggleColumnVisibility = (id: string) => {
@@ -62,9 +74,15 @@ const InventoryItemsView = () => {
     setSortConfig({ key, direction });
   };
 
+  const { items: storeItems, fetchItems } = useERPStore();
+
+  useEffect(() => {
+    fetchItems();
+  }, []);
+
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    let result = mockInventoryItems.filter(item => {
+    let result = storeItems.filter((item: any) => {
       const searchStr = `${item.itemName} ${item.itemCode} ${item.description} ${item.category}`.toLowerCase();
       return searchStr.includes(query);
     });
@@ -86,7 +104,7 @@ const InventoryItemsView = () => {
       });
     }
     return result;
-  }, [searchQuery, sortConfig]);
+  }, [storeItems, searchQuery, sortConfig]);
 
   const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
   const currentSlice = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);

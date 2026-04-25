@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, ArrowRightLeft, Plus, Trash2, ArrowLeft } from 'lucide-react';
-import { mockInventoryTransfers, mockInventoryItems, getInventoryLocations } from '../mockData';
+import { mockInventoryTransfers } from '../mockData';
 import { InventoryTransfer } from '../types';
+import { useERPStore } from '../store/useERPStore';
+import { useEffect } from 'react';
 
 const NewInventoryTransferView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
   const existingTransfer = isEdit ? mockInventoryTransfers.find(t => t.id === id) : null;
+  const { inventoryLocations, fetchInventoryLocations, items, fetchItems } = useERPStore();
+
+  useEffect(() => {
+    fetchInventoryLocations();
+    fetchItems();
+  }, []);
 
   const [formData, setFormData] = useState<Partial<InventoryTransfer>>(existingTransfer || {
     date: new Date().toISOString().split('T')[0],
@@ -157,7 +165,7 @@ const NewInventoryTransferView = () => {
                 required
               >
                 <option value="">Select Source...</option>
-                {getInventoryLocations().map(loc => (
+                {inventoryLocations.map(loc => (
                   <option key={loc.id} value={loc.name}>{loc.name}</option>
                 ))}
               </select>
@@ -172,7 +180,7 @@ const NewInventoryTransferView = () => {
                 required
               >
                 <option value="">Select Destination...</option>
-                {getInventoryLocations().map(loc => (
+                {inventoryLocations.map(loc => (
                   <option key={loc.id} value={loc.name}>{loc.name}</option>
                 ))}
               </select>
@@ -225,9 +233,9 @@ const NewInventoryTransferView = () => {
                     required
                   >
                     <option value="">Select Item...</option>
-                    {mockInventoryItems.map(mi => (
+                    {items.map(mi => (
                       <option key={mi.id} value={`${mi.itemCode} - ${mi.itemName}`}>
-                        {mi.itemCode} - {mi.itemName} ({mi.qtyOnHand} available)
+                        {mi.itemCode} - {mi.itemName} ({mi.qtyOnHand || 0} available)
                       </option>
                     ))}
                   </select>

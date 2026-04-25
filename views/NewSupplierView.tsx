@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, ChevronUp } from 'lucide-react';
-import { getSuppliers, saveSuppliers, getInventoryLocations } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 import { Supplier } from '../types';
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error }: any) => (
@@ -57,6 +57,7 @@ const NumericInputField = ({ label, value, onChange, placeholder, onIncrement, o
 
 const NewSupplierView = () => {
     const navigate = useNavigate();
+    const { createSupplier, suppliers, fetchSuppliers } = useERPStore();
     const [name, setName] = useState('');
     const [currency, setCurrency] = useState('ZMW - Zambian Kwacha');
     const [address, setAddress] = useState('');
@@ -64,7 +65,12 @@ const NewSupplierView = () => {
     const [division, setDivision] = useState('General');
     const [fileName, setFileName] = useState('No file chosen');
     const [emailError, setEmailError] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        fetchSuppliers();
+    }, []);
 
     const validateEmail = (email: string) => {
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -188,9 +194,6 @@ const NewSupplierView = () => {
                                         className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
                                     >
                                         <option value="General">General</option>
-                                        {getInventoryLocations().map(loc => (
-                                            <option key={loc.id} value={loc.name}>{loc.name}</option>
-                                        ))}
                                     </select>
                                     <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                 </div>
@@ -216,52 +219,46 @@ const NewSupplierView = () => {
                             Discard
                         </button>
                         <button
-                            onClick={() => {
+                            disabled={isSubmitting}
+                            onClick={async () => {
                                 if (email && !validateEmail(email)) {
                                     setEmailError('Invalid email format');
                                     return;
                                 }
                                 
-                                const allSuppliers = getSuppliers();
-                                const nextNumber = allSuppliers.reduce((max, s) => {
-                                    const match = s.code?.match(/\d+/);
-                                    if (match) {
-                                        const num = parseInt(match[0]);
-                                        return num > max ? num : max;
-                                    }
-                                    return max;
-                                }, 0) + 1;
-                                const newCode = `SUP-${nextNumber.toString().padStart(4, '0')}`;
+                                setIsSubmitting(true);
+                                try {
+                                    // Generate code based on existing supplier count
+                                    const nextNumber = suppliers.length + 1;
+                                    const newCode = `SUP-${nextNumber.toString().padStart(4, '0')}`;
 
-                                const currencyCode = currency.split(' ')[0];
-                                const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`)) 
-                                    ? `${name} - ${currencyCode}` 
-                                    : name;
+                                    const currencyCode = currency.split(' ')[0];
+                                    const finalName = (currencyCode !== 'ZMW' && !name.includes(`- ${currencyCode}`)) 
+                                        ? `${name} - ${currencyCode}` 
+                                        : name;
 
-                                const newSupplier: Supplier = {
-                                    id: `sup-gen-${Date.now()}`,
-                                    name: finalName || 'Unnamed Supplier',
-                                    code: newCode,
-                                    division: division,
-                                    status: 'Paid',
-                                    balance: 0,
-                                    email: email,
-                                    billingAddress: address,
-                                    currency: currency.split(' ')[0],
-                                    purchaseOrders: 0,
-                                    purchaseInvoices: 0,
-                                    goodsReceipts: 0,
-                                    qtyToReceive: 0
-                                };
+                                    await createSupplier({
+                                        name: finalName || 'Unnamed Supplier',
+                                        code: newCode,
+                                        division: division,
+                                        status: 'Active',
+                                        email: email,
+                                        billingAddress: address,
+                                        currency: currencyCode,
+                                    });
 
-                                const updatedSuppliers = [newSupplier, ...allSuppliers];
-                                saveSuppliers(updatedSuppliers);
-                                alert('Supplier profile finalized successfully!');
-                                navigate('/suppliers');
+                                    alert('Supplier profile finalized successfully!');
+                                    navigate('/suppliers');
+                                } catch (err) {
+                                    console.error('Failed to create supplier:', err);
+                                    alert('Failed to register supplier. Please try again.');
+                                } finally {
+                                    setIsSubmitting(false);
+                                }
                             }}
-                            className="bg-indigo-600 text-white px-12 py-4 rounded-2xl text-[14px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 uppercase tracking-[0.2em]"
+                            className="bg-indigo-600 text-white px-12 py-4 rounded-2xl text-[14px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 uppercase tracking-[0.2em] disabled:opacity-50"
                         >
-                            Finalize Profile
+                            {isSubmitting ? 'Saving...' : 'Finalize Profile'}
                         </button>
                     </div>
                 </div>

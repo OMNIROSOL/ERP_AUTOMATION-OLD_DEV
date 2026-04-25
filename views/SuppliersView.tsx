@@ -6,7 +6,7 @@ import {
     Building2
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getSuppliers } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
 import { Supplier } from '../types';
 import { cn } from '../utils/cn';
 
@@ -59,7 +59,13 @@ const SuppliersView = () => {
         localStorage.setItem('is_supplier_batch_view_mode', isBatchViewMode.toString());
     }, [isBatchViewMode]);
 
-    const suppliers = useMemo(() => getSuppliers(), [refreshTrigger]);
+    const { suppliers: storeSuppliers, fetchSuppliers } = useERPStore();
+
+    useEffect(() => {
+        fetchSuppliers();
+    }, []);
+
+    const suppliers = useMemo(() => storeSuppliers, [storeSuppliers, refreshTrigger]);
 
     const defaultColumns = [
         { id: 'name', label: 'Supplier Name', visible: true },
