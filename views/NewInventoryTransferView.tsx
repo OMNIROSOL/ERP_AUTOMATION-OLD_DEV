@@ -11,7 +11,7 @@ const NewInventoryTransferView = () => {
   const { id } = useParams();
   const isEdit = !!id;
   const existingTransfer = isEdit ? mockInventoryTransfers.find(t => t.id === id) : null;
-  const { inventoryLocations, fetchInventoryLocations, items, fetchItems } = useERPStore();
+  const { inventoryLocations, fetchInventoryLocations, items, fetchItems, createInventoryTransfer } = useERPStore();
 
   useEffect(() => {
     fetchInventoryLocations();
@@ -53,10 +53,30 @@ const NewInventoryTransferView = () => {
     setFormData(prev => ({ ...prev, items: newItems }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Post/Saving inventory transfer:', formData);
-    navigate('/inventory-transfers');
+    try {
+      const payload = {
+        ...formData,
+        items: formData.items?.map(item => {
+          const itemObj = items.find(i => `${i.itemCode} - ${i.itemName}` === item.inventoryItem);
+          return {
+            itemId: itemObj?.id || '',
+            qty: item.qty
+          };
+        }).filter(i => i.itemId !== '')
+      };
+      
+      if (!payload.fromLocation || !payload.toLocation) {
+        alert('Please select both source and destination locations.');
+        return;
+      }
+
+      await createInventoryTransfer(payload);
+      navigate('/inventory-transfers');
+    } catch (err) {
+      alert('Failed to save transfer: ' + (err as Error).message);
+    }
   };
 
   return (
