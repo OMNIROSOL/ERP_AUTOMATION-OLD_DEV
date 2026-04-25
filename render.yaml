@@ -22,8 +22,9 @@ services:
     name: cloudmanager-backend
     runtime: node
     plan: free
+    rootDir: server
     buildCommand: npm install && npx prisma generate
-    startCommand: npx tsx server/index.ts
+    startCommand: npx tsx index.ts
     envVars:
       - key: DATABASE_URL
         fromDatabase:
