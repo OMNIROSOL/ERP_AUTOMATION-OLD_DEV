@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockPurchaseQuotes, mockPurchaseOrders, mockSalesOrders, getDeliveryNotes, mockReceipts, getFooters } from '../mockData';
-import { Customer } from '../types';
 import { Printer, ChevronLeft } from 'lucide-react';
+import apiService from '../services/apiService';
 
 const BatchPrintView = () => {
     const location = useLocation();
@@ -24,8 +24,28 @@ const BatchPrintView = () => {
     const isPurchaseQuotes = type === 'purchase-quotes' || location.pathname.includes('/purchase-quotes/');
     const isPurchaseOrders = type === 'purchase-orders' || location.pathname.includes('/purchase-orders/');
 
-    const allCustomers = useMemo(() => getCustomers(), []);
-    const allSuppliers = useMemo(() => getSuppliers(), []);
+    const [allCustomers, setAllCustomers] = React.useState<Customer[]>([]);
+    const [allSuppliers, setAllSuppliers] = React.useState<any[]>([]);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    useEffect(() => {
+        const fetchBaseData = async () => {
+            setIsLoading(true);
+            try {
+                const [custs, supps] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getSuppliers()
+                ]);
+                setAllCustomers(custs);
+                setAllSuppliers(supps);
+            } catch (err) {
+                console.error('Failed to fetch print data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchBaseData();
+    }, []);
 
     const items = useMemo(() => {
         // Handle Single-Invoice Detail Reports (Selected Lines)
@@ -179,7 +199,7 @@ const BatchPrintView = () => {
         }
 
         return [];
-    }, [allCustomers, selectedIds, isCustomers, isSalesQuotes, isPurchaseQuotes, isPurchaseOrders, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
+    }, [allCustomers, allSuppliers, selectedIds, isCustomers, isSuppliers, isSalesQuotes, isPurchaseQuotes, isPurchaseOrders, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
 
     useEffect(() => {
         if (items.length > 0) {
@@ -189,6 +209,17 @@ const BatchPrintView = () => {
             return () => clearTimeout(timer);
         }
     }, [items]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-8">
+                <div className="flex flex-col items-center justify-center space-y-4">
+                    <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading Documents...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (items.length === 0) {
         return (

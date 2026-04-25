@@ -82,8 +82,8 @@ const NewCustomerView = () => {
             .then(setCode)
             .catch(err => {
                 console.error('Failed to fetch next customer code:', err);
-                // Fallback to timestamp based code if API fails
-                setCode(`CUST-${Date.now().toString().slice(-4)}`);
+                // Fallback to a formatted code if API fails
+                setCode(`CUST-`);
             });
     }, []);
 
@@ -133,7 +133,7 @@ const NewCustomerView = () => {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <InputField label="Customer Name" value={name} onChange={(e: any) => setName(e.target.value)} Icon={User} placeholder="e.g. Acme Corp" required />
-                            <InputField label="Customer Code" value={code} onChange={(e: any) => setCode(e.target.value)} Icon={Hash} placeholder="e.g. CUST-001" required />
+                            <InputField label="Customer Code" value={code} onChange={(e: any) => setCode(e.target.value)} Icon={Hash} placeholder="e.g. CUST-0001" required />
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

@@ -113,9 +113,6 @@ const ViewCustomerView = () => {
                         <button onClick={() => navigate(`/customers/edit/${customer.id}`)} className="px-4 py-1.5 text-[12px] font-bold text-gray-700 hover:bg-gray-50 border-r border-gray-300 flex items-center gap-2">
                             <Edit size={14} /> Edit
                         </button>
-                        <button onClick={() => navigate(`/customers/edit/${customer.id}`)} className="px-4 py-1.5 text-[12px] font-bold text-gray-700 hover:bg-gray-50 border-r border-gray-300 flex items-center gap-2">
-                            <Copy size={14} /> Clone
-                        </button>
 
                         <div className="relative" ref={dropdownRef}>
                             <button

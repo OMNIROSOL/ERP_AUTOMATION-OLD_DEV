@@ -468,11 +468,35 @@ app.get('/api/reference/next/:type', async (req, res) => {
       prefix = 'DN';
       break;
     case 'customer':
-      count = await prisma.customer.count();
+      const lastCustomer = await prisma.customer.findFirst({
+        where: { code: { startsWith: 'CUST-' } },
+        orderBy: { code: 'desc' }
+      });
+      if (lastCustomer) {
+        const lastRef = lastCustomer.code;
+        const parts = lastRef.split('-');
+        const lastNumStr = parts[parts.length - 1];
+        const lastNum = parseInt(lastNumStr);
+        count = isNaN(lastNum) ? await prisma.customer.count() : lastNum;
+      } else {
+        count = 0;
+      }
       prefix = 'CUST';
       break;
     case 'supplier':
-      count = await prisma.suppliers.count();
+      const lastSupplier = await prisma.suppliers.findFirst({
+        where: { code: { startsWith: 'SUP-' } },
+        orderBy: { code: 'desc' }
+      });
+      if (lastSupplier) {
+        const lastRef = lastSupplier.code;
+        const parts = lastRef.split('-');
+        const lastNumStr = parts[parts.length - 1];
+        const lastNum = parseInt(lastNumStr);
+        count = isNaN(lastNum) ? await prisma.suppliers.count() : lastNum;
+      } else {
+        count = 0;
+      }
       prefix = 'SUP';
       break;
     default:
