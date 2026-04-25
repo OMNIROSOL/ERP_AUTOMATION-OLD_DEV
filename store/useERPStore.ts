@@ -76,13 +76,15 @@ interface ERPState {
   fetchProcurementOrders: () => Promise<void>;
   createProcurementOrder: (order: any) => Promise<void>;
   fetchProcurementSuggestions: (supplierId: string) => Promise<any[]>;
-  fetchLeadTime: (supplierId: string) => Promise<any>;
-  updateLeadTime: (leadTime: any) => Promise<void>;
-
   // Inventory Transfers
   inventoryTransfers: any[];
   fetchInventoryTransfers: () => Promise<void>;
   createInventoryTransfer: (transfer: any) => Promise<void>;
+
+  // Goods Received Notes
+  goodsReceivedNotes: any[];
+  fetchGoodsReceivedNotes: () => Promise<void>;
+  createGoodsReceivedNote: (note: any) => Promise<void>;
 
   getNextReference: (type: string) => Promise<string>;
 }
@@ -105,6 +107,7 @@ export const useERPStore = create<ERPState>((set, get) => ({
   inventoryWriteOffs: [],
   inventoryUnitCosts: [],
   inventoryTransfers: [],
+  goodsReceivedNotes: [],
   isLoading: false,
   error: null,
 
@@ -764,6 +767,31 @@ export const useERPStore = create<ERPState>((set, get) => ({
       await get().fetchInventoryTransfers();
     } catch (err) {
       console.error('Create inventory transfer failed:', err);
+      throw err;
+    }
+  },
+
+  fetchGoodsReceivedNotes: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/goods-received-notes`);
+      const data = await res.json();
+      set({ goodsReceivedNotes: data });
+    } catch (err) {
+      console.error('Fetch goods received notes failed:', err);
+    }
+  },
+
+  createGoodsReceivedNote: async (note: any) => {
+    try {
+      const res = await fetch(`${API_BASE}/goods-received-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(note),
+      });
+      if (!res.ok) throw new Error('Failed to create goods received note');
+      await get().fetchGoodsReceivedNotes();
+    } catch (err) {
+      console.error('Create goods received note failed:', err);
       throw err;
     }
   }

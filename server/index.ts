@@ -828,6 +828,45 @@ app.post('/api/inventory-transfers', async (req, res) => {
     }
 });
 
+// Goods Received Notes
+app.get('/api/goods-received-notes', async (req, res) => {
+    try {
+        const notes = await prisma.goodsReceivedNote.findMany({
+            include: { items: { include: { item: true } } },
+            orderBy: { timestamp: 'desc' }
+        });
+        res.json(notes);
+    } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+    }
+});
+
+app.post('/api/goods-received-notes', async (req, res) => {
+    const { reference, receivedDate, supplier, purchaseOrder, inventoryLocation, description, status, items } = req.body;
+    try {
+        const result = await prisma.goodsReceivedNote.create({
+            data: {
+                reference,
+                receivedDate: receivedDate ? new Date(receivedDate) : new Date(),
+                supplier,
+                purchaseOrder,
+                inventoryLocation,
+                description,
+                status,
+                items: {
+                    create: items.map((item: any) => ({
+                        itemId: item.itemId,
+                        qty: item.qty
+                    }))
+                }
+            }
+        });
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: (err as Error).message });
+    }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 ERP Backend running at http://localhost:${PORT}`);
 });
