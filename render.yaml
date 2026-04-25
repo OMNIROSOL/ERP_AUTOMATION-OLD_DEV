@@ -1,17 +1,36 @@
 services:
-  - type: web
-    name: cloudmanager-accounting
+  # 1. Frontend - Static Site
+  - type: static
+    name: cloudmanager-frontend
     runtime: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
-    envVars:
-      - key: GEMINI_API_KEY
-        sync: false
     headers:
       - path: /*
         name: X-Frame-Options
         value: SAMEORIGIN
     routes:
       - type: rewrite
+        source: /api/*
+        destination: https://cloudmanager-backend.onrender.com/api/*
+      - type: rewrite
         source: /*
         destination: /index.html
+
+  # 2. Backend - Node Web Service
+  - type: web
+    name: cloudmanager-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npx prisma generate
+    startCommand: npx tsx server/index.ts
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dev_erp_render
+          property: connectionString
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+

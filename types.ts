@@ -261,11 +261,28 @@ export interface InventoryTransfer {
   description: string;
   status: 'Draft' | 'Approved' | 'Posted' | 'Sent' | 'Received';
   items: {
+    itemId?: string;
     inventoryItem: string;
     qty: number;
   }[];
   timestamp?: string;
   image?: string;
+}
+
+export interface GoodsReceivedNote {
+  id: string;
+  receivedDate: string;
+  reference: string;
+  purchaseOrder?: string;
+  supplier: string;
+  inventoryLocation?: string;
+  description: string;
+  status: string;
+  items: {
+    itemId: string;
+    qty: number;
+  }[];
+  timestamp?: string;
 }
 
 export interface InventoryWriteOff {

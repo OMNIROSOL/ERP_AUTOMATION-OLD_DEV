@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { mockSalesQuotes } from '../mockData';
+import { useERPStore } from '../store/useERPStore';
+import { GoodsReceivedNote } from '../types';
 
 const NewGoodsReceiptView = () => {
     const navigate = useNavigate();
@@ -8,14 +9,21 @@ const NewGoodsReceiptView = () => {
     const dateInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [date, setDate] = useState('2026-02-20');
+    const { suppliers, fetchSuppliers, inventoryLocations, fetchInventoryLocations, items: storeItems, fetchItems, createGoodsReceivedNote } = useERPStore();
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [supplier, setSupplier] = useState('');
-    const [inventoryLocation, setInventoryLocation] = useState('Default Inventory Location');
+    const [inventoryLocation, setInventoryLocation] = useState('');
     const [description, setDescription] = useState('');
-    const [reference, setReference] = useState('');
+    const [reference, setReference] = useState(`GRN-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`);
     const [useManualRef, setUseManualRef] = useState(false);
     const [fileName, setFileName] = useState('No file chosen');
     const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '1' }]);
+
+    useEffect(() => {
+        fetchSuppliers();
+        fetchInventoryLocations();
+        fetchItems();
+    }, []);
 
     const [options, setOptions] = useState({
         lineNumber: false,
@@ -140,6 +148,9 @@ const NewGoodsReceiptView = () => {
                                         className="w-full border border-[#cfd8dc] border-l-0 px-3 py-1.5 text-[14px] text-[#263238] rounded-r-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
                                     >
                                         <option value=""></option>
+                                        {suppliers.map(s => (
+                                            <option key={s.id} value={s.name}>{s.name}</option>
+                                        ))}
                                     </select>
                                     <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[10px] pointer-events-none"></i>
                                 </div>
@@ -158,7 +169,10 @@ const NewGoodsReceiptView = () => {
                                         onChange={(e) => setInventoryLocation(e.target.value)}
                                         className="w-full border border-[#cfd8dc] border-l-0 px-3 py-1.5 text-[14px] text-[#263238] rounded-r-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
                                     >
-                                        <option value="Default Inventory Location">Default Inventory Location</option>
+                                        <option value="">Select Location...</option>
+                                        {inventoryLocations.map(loc => (
+                                            <option key={loc.id} value={loc.name}>{loc.name}</option>
+                                        ))}
                                     </select>
                                     <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[10px] pointer-events-none"></i>
                                 </div>
@@ -191,14 +205,16 @@ const NewGoodsReceiptView = () => {
                                     <tr key={item.id} className="group">
                                         <td className="py-2 pr-4 align-top w-1/3">
                                             <div className="relative">
-                                                <select
-                                                    value={item.item}
-                                                    onChange={(e) => updateItem(item.id, 'item', e.target.value)}
-                                                    className="w-full border border-[#cfd8dc] px-2 py-1.5 text-[13px] text-[#263238] rounded-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[34px]"
-                                                >
-                                                    <option value=""></option>
-                                                    <option value="MI0084 - 315/80 R22.5 UNIVERSAL">MI0084 - 315/80 R22.5 UNIVERSAL</option>
-                                                </select>
+                                                    <select
+                                                        value={item.item}
+                                                        onChange={(e) => updateItem(item.id, 'item', e.target.value)}
+                                                        className="w-full border border-[#cfd8dc] px-2 py-1.5 text-[13px] text-[#263238] rounded-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[34px]"
+                                                    >
+                                                        <option value=""></option>
+                                                        {storeItems.map(si => (
+                                                            <option key={si.id} value={`${si.itemCode} - ${si.itemName}`}>{si.itemCode} - {si.itemName}</option>
+                                                        ))}
+                                                    </select>
                                                 <i className="fas fa-caret-down absolute right-2 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[9px] pointer-events-none"></i>
                                             </div>
                                         </td>

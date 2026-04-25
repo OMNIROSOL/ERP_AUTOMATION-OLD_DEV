@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "npx ts-node server/index.ts",
-    "start": "node server/index.js",
+    "server": "npx tsx server/index.ts",
+    "start": "npx tsx server/index.ts",
     "build": "vite build",
     "lint": "tsc --noEmit",
     "preview": "vite preview"
