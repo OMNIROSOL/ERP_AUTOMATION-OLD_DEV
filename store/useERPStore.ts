@@ -89,7 +89,7 @@ interface ERPState {
   getNextReference: (type: string) => Promise<string>;
 }
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 export const useERPStore = create<ERPState>((set, get) => ({
   customers: [],
