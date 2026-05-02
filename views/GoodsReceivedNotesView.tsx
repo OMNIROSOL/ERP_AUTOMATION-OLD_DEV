@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockGoodsReceivedNotes } from '../mockData';
+import apiService from '../services/apiService';
 import Badge from '../components/shared/Badge';
 import DataTable from '../components/shared/DataTable';
 import {
     Plus, Eye, Edit, FileText, Search,
-    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ChevronDown, ChevronUp, Package, Truck
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ChevronDown, ChevronUp, Package, Truck, Loader2
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -17,9 +17,26 @@ const GoodsReceivedNotesView = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [sortColumn, setSortColumn] = useState<string>('Received date');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    const [dbData, setDbData] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getGoodsReceivedNotes();
+                setDbData(data);
+            } catch (err) {
+                console.error('Failed to load GRNs:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, []);
 
     const filteredData = useMemo(() => {
-        let result = [...mockGoodsReceivedNotes];
+        let result = [...dbData];
 
         if (supplierName) {
             result = result.filter(grn => (grn.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
@@ -28,8 +45,8 @@ const GoodsReceivedNotesView = () => {
         const query = searchQuery.toLowerCase();
         if (query) {
             result = result.filter(grn =>
-                grn.supplier.toLowerCase().includes(query) ||
-                grn.reference.toLowerCase().includes(query)
+                (grn.supplier || '').toLowerCase().includes(query) ||
+                (grn.reference || '').toLowerCase().includes(query)
             );
         }
 
@@ -40,7 +57,7 @@ const GoodsReceivedNotesView = () => {
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [searchQuery, supplierName, sortColumn, sortDirection]);
+    }, [dbData, searchQuery, supplierName, sortColumn, sortDirection]);
 
     const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
     const displayData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -136,7 +153,15 @@ const GoodsReceivedNotesView = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm text-[13px]">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm text-[13px] relative overflow-hidden">
+                {isLoading && (
+                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex items-center justify-center animate-in fade-in duration-300">
+                        <div className="flex flex-col items-center gap-3">
+                            <Loader2 size={32} className="text-indigo-600 animate-spin" />
+                            <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em]">Synchronizing GRNs...</p>
+                        </div>
+                    </div>
+                )}
                 <DataTable
                     data={displayData}
                     columns={columns as any}

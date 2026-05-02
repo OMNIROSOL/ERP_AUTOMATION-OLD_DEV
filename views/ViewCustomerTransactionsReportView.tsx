@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
+import apiService from '../services/apiService';
+
 interface TransactionLine {
     date: string;
     customerName: string;
@@ -21,14 +23,6 @@ interface TransactionLine {
     credit: number;
     currency: string;
 }
-
-const mockTransactionData: TransactionLine[] = [
-    { date: '01.04.2026', customerName: 'UNICORN LOGISTICS ZAMBIA', transactionType: 'Sales Invoice', referenceNo: 'INV-2026-001', description: 'Logistics services for Q1', debit: 25000.00, credit: 0, currency: 'ZMW' },
-    { date: '05.04.2026', customerName: 'UNICORN LOGISTICS ZAMBIA', transactionType: 'Receipt', referenceNo: 'RCT-2026-005', description: 'Partial payment INV-001', debit: 0, credit: 15000.00, currency: 'ZMW' },
-    { date: '10.04.2026', customerName: 'GLOBAL FREIGHT SERVICES', transactionType: 'Sales Invoice', referenceNo: 'INV-2026-012', description: 'Freight handling USD', debit: 4500.00, credit: 0, currency: 'USD' },
-    { date: '12.04.2026', customerName: 'TRANS-AFRICA LOGISTICS', transactionType: 'Credit Note', referenceNo: 'CN-2026-002', description: 'Discount applied', debit: 0, credit: 500.00, currency: 'USD' },
-    { date: '15.04.2026', customerName: 'MACHI AUTO PARTS', transactionType: 'Sales Invoice', referenceNo: 'INV-2026-018', description: 'Replacement parts kit', debit: 12400.00, credit: 0, currency: 'ZMW' }
-];
 
 const ViewCustomerTransactionsReportView: React.FC = () => {
     const { id } = useParams();
@@ -46,11 +40,61 @@ const ViewCustomerTransactionsReportView: React.FC = () => {
     }, [id]);
 
     const [selectedCustomer, setSelectedCustomer] = React.useState<{ name: string, currency: string } | null>(null);
+    const [dbTransactions, setDbTransactions] = React.useState<TransactionLine[]>([]);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const [invoices, receipts] = await Promise.all([
+                    apiService.getInvoices(),
+                    apiService.getReceipts()
+                ]);
+
+                const txs: TransactionLine[] = [];
+
+                invoices.forEach((inv: any) => {
+                    if (inv.status === 'Draft') return;
+                    txs.push({
+                        date: inv.issueDate ? new Date(inv.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                        customerName: inv.customer?.name || inv.customer || 'Unknown',
+                        transactionType: 'Sales Invoice',
+                        referenceNo: inv.reference,
+                        description: inv.description || '',
+                        debit: parseFloat(inv.grandTotal) || 0,
+                        credit: 0,
+                        currency: inv.currency || 'ZMW'
+                    });
+                });
+
+                receipts.forEach((r: any) => {
+                    txs.push({
+                        date: r.date ? new Date(r.date).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                        customerName: r.paidByContact || 'Unknown',
+                        transactionType: 'Receipt',
+                        referenceNo: r.reference,
+                        description: r.description || '',
+                        debit: 0,
+                        credit: parseFloat(r.amount) || 0,
+                        currency: r.currency || 'ZMW'
+                    });
+                });
+
+                setDbTransactions(txs);
+            } catch (err) {
+                console.error('Failed to load transaction data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, []);
 
     const groupedData = useMemo(() => {
         const groups: Record<string, Array<{ name: string, count: number, debit: number, credit: number }>> = {};
         
-        mockTransactionData.forEach(item => {
+        dbTransactions.forEach(item => {
             if (!groups[item.currency]) groups[item.currency] = [];
             
             let customerEntry = groups[item.currency].find(e => e.name === item.customerName);
@@ -65,15 +109,15 @@ const ViewCustomerTransactionsReportView: React.FC = () => {
         });
         
         return groups;
-    }, []);
+    }, [dbTransactions]);
 
     const customerDetails = useMemo(() => {
         if (!selectedCustomer) return [];
-        return mockTransactionData.filter(tx => 
+        return dbTransactions.filter(tx => 
             tx.customerName === selectedCustomer.name && 
             tx.currency === selectedCustomer.currency
         );
-    }, [selectedCustomer]);
+    }, [selectedCustomer, dbTransactions]);
 
     const currencies = useMemo(() => {
         return Object.keys(groupedData).sort((a, b) => {
@@ -87,6 +131,10 @@ const ViewCustomerTransactionsReportView: React.FC = () => {
         if (val === 0) return '—';
         return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
+
+    if (isLoading) {
+        return <div className="p-20 text-center font-bold text-slate-400">LOADING DATABASE TRANSACTIONS...</div>;
+    }
 
     return (
         <div className="min-h-screen bg-slate-50/50 p-8 space-y-8 animate-in fade-in duration-700 font-sans relative">

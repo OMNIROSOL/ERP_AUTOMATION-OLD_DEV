@@ -5,7 +5,6 @@ import {
     ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, Printer, HelpCircle
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getCustomers, mockInvoices, mockSalesQuotes, mockSalesOrders, mockDeliveryNotes, mockReceipts } from '../mockData';
 import { Customer } from '../types';
 import { cn } from '../utils/cn';
 import apiService from '../services/apiService';
@@ -23,6 +22,14 @@ const CustomersView = () => {
     const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
     const [showInactive, setShowInactive] = useState(false);
     const [showEditColumns, setShowEditColumns] = useState(false);
+
+    const [customers, setCustomers] = useState<Customer[]>([]);
+    const [quotes, setQuotes] = useState<any[]>([]);
+    const [orders, setOrders] = useState<any[]>([]);
+    const [invoices, setInvoices] = useState<any[]>([]);
+    const [deliveryNotes, setDeliveryNotes] = useState<any[]>([]);
+    const [receipts, setReceipts] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -46,22 +53,34 @@ const CustomersView = () => {
         localStorage.setItem('is_batch_view_mode', isBatchViewMode.toString());
     }, [isBatchViewMode]);
 
-    const [customers, setCustomers] = useState<Customer[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-
     useEffect(() => {
-        const fetchCustomers = async () => {
+        const fetchData = async () => {
             setIsLoading(true);
             try {
-                const data = await apiService.getCustomers();
-                setCustomers(data);
+                const [custs, qts, ords, invs, dns, rcs] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getQuotes(),
+                    apiService.getOrders(),
+                    apiService.getInvoices(),
+                    apiService.getDeliveryNotes(),
+                    apiService.getReceipts()
+                ]);
+                setCustomers(custs);
+                setQuotes(qts.map((q: any) => ({
+                    ...q,
+                    issueDate: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : ''
+                })));
+                setOrders(ords);
+                setInvoices(invs);
+                setDeliveryNotes(dns);
+                setReceipts(rcs);
             } catch (err) {
-                console.error('Failed to fetch customers:', err);
+                console.error('Failed to fetch data:', err);
             } finally {
                 setIsLoading(false);
             }
         };
-        fetchCustomers();
+        fetchData();
     }, [refreshTrigger]);
 
     const defaultColumns = [
@@ -487,24 +506,31 @@ const CustomersView = () => {
 
                                     if (['receipts', 'salesQuotes', 'salesOrders', 'salesInvoices', 'deliveryNotes', 'payments', 'creditNotes'].includes(col.id)) {
                                         let count = 0;
-                                        if (col.id === 'receipts') count = mockReceipts.filter(r => r.paidByContact === customer.name).length;
+                                        if (col.id === 'receipts') count = receipts.filter(r => r.paidByContact === customer.name || r.customerId === customer.id).length;
                                         if (col.id === 'salesQuotes') {
-                                            count = mockSalesQuotes.filter(q => {
-                                                if (q.customer !== customer.name) return false;
+                                            count = quotes.filter(q => {
+                                                if (q.customerId !== customer.id && q.customer?.name !== customer.name) return false;
                                                 if (q.status === 'Accepted' || q.status === 'Rejected') return false;
+                                                // Parity with SalesQuotesView.tsx: exclude expired active quotes
                                                 if (q.status === 'Active' && q.issueDate && q.expiryDays) {
-                                                    const [d, m, y] = q.issueDate.split('.');
-                                                    const expDate = new Date(`${y}-${m}-${d}`);
-                                                    expDate.setHours(23, 59, 59, 999);
-                                                    expDate.setDate(expDate.getDate() + parseInt(q.expiryDays));
-                                                    if (new Date() > expDate) return false;
+                                                    try {
+                                                        const [d, m, y] = q.issueDate.split('.');
+                                                        if (d && m && y) {
+                                                            const expDate = new Date(`${y}-${m}-${d}`);
+                                                            expDate.setHours(23, 59, 59, 999);
+                                                            expDate.setDate(expDate.getDate() + parseInt(q.expiryDays));
+                                                            if (new Date() > expDate) return false;
+                                                        }
+                                                    } catch (e) {
+                                                        console.error('Date parsing failed for quote:', q.reference, e);
+                                                    }
                                                 }
                                                 return true;
                                             }).length;
                                         }
-                                        if (col.id === 'salesOrders') count = mockSalesOrders.filter(o => o.customer === customer.name && o.status !== 'Invoiced' && o.status !== 'Rejected').length;
-                                        if (col.id === 'salesInvoices') count = mockInvoices.filter(i => i.customer === customer.name && i.status !== 'Delivered').length;
-                                        if (col.id === 'deliveryNotes') count = mockDeliveryNotes.filter(d => d.customer === customer.name && (d.status || 'Pending') === 'Pending').length;
+                                        if (col.id === 'salesOrders') count = orders.filter(o => (o.customerId === customer.id || o.customer?.name === customer.name) && o.status !== 'Invoiced' && o.status !== 'Rejected').length;
+                                        if (col.id === 'salesInvoices') count = invoices.filter(i => (i.customerId === customer.id || i.customer?.name === customer.name) && i.status !== 'Delivered').length;
+                                        if (col.id === 'deliveryNotes') count = deliveryNotes.filter(d => (d.customerId === customer.id || d.customer?.name === customer.name) && (d.status || 'Pending') === 'Pending').length;
 
                                         if (['receipts', 'salesQuotes', 'salesOrders', 'salesInvoices', 'deliveryNotes', 'payments'].includes(col.id) && count > 0) {
                                             const routeMap: Record<string, string> = {

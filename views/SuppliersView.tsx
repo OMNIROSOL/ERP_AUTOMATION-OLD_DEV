@@ -6,7 +6,7 @@ import {
     Building2
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getSuppliers } from '../mockData';
+
 import { Supplier } from '../types';
 import { cn } from '../utils/cn';
 import apiService from '../services/apiService';

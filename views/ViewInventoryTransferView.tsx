@@ -1,12 +1,38 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, ArrowRightLeft, Calendar, MapPin, ClipboardList, AlertCircle } from 'lucide-react';
-import { mockInventoryTransfers } from '../mockData';
+import apiService from '../services/apiService';
 
 const ViewInventoryTransferView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const transfer = mockInventoryTransfers.find(t => t.id === id);
+  const [transfer, setTransfer] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTransfer = async () => {
+      if (!id) return;
+      setIsLoading(true);
+      try {
+        const data = await apiService.getInventoryTransfer(id);
+        setTransfer(data);
+      } catch (err) {
+        console.error('Failed to fetch inventory transfer:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTransfer();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading transfer details...</p>
+      </div>
+    );
+  }
 
   if (!transfer) {
     return (

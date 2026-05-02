@@ -26,8 +26,16 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { getCurrentUser } from '../../mockData';
 import { AppUser } from '../../types';
+
+// TODO: Replace with real auth service
+const getCurrentUserFallback = (): AppUser => ({
+  id: 'admin-1',
+  name: 'Admin User',
+  email: 'admin@omnirosol.com',
+  role: 'Admin',
+  avatar: 'A'
+});
 
 interface SidebarItemProps {
   icon: React.ElementType;
@@ -105,12 +113,13 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, setIsCollapsed }) => {
-  const [currentUser, setCurrentUser] = useState<AppUser>(getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<AppUser>(getCurrentUserFallback());
 
   useEffect(() => {
-    const handleUpdate = () => setCurrentUser(getCurrentUser());
-    window.addEventListener('user_sim_updated', handleUpdate);
-    return () => window.removeEventListener('user_sim_updated', handleUpdate);
+    // Keep for potential future storage-based auth updates
+    const handleUpdate = () => setCurrentUser(getCurrentUserFallback());
+    window.addEventListener('storage', handleUpdate);
+    return () => window.removeEventListener('storage', handleUpdate);
   }, []);
 
   const isAdmin = currentUser.role === 'Admin';
@@ -119,15 +128,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, setIsCollapsed }) => {
   const [roleDef, setRoleDef] = useState<any>(null);
 
   useEffect(() => {
-    import('../../mockData').then(m => {
-      const perms = m.getRoleById(currentUser.roleId || '');
-      // Fallback for default simulation users if no roleId
-      if (!perms) {
-        setRoleDef(m.initialRoleDefinitions.find(r => r.name === currentUser.role));
-      } else {
-        setRoleDef(perms);
-      }
-    });
+    // For now, allow all views for the hardcoded admin
+    setRoleDef({ permissions: [] });
   }, [currentUser]);
 
   const hasViewRight = (screenId: string) => {

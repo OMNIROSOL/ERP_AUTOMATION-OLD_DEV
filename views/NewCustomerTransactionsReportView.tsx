@@ -74,7 +74,7 @@ const NewCustomerTransactionsReportView: React.FC = () => {
       division: formData.division,
       description: formData.description,
       sortBy: formData.sortBy,
-      transactionCount: Math.floor(Math.random() * 200) + 50 // Mock count
+      transactionCount: 0
     };
 
     const saved = localStorage.getItem('customer_transaction_reports');

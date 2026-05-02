@@ -1,17 +1,17 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Eye, Edit, ChevronRight, LayoutGrid, HelpCircle, Search, FileText, ArrowLeft, X, Printer, Copy, Check, ChevronDown, ChevronUp, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import { mockInvoices, getInvoiceTransactions } from '../mockData';
+import apiService from '../services/apiService';
+import { SalesInvoice } from '../types';
 import { cn } from '../utils/cn';
 
 const InvoiceTransactionsView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const invoice = useMemo(() => {
-        return mockInvoices.find(inv => inv.id === id || inv.reference === id);
-    }, [id]);
-
+    const [invoice, setInvoice] = useState<SalesInvoice | null>(null);
+    const [transactions, setTransactions] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -53,10 +53,23 @@ const InvoiceTransactionsView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const transactions = useMemo(() => {
-        if (!invoice) return [];
-        return getInvoiceTransactions(invoice.reference || invoice.id);
-    }, [invoice]);
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const invData = await apiService.getInvoice(id);
+                setInvoice(invData);
+                const transData = await apiService.getInvoiceTransactions(invData.reference || invData.id);
+                setTransactions(transData);
+            } catch (err) {
+                console.error('Failed to fetch invoice transactions:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
 
     const filteredTransactions = useMemo(() => {
         return transactions.filter(t =>
@@ -64,6 +77,15 @@ const InvoiceTransactionsView = () => {
             t.description.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [transactions, searchQuery]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading transactions...</p>
+            </div>
+        );
+    }
 
     const handleBatchCopy = () => {
         const selectedTransactions = filteredTransactions.filter(t => selectedIds.includes(t.id));

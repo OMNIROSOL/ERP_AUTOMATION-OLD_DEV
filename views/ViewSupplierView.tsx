@@ -1,16 +1,37 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Eye, Edit, ChevronRight, LayoutGrid, Printer, FileText, Mail, Copy, ChevronLeft, ChevronsLeft, ChevronsRight, FolderOpen, Building2, ChevronDown } from 'lucide-react';
-import { getSuppliers } from '../mockData';
+import apiService from '../services/apiService';
+import { Supplier } from '../types';
 
 const ViewSupplierView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const allSuppliers = useMemo(() => getSuppliers(), []);
-
+    const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+    const [supplier, setSupplier] = useState<Supplier | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [suppliers, currentSupplier] = await Promise.all([
+                    apiService.getSuppliers(),
+                    id ? apiService.getSupplier(id) : Promise.resolve(null)
+                ]);
+                setAllSuppliers(suppliers);
+                setSupplier(currentSupplier);
+            } catch (err) {
+                console.error('Failed to fetch supplier details:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -23,7 +44,7 @@ const ViewSupplierView = () => {
     }, []);
 
     const supplierIndex = useMemo(() => {
-        return allSuppliers.findIndex(s => s.id === id || s.code === id);
+        return allSuppliers.findIndex(s => s.id === id);
     }, [id, allSuppliers]);
 
     const handleNext = () => {
@@ -59,9 +80,14 @@ const ViewSupplierView = () => {
         </button>
     );
 
-    const supplier = useMemo(() => {
-        return allSuppliers.find(s => s.id === id) || allSuppliers.find(s => s.code === id);
-    }, [id, allSuppliers]);
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading supplier profile...</p>
+            </div>
+        );
+    }
 
     if (!supplier) {
         return <div className="p-8 text-center text-gray-500">Supplier not found.</div>;

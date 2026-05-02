@@ -1,13 +1,6 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  mockSalesQuotes, 
-  mockSalesOrders, 
-  mockInvoices, 
-  mockInventory,
-  mockDeliveryNotes
-} from '../mockData';
-import { SalesQuote, SalesOrder, Invoice, Transaction } from '../types';
+import apiService from '../services/apiService';
+import { SalesQuote, SalesOrder, Invoice, InventoryItem } from '../types';
 
 import { 
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, 
@@ -20,32 +13,27 @@ const COLORS = ['#6366f1', '#8b5cf6', '#d946ef', '#ec4899', '#f472b6', '#3b82f6'
 const RoseSector = (props: any) => {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill, payload, maxRevenue } = props;
   
-  // Calculate specific radius for this product based on revenue
   const safeMax = maxRevenue || 1;
   const radiusMultiplier = payload.revenue / safeMax;
   const actualOuterRadius = innerRadius + (outerRadius - innerRadius) * radiusMultiplier;
 
   return (
     <g>
-      {/* Background layer */}
       <path
         d={`M ${cx},${cy} L ${cx + (actualOuterRadius) * Math.cos(-startAngle * Math.PI / 180)},${cy + (actualOuterRadius) * Math.sin(-startAngle * Math.PI / 180)} A ${actualOuterRadius},${actualOuterRadius} 0 0,0 ${cx + (actualOuterRadius) * Math.cos(-endAngle * Math.PI / 180)},${cy + (actualOuterRadius) * Math.sin(-endAngle * Math.PI / 180)} Z`}
         fill={fill}
         fillOpacity={0.1}
       />
-      {/* Mid layer */}
       <path
         d={`M ${cx},${cy} L ${cx + (actualOuterRadius * 0.7) * Math.cos(-startAngle * Math.PI / 180)},${cy + (actualOuterRadius * 0.7) * Math.sin(-startAngle * Math.PI / 180)} A ${actualOuterRadius * 0.7},${actualOuterRadius * 0.7} 0 0,0 ${cx + (actualOuterRadius * 0.7) * Math.cos(-endAngle * Math.PI / 180)},${cy + (actualOuterRadius * 0.7) * Math.sin(-endAngle * Math.PI / 180)} Z`}
         fill={fill}
         fillOpacity={0.3}
       />
-      {/* Top layer (Actual revenue radius) */}
       <path
         d={`M ${cx},${cy} L ${cx + (actualOuterRadius * 0.4) * Math.cos(-startAngle * Math.PI / 180)},${cy + (actualOuterRadius * 0.4) * Math.sin(-startAngle * Math.PI / 180)} A ${actualOuterRadius * 0.4},${actualOuterRadius * 0.4} 0 0,0 ${cx + (actualOuterRadius * 0.4) * Math.cos(-endAngle * Math.PI / 180)},${cy + (actualOuterRadius * 0.4) * Math.sin(-endAngle * Math.PI / 180)} Z`}
         fill={fill}
         fillOpacity={0.8}
       />
-      {/* Outline for the whole slice */}
       <path
         d={`M ${cx},${cy} L ${cx + (actualOuterRadius) * Math.cos(-startAngle * Math.PI / 180)},${cy + (actualOuterRadius) * Math.sin(-startAngle * Math.PI / 180)} A ${actualOuterRadius},${actualOuterRadius} 0 0,0 ${cx + (actualOuterRadius) * Math.cos(-endAngle * Math.PI / 180)},${cy + (actualOuterRadius) * Math.sin(-endAngle * Math.PI / 180)} Z`}
         fill="none"
@@ -59,14 +47,46 @@ const RoseSector = (props: any) => {
 
 const SalesDashboard: React.FC = () => {
   const [filterType, setFilterType] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('monthly');
-  const [selectedDate, setSelectedDate] = useState('2026-03'); 
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }); 
   const [isYearPickerOpen, setIsYearPickerOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Sync date format
+  const [dbInvoices, setDbInvoices] = useState<any[]>([]);
+  const [dbOrders, setDbOrders] = useState<any[]>([]);
+  const [dbQuotes, setDbQuotes] = useState<any[]>([]);
+  const [dbDeliveries, setDbDeliveries] = useState<any[]>([]);
+  const [dbItems, setDbItems] = useState<any[]>([]);
+
   useEffect(() => {
-    // Set sensible defaults when switching filter types
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [inv, ord, quo, del, itm] = await Promise.all([
+          apiService.getInvoices(),
+          apiService.getOrders(),
+          apiService.getQuotes(),
+          apiService.getDeliveryNotes(),
+          apiService.getItems()
+        ]);
+        setDbInvoices(inv);
+        setDbOrders(ord);
+        setDbQuotes(quo);
+        setDbDeliveries(del);
+        setDbItems(itm);
+      } catch (err) {
+        console.error('Dashboard fetch failed:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  useEffect(() => {
     if (filterType === 'daily') {
-      // Ensure ISO date format (YYYY-MM-DD)
       if (!/\d{4}-\d{2}-\d{2}/.test(selectedDate)) {
         const today = new Date();
         const iso = today.toISOString().split('T')[0];
@@ -91,6 +111,8 @@ const SalesDashboard: React.FC = () => {
 
   const parseDate = (dateStr: string) => {
     if (!dateStr) return new Date(0);
+    // Handle database ISO dates or legacy dotted dates
+    if (dateStr.includes('T')) return new Date(dateStr);
     const parts = dateStr.includes('.') ? dateStr.split('.') : dateStr.split('-');
     if (parts.length === 3) {
       return parts[0].length === 4 
@@ -107,24 +129,25 @@ const SalesDashboard: React.FC = () => {
     return Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   };
 
-  const todayStr = '26.03.2026';
-  const today = parseDate(todayStr);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const today = new Date();
 
   const isDateInFilter = (dateStr: string) => {
     if (!dateStr) return false;
     const date = parseDate(dateStr);
     
-    if (filterType === 'daily') return dateStr.includes(selectedDate.split('-').reverse().join('.'));
+    if (filterType === 'daily') {
+        const selectedISO = selectedDate; // YYYY-MM-DD
+        return date.toISOString().split('T')[0] === selectedISO;
+    }
     if (filterType === 'monthly') {
         if (selectedDate === '3-months') {
-            const endOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
             const startOfPastMonth = new Date(today.getFullYear(), today.getMonth() - 3, 1);
-            return date >= startOfPastMonth && date <= endOfPrevMonth;
+            return date >= startOfPastMonth && date <= today;
         }
         if (selectedDate === '6-months') {
-            const endOfPrevMonth = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
             const startOfPastMonth = new Date(today.getFullYear(), today.getMonth() - 6, 1);
-            return date >= startOfPastMonth && date <= endOfPrevMonth;
+            return date >= startOfPastMonth && date <= today;
         }
         return date.getFullYear() === parseInt(selectedDate.split('-')[0]) && (date.getMonth() + 1) === parseInt(selectedDate.split('-')[1]);
     }
@@ -136,40 +159,39 @@ const SalesDashboard: React.FC = () => {
     return true;
   };
 
-  // Filtered Datasets
   const filteredInvoices = useMemo(() => {
-    return mockInvoices.filter(inv => isDateInFilter(inv.issueDate));
-  }, [filterType, selectedDate, today]);
+    return dbInvoices.filter(inv => isDateInFilter(inv.createdAt || inv.issueDate || inv.date));
+  }, [dbInvoices, filterType, selectedDate]);
 
   const filteredOrders = useMemo(() => {
-    return mockSalesOrders.filter(o => isDateInFilter(o.orderDate));
-  }, [filterType, selectedDate, today]);
+    return dbOrders.filter(o => isDateInFilter(o.orderDate));
+  }, [dbOrders, filterType, selectedDate]);
 
   const filteredQuotes = useMemo(() => {
-    return mockSalesQuotes.filter(q => isDateInFilter(q.issueDate || q.timestamp?.split(' ')[0] || ''));
-  }, [filterType, selectedDate, today]);
+    return dbQuotes.filter(q => isDateInFilter(q.issueDate || q.createdAt));
+  }, [dbQuotes, filterType, selectedDate]);
 
   const filteredDeliveries = useMemo(() => {
-    return mockDeliveryNotes.filter(d => isDateInFilter(d.deliveryDate || d.timestamp?.split(' ')[0] || ''));
-  }, [filterType, selectedDate, today]);
+    return dbDeliveries.filter(d => isDateInFilter(d.deliveryDate || d.timestamp));
+  }, [dbDeliveries, filterType, selectedDate]);
 
-  // --- ANALYTICS LOGIC ---
   const lowStock = useMemo(() => 
-    Object.entries(mockInventory)
-      .filter(([_, data]) => data.stock < 15)
-      .map(([name, data]) => ({ name, stock: data.stock })), []);
+    dbItems
+      .filter(item => (item.qtyOnHand || 0) < 15)
+      .map(item => ({ name: item.itemName, stock: item.qtyOnHand || 0 })), [dbItems]);
 
   const overduePayments = useMemo(() => 
-    mockInvoices.filter(inv => {
-      const dueDate = parseDate(inv.dueDate || '');
-      return inv.balanceDue > 0 && dueDate < today;
-    }), [today]);
+    dbInvoices.filter(inv => {
+      if (!inv.dueDate) return false;
+      const dueDate = parseDate(inv.dueDate);
+      return (inv.balanceDue || 0) > 0 && dueDate < today;
+    }), [dbInvoices, today]);
 
   const productIntelligence = useMemo(() => {
     const products: Record<string, { revenue: number, sales: number }> = {};
     filteredInvoices.forEach(inv => {
-      inv.items?.forEach(item => {
-        const name = item.item;
+      inv.items?.forEach((item: any) => {
+        const name = typeof item.item === 'string' ? item.item : (item.item?.itemName || 'Unknown Item');
         if (!products[name]) products[name] = { revenue: 0, sales: 0 };
         const qty = parseFloat(item.qty) || 0;
         const price = parseFloat(item.unitPrice) || 0;
@@ -185,21 +207,21 @@ const SalesDashboard: React.FC = () => {
   }, [filteredInvoices]);
 
   const metrics = useMemo(() => {
-    const dailyTotal = mockInvoices
-        .filter(inv => inv.issueDate === todayStr)
-        .reduce((s, i) => s + (i.invoiceAmount || 0), 0);
-    const totalRev = filteredInvoices.reduce((s, i) => s + (i.invoiceAmount || 0), 0);
+    const dailyTotal = dbInvoices
+        .filter(inv => (inv.createdAt || inv.issueDate || inv.date)?.startsWith(todayStr))
+        .reduce((s, i) => s + (parseFloat(i.grandTotal || i.invoiceAmount || i.amount) || 0), 0);
+    const totalRev = filteredInvoices.reduce((s, i) => s + (parseFloat(i.grandTotal || i.invoiceAmount || i.amount) || 0), 0);
     return {
-      totalSalesToday: dailyTotal || 3209, // Fallback to reference if mock date matches
+      totalSalesToday: dailyTotal,
       totalRevenue: totalRev,
-      pendingQuotes: mockSalesQuotes.filter(q => q.status === 'Active').length,
-      confirmedOrders: mockSalesOrders.filter(o => o.status === 'Processed').length,
+      pendingQuotes: dbQuotes.filter(q => q.status === 'Active' || q.status === 'Pending Approval').length,
+      confirmedOrders: dbOrders.filter(o => o.status === 'Ordered' || o.status === 'Invoiced' || o.status === 'Processed' || o.status === 'Completed').length,
       totalQuotation: filteredQuotes.length,
       totalOrder: filteredOrders.length,
       totalInvoice: filteredInvoices.length,
       totalDelivery: filteredDeliveries.length
     };
-  }, [filteredInvoices, filteredOrders, filteredQuotes, filteredDeliveries]);
+  }, [dbInvoices, dbQuotes, dbOrders, filteredInvoices, filteredOrders, filteredQuotes, filteredDeliveries]);
 
   const kpis = [
       { label: 'TOTAL SALES', val: `$${metrics.totalSalesToday.toLocaleString()}`, dot: 'bg-blue-600', badge: '+12%', badgeColor: 'text-green-600 bg-green-50' },
@@ -372,7 +394,7 @@ const SalesDashboard: React.FC = () => {
                   </div>
                   <div className="h-72">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={filteredInvoices.slice(0, 15).map((n, i) => ({ n: i, v: n.invoiceAmount }))}>
+                      <LineChart data={filteredInvoices.slice(0, 15).map((n, i) => ({ n: i, v: parseFloat(n.grandTotal || n.invoiceAmount || n.amount || 0) }))}>
                         <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="n" hide />
                         <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 10, fontWeight: 700}} />
@@ -465,7 +487,7 @@ const SalesDashboard: React.FC = () => {
               <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
                   <h3 className="text-xs font-black text-slate-900 uppercase tracking-[0.2em] mb-8">Pending approvals</h3>
                   <div className="space-y-4 text-center">
-                    {mockSalesQuotes.filter(q => q.status === 'Active').slice(0, 5).map((q, i) => (
+                    {dbQuotes.filter(q => q.status === 'Active').slice(0, 5).map((q, i) => (
                         <div key={i} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 text-left hover:shadow-md transition-all">
                             <div className="flex justify-between items-center mb-2">
                                 <p className="text-[9px] font-black text-indigo-400 uppercase tracking-widest">REF: {q.reference}</p>

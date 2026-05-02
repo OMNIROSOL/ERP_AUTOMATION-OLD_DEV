@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
-import { getDeliveryNotes } from '../mockData';
+import apiService from '../services/apiService';
 
 const ViewDeliveryNoteView = () => {
     const { id } = useParams();
@@ -9,13 +9,33 @@ const ViewDeliveryNoteView = () => {
     const location = useLocation();
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
+    const [note, setNote] = useState<any>(null);
+    const [allNotes, setAllNotes] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     const queryParams = new URLSearchParams(location.search);
     const filterItem = queryParams.get('item');
 
-    const allNotes = getDeliveryNotes();
-    const noteIndex = allNotes.findIndex((n: any) => n.id === id || n.noteId === id);
-    const note = allNotes[noteIndex] as any;
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [specificNote, notesList] = await Promise.all([
+                    apiService.getDeliveryNote(id!),
+                    apiService.getDeliveryNotes()
+                ]);
+                setNote(specificNote);
+                setAllNotes(notesList);
+            } catch (err) {
+                console.error('Failed to fetch delivery note:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
+
+    const noteIndex = useMemo(() => allNotes.findIndex((n: any) => n.id === id || n.noteId === id), [allNotes, id]);
 
     const displayItems = useMemo(() => {
         if (!note?.items) return [];
@@ -45,6 +65,15 @@ const ViewDeliveryNoteView = () => {
     };
     const handleFirst = () => navigate(`/delivery-notes/view/${allNotes[0].id}${location.search}`);
     const handleLast = () => navigate(`/delivery-notes/view/${allNotes[allNotes.length - 1].id}${location.search}`);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading delivery note...</p>
+            </div>
+        );
+    }
 
     if (!note) {
         return (

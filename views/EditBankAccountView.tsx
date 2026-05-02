@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { mockAccounts } from '../mockData';
+import apiService from '../services/apiService';
+import { BankAccount } from '../types';
 
 const EditBankAccountView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
+    const [isLoading, setIsLoading] = useState(true);
     const [name, setName] = useState('');
     const [code, setCode] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -18,29 +20,53 @@ const EditBankAccountView = () => {
     const [isInactive, setIsInactive] = useState(false);
 
     useEffect(() => {
-        if (id) {
-            const account = mockAccounts.find(a => a.id === id);
-            if (account) {
-                setName(account.name);
-                setCode(account.code || '');
+        const fetchAccount = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const account = await apiService.getBankAccounts().then(accounts => accounts.find((a: any) => a.id === id));
+                if (account) {
+                    setName(account.name);
+                    setCode(account.code || '');
+                    setCurrency(account.currency || 'ZMW');
+                    setDivision(account.division || '');
+                    setIsInactive(!account.isPaymentAccount);
+                    // Add other fields if available in the model
+                }
+            } catch (err) {
+                console.error('Failed to fetch bank account:', err);
+            } finally {
+                setIsLoading(false);
             }
-        }
+        };
+        fetchAccount();
     }, [id]);
 
-    const handleUpdate = () => {
-        if (id) {
-            const index = mockAccounts.findIndex(a => a.id === id);
-            if (index !== -1) {
-                mockAccounts[index] = {
-                    ...mockAccounts[index],
-                    name: name.toUpperCase(),
-                    code,
-                    isPaymentAccount: !isInactive
-                };
-            }
+    const handleUpdate = async () => {
+        if (!id) return;
+        try {
+            await apiService.updateBankAccount(id, {
+                name: name.toUpperCase(),
+                code,
+                currency,
+                division,
+                isPaymentAccount: !isInactive
+            });
+            navigate('/account');
+        } catch (err) {
+            console.error('Failed to update bank account:', err);
+            alert('Failed to update bank account in database');
         }
-        navigate('/account');
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading account details...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-[#f9fafb] min-h-full pb-20 font-sans">

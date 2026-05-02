@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronRight, FileText, ArrowLeft, HelpCircle, Search, LayoutGrid, X, Check, Printer, Copy, MoreHorizontal, ChevronDown, ChevronUp, ChevronsLeft, ChevronsRight, Eye, Edit, Trash2 } from 'lucide-react';
-import { mockInvoices, mockInventory, mockInventoryItems } from '../mockData';
+import apiService from '../services/apiService';
+import { SalesInvoice, InventoryItem } from '../types';
 import { cn } from '../utils/cn';
 import Badge from '../components/shared/Badge';
 
@@ -9,10 +10,9 @@ const InvoiceCostOfSalesView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const invoice = useMemo(() => {
-        return mockInvoices.find(inv => inv.id === id || inv.reference === id);
-    }, [id]);
-
+    const [invoice, setInvoice] = useState<SalesInvoice | null>(null);
+    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -29,7 +29,6 @@ const InvoiceCostOfSalesView = () => {
         'Line Cost': true
     };
 
-    // Column Visibility State - Loaded from localStorage
     const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
         const saved = localStorage.getItem('invoice_cogs_column_visibility_settings');
         return saved ? JSON.parse(saved) : defaultVisibility;
@@ -53,13 +52,35 @@ const InvoiceCostOfSalesView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const [invData, items] = await Promise.all([
+                    apiService.getInvoice(id),
+                    apiService.getItems()
+                ]);
+                setInvoice(invData);
+                setInventoryItems(items);
+            } catch (err) {
+                console.error('Failed to fetch invoice COGS data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
+
     const costOfSalesData = useMemo(() => {
         if (!invoice || !invoice.items) return [];
 
         return invoice.items.map(item => {
-            const inventoryItem = mockInventory[item.item];
-            const purchasePrice = inventoryItem ? inventoryItem.purchasePrice : 0;
-            const qty = parseFloat(item.qty) || 0;
+            const inventoryItem = inventoryItems.find(ii => 
+                ii.itemName === item.item || ii.itemCode === item.item
+            );
+            const purchasePrice = inventoryItem ? (inventoryItem.avgCost || 0) : 0;
+            const qty = parseFloat(item.qty as any) || 0;
             const totalCost = qty * purchasePrice;
 
             return {
@@ -68,10 +89,11 @@ const InvoiceCostOfSalesView = () => {
                 description: item.description,
                 qty: qty,
                 purchasePrice: purchasePrice,
-                totalCost: totalCost
+                totalCost: totalCost,
+                inventoryItemId: inventoryItem?.id
             };
         });
-    }, [invoice]);
+    }, [invoice, inventoryItems]);
 
     const filteredData = useMemo(() => {
         const query = searchQuery.toLowerCase();
@@ -80,6 +102,15 @@ const InvoiceCostOfSalesView = () => {
             (line.description && line.description.toLowerCase().includes(query))
         );
     }, [costOfSalesData, searchQuery]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading COGS data...</p>
+            </div>
+        );
+    }
 
     const grandTotalCost = useMemo(() => {
         return filteredData.reduce((sum, line) => sum + line.totalCost, 0);
@@ -262,24 +293,16 @@ const InvoiceCostOfSalesView = () => {
                                             {visibleColumns['Sold Qty'] && <td className="px-4 py-3 border-r border-slate-100 text-right tabular-nums font-bold text-slate-900">{line.qty.toLocaleString()}</td>}
                                             {visibleColumns['Unit Price'] && (
                                                 <td className="px-4 py-3 border-r border-slate-100 text-right tabular-nums font-medium text-slate-500">
-                                                    {(() => {
-                                                        const cleanItem = line.item.trim().toLowerCase();
-                                                        const invItem = mockInventoryItems.find(i => 
-                                                            i.itemName.trim().toLowerCase() === cleanItem || 
-                                                            i.itemCode?.trim().toLowerCase() === cleanItem
-                                                        );
-                                                        
-                                                        return invItem ? (
-                                                            <Link 
-                                                                to={`/inventory-items/edit/${invItem.id}`}
-                                                                className="text-blue-600 font-bold hover:underline transition-all"
-                                                            >
-                                                                {line.purchasePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                            </Link>
-                                                        ) : (
-                                                            <span>{line.purchasePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                                        );
-                                                    })()}
+                                                    {line.inventoryItemId ? (
+                                                        <Link 
+                                                            to={`/inventory-items/edit/${line.inventoryItemId}`}
+                                                            className="text-blue-600 font-bold hover:underline transition-all"
+                                                        >
+                                                            {line.purchasePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                        </Link>
+                                                    ) : (
+                                                        <span>{line.purchasePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                    )}
                                                 </td>
                                             )}
                                             {visibleColumns['Line Cost'] && (

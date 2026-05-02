@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockAccounts } from '../mockData';
+import apiService from '../services/apiService';
 import { Account } from '../types';
 import DataTable from '../components/shared/DataTable';
 import Button from '../components/shared/Button';
@@ -27,6 +27,9 @@ const AccountsView = () => {
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
     const batchOpsRef = React.useRef<HTMLDivElement>(null);
 
+    const [accounts, setAccounts] = useState<Account[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
     React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (batchOpsRef.current && !batchOpsRef.current.contains(event.target as Node)) {
@@ -37,8 +40,23 @@ const AccountsView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    React.useEffect(() => {
+        const fetchAccounts = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getAccounts();
+                setAccounts(data);
+            } catch (err) {
+                console.error('Failed to fetch accounts:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchAccounts();
+    }, []);
+
     const filteredAccounts = useMemo(() => {
-        let result = [...mockAccounts];
+        let result = [...accounts];
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             result = result.filter(a => 

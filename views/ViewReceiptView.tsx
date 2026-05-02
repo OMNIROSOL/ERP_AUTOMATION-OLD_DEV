@@ -1,11 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import apiService from '../services/apiService';
+import { Receipt as ReceiptType } from '../types';
 import {
     FolderOpen, ChevronRight, Edit, Printer, FileText, Mail,
     ChevronsLeft, ChevronLeft, ChevronRight as ChevronRightIcon,
     ChevronsRight, ChevronDown
 } from 'lucide-react';
-import { mockReceipts } from '../mockData';
 
 const ViewReceiptView = () => {
     const { id } = useParams();
@@ -14,8 +15,30 @@ const ViewReceiptView = () => {
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const receiptIndex = mockReceipts.findIndex(r => r.id === id || r.reference === id);
-    const receipt = mockReceipts[receiptIndex];
+    const [receipt, setReceipt] = useState<ReceiptType | null>(null);
+    const [allReceipts, setAllReceipts] = useState<ReceiptType[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const receiptIndex = allReceipts.findIndex(r => r.id === id || r.reference === id);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [receiptData, receipts] = await Promise.all([
+                    apiService.getReceipt(id!),
+                    apiService.getReceipts()
+                ]);
+                setReceipt(receiptData);
+                setAllReceipts(receipts);
+            } catch (err) {
+                console.error('Failed to fetch receipt:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        if (id) fetchData();
+    }, [id]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -28,21 +51,30 @@ const ViewReceiptView = () => {
     }, []);
 
     const handleNext = () => {
-        if (receiptIndex < mockReceipts.length - 1) {
-            navigate(`/receipts/view/${mockReceipts[receiptIndex + 1].id}`);
+        if (receiptIndex < allReceipts.length - 1) {
+            navigate(`/receipts/view/${allReceipts[receiptIndex + 1].id}`);
         }
     };
     const handlePrev = () => {
         if (receiptIndex > 0) {
-            navigate(`/receipts/view/${mockReceipts[receiptIndex - 1].id}`);
+            navigate(`/receipts/view/${allReceipts[receiptIndex - 1].id}`);
         }
     };
-    const handleFirst = () => navigate(`/receipts/view/${mockReceipts[0].id}`);
-    const handleLast = () => navigate(`/receipts/view/${mockReceipts[mockReceipts.length - 1].id}`);
+    const handleFirst = () => navigate(`/receipts/view/${allReceipts[0].id}`);
+    const handleLast = () => navigate(`/receipts/view/${allReceipts[allReceipts.length - 1].id}`);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing receipt view...</p>
+            </div>
+        );
+    }
 
     if (!receipt) {
         return (
-            <div className="p-8 text-center text-gray-500">
+            <div className="p-8 text-center text-gray-500 font-black uppercase tracking-widest">
                 <p>Receipt not found.</p>
                 <button onClick={() => navigate('/receipts')} className="mt-4 text-blue-500 hover:underline">Return to list</button>
             </div>
@@ -136,10 +168,10 @@ const ViewReceiptView = () => {
                         <button onClick={handleFirst} disabled={receiptIndex === 0} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 border-r border-slate-200 disabled:opacity-20 transition-all"><ChevronsLeft size={16} /></button>
                         <button onClick={handlePrev} disabled={receiptIndex === 0} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 disabled:opacity-20 transition-all"><ChevronLeft size={16} /></button>
                     </div>
-                    <span className="text-[11px] font-bold text-slate-400 tracking-widest">{receiptIndex + 1} / {mockReceipts.length}</span>
+                    <span className="text-[11px] font-bold text-slate-400 tracking-widest">{receiptIndex + 1} / {allReceipts.length}</span>
                     <div className="flex bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-                        <button onClick={handleNext} disabled={receiptIndex === mockReceipts.length - 1} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 border-r border-slate-200 disabled:opacity-20 transition-all"><ChevronRightIcon size={16} /></button>
-                        <button onClick={handleLast} disabled={receiptIndex === mockReceipts.length - 1} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 disabled:opacity-20 transition-all"><ChevronsRight size={16} /></button>
+                        <button onClick={handleNext} disabled={receiptIndex === allReceipts.length - 1} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 border-r border-slate-200 disabled:opacity-20 transition-all"><ChevronRightIcon size={16} /></button>
+                        <button onClick={handleLast} disabled={receiptIndex === allReceipts.length - 1} className="px-3.5 py-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 disabled:opacity-20 transition-all"><ChevronsRight size={16} /></button>
                     </div>
                 </div>
             </div>

@@ -1,12 +1,38 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, FileX, Calendar, Package, Trash2, AlertCircle, TrendingDown } from 'lucide-react';
-import { mockInventoryWriteOffs } from '../mockData';
+import apiService from '../services/apiService';
 
 const ViewInventoryWriteOffView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const writeOff = mockInventoryWriteOffs.find(wo => wo.id === id);
+  const [writeOff, setWriteOff] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchWriteOff = async () => {
+      if (!id) return;
+      setIsLoading(true);
+      try {
+        const data = await apiService.getInventoryWriteOff(id);
+        setWriteOff(data);
+      } catch (err) {
+        console.error('Failed to fetch inventory write-off:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchWriteOff();
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading write-off details...</p>
+      </div>
+    );
+  }
 
   if (!writeOff) {
     return (

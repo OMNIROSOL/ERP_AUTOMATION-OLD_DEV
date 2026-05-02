@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { mockPurchaseOrders, mockPurchaseInvoices, savePurchaseOrders, savePurchaseInvoices, getCurrentUser } from '../mockData';
+import apiService from '../services/apiService';
 import { PurchaseOrder, ScreenPermission } from '../types';
 import DataTable from '../components/shared/DataTable';
 import Badge from '../components/shared/Badge';
@@ -106,44 +106,44 @@ const PurchaseOrdersView = () => {
         };
     }, []);
 
-    const handleStatusChange = (id: string, newStatus: string, shouldNavigate: boolean = false) => {
-        const orders = [...mockPurchaseOrders];
-        const index = orders.findIndex(o => o.id === id);
-        if (index !== -1) {
-            const order = orders[index];
-            const finalStatus = shouldNavigate ? 'Invoiced' : newStatus;
-            (orders[index] as any).status = finalStatus;
+    const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-            if (shouldNavigate) {
-                const newInvoice = {
-                    id: `PINV-${Date.now()}`,
-                    issueDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                    dueDate: '30 Days',
-                    reference: order.reference,
-                    purchaseOrder: order.reference,
-                    supplier: order.supplier,
-                    description: order.description,
-                    currency: order.currency,
-                    invoiceAmount: order.amount as number,
-                    balanceDue: order.amount as number,
-                    status: 'Coming due',
-                    items: order.items || [],
-                    timestamp: new Date().toISOString()
-                };
-                mockPurchaseInvoices.unshift(newInvoice as any);
-                savePurchaseInvoices(mockPurchaseInvoices);
-                savePurchaseOrders(orders);
-                setRefreshTrigger(prev => prev + 1);
-                navigate('/purchase-invoices');
-            } else {
-                savePurchaseOrders(orders);
-                setRefreshTrigger(prev => prev + 1);
+    useEffect(() => {
+        const fetchOrders = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getPurchaseOrders();
+                const mapped = data.map((o: any) => ({
+                    ...o,
+                    supplier: o.supplier?.name || o.supplier || 'Unknown',
+                    currency: o.currency || o.supplier?.currency?.split(' - ')[0] || 'ZMW',
+                    orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    amount: parseFloat(o.amount) || 0
+                }));
+                setPurchaseOrders(mapped);
+            } catch (err) {
+                console.error('Failed to fetch purchase orders:', err);
+            } finally {
+                setIsLoading(false);
             }
+        };
+        fetchOrders();
+    }, [refreshTrigger]);
+
+    const handleStatusChange = async (id: string, newStatus: string, shouldNavigate: boolean = false) => {
+        try {
+            // await apiService.updatePurchaseOrderStatus(id, newStatus);
+            alert('Status update implemented in API, but not yet fully linked in UI for invoice conversion.');
+            setRefreshTrigger(prev => prev + 1);
+            if (shouldNavigate) navigate('/purchase-invoices');
+        } catch (err) {
+            console.error('Failed to update status:', err);
         }
     };
 
     const filteredData = useMemo(() => {
-        let result = [...mockPurchaseOrders].filter(o => (o as any).status !== 'Invoiced' && (o as any).status !== 'Rejected');
+        let result = [...purchaseOrders].filter(o => (o as any).status !== 'Invoiced' && (o as any).status !== 'Rejected');
 
         if (supplierName) {
             result = result.filter(o => (o.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
@@ -331,11 +331,46 @@ const PurchaseOrdersView = () => {
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
                 <DataTable
-                    data={displayData}
+                    data={isLoading ? [] : displayData}
                     columns={columns.filter(c => visibleColumns[c.id]) as any}
                     tableClassName="min-w-[1000px]"
                     hideDefaultPagination={true}
                     disableInternalScroll={true}
+                    emptyState={
+                        isLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching purchase orders...</p>
+                            </div>
+                        ) : undefined
+                    }
+                    tableFooter={
+                        <tr className="bg-slate-50/50 font-black">
+                            {columns.filter(c => visibleColumns[c.id]).map(col => {
+                                if (col.id === 'Amount') {
+                                    const totalsByCurrency: Record<string, number> = {};
+                                    filteredData.forEach(o => {
+                                        const cur = o.currency || 'ZMW';
+                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (o.amount || 0);
+                                    });
+                                    const activeCurs = Object.keys(totalsByCurrency);
+                                    return (
+                                        <td key={col.id} className="px-6 py-4 text-right">
+                                            <div className="flex flex-col gap-1">
+                                                {activeCurs.map(cur => (
+                                                    <div key={cur} className="flex items-center justify-end gap-1.5">
+                                                        <span className="text-[9px] text-slate-400 uppercase tracking-tight">{cur}</span>
+                                                        <span className="text-[12px] underline decoration-slate-200 underline-offset-4">{totalsByCurrency[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </td>
+                                    );
+                                }
+                                return <td key={col.id} className="px-6 py-4"></td>;
+                            })}
+                        </tr>
+                    }
                 />
             </div>
 
@@ -393,10 +428,10 @@ const PurchaseOrdersView = () => {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <button 
+                    <button
                         onClick={() => {
                             const header = "Order Date\tReference\tSupplier\tDescription\tAmount\tStatus";
-                            const rows = filteredData.map(o => 
+                            const rows = filteredData.map(o =>
                                 `${o.orderDate}\t${o.reference}\t${o.supplier}\t${o.description || ''}\t${o.amount}\t${o.status}`
                             ).join('\n');
                             navigator.clipboard.writeText(`${header}\n${rows}`);
@@ -407,7 +442,7 @@ const PurchaseOrdersView = () => {
                         <Copy size={16} className="text-slate-400" /> EXPORT DATA
                     </button>
                     <div className="relative group" ref={batchOpsRef}>
-                        <button 
+                        <button
                             onClick={() => setIsBatchOpsOpen(!isBatchOpsOpen)}
                             className="px-10 py-3.5 bg-indigo-600 text-white rounded-[20px] text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-4"
                         >
@@ -415,13 +450,13 @@ const PurchaseOrdersView = () => {
                         </button>
                         {isBatchOpsOpen && (
                             <div className="absolute bottom-full right-0 mb-4 w-56 bg-white border border-gray-100 shadow-2xl rounded-2xl py-3 z-[100] animate-in slide-in-from-bottom-2 duration-200 overflow-hidden">
-                                <button 
-                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsBatchOpsOpen(false); }} 
+                                <button
+                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsBatchOpsOpen(false); }}
                                     className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                 >
                                     {isSelectionMode ? 'Disable Batch Mode' : 'Enable Batch Actions'}
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => { navigate('/purchase-orders/edit-columns'); setIsBatchOpsOpen(false); }}
                                     className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                 >

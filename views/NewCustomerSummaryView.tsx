@@ -76,7 +76,7 @@ const NewCustomerSummaryView: React.FC = () => {
       division: formData.division,
       description: formData.description,
       sortBy: formData.sortBy,
-      count: Math.floor(Math.random() * 200) + 100 // Mock count
+      count: 0
     };
 
     const saved = localStorage.getItem('customer_summary_reports');

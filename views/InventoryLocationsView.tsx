@@ -13,20 +13,29 @@ import {
   Settings,
   ChevronLeft
 } from 'lucide-react';
-import { getInventoryLocations, saveInventoryLocations } from '../mockData';
+import apiService from '../services/apiService';
 import { InventoryLocation } from '../types';
 
 const InventoryLocationsView = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
-  const [locations, setLocations] = useState<InventoryLocation[]>(getInventoryLocations());
+  const [locations, setLocations] = useState<InventoryLocation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const handleUpdate = () => {
-      setLocations(getInventoryLocations());
+    const fetchLocations = async () => {
+      try {
+        const data = await apiService.getLocations();
+        setLocations(data);
+      } catch (err) {
+        console.error('Failed to fetch locations:', err);
+      } finally {
+        setIsLoading(false);
+      }
     };
-    window.addEventListener('inventory_locations_updated', handleUpdate);
-    return () => window.removeEventListener('inventory_locations_updated', handleUpdate);
+    fetchLocations();
+    window.addEventListener('inventory_locations_updated', fetchLocations);
+    return () => window.removeEventListener('inventory_locations_updated', fetchLocations);
   }, []);
 
   const filteredLocations = useMemo(() => {

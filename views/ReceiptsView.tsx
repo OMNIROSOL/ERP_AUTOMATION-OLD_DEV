@@ -7,8 +7,8 @@ import {
     ChevronDown, ChevronUp, Printer, Download, Trash2, Settings,
     Layout
 } from 'lucide-react';
-import { mockReceipts } from '../mockData';
 import { Receipt } from '../types';
+import apiService from '../services/apiService';
 import { cn } from '../utils/cn';
 import BatchActionBar from '../components/shared/BatchActionBar';
 
@@ -56,8 +56,29 @@ const ReceiptsView = () => {
         setSortConfig({ key, direction });
     };
 
+    const [receipts, setReceipts] = useState<Receipt[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchReceipts = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getReceipts();
+                setReceipts(data.map((r: any) => ({
+                    ...r,
+                    date: r.date ? new Date(r.date).toLocaleDateString('en-GB').replace(/\//g, '.') : ''
+                })));
+            } catch (err) {
+                console.error('Failed to fetch receipts:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchReceipts();
+    }, []);
+
     const filteredReceipts = useMemo(() => {
-        let result = [...mockReceipts];
+        let result = [...receipts];
         if (customerName) {
             result = result.filter(r => r.paidByContact.toLowerCase() === customerName.toLowerCase());
         }
@@ -255,7 +276,22 @@ const ReceiptsView = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {currentReceiptsSlice.map((item) => (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={columns.length + 2} className="px-6 py-20 text-center">
+                                        <div className="flex flex-col items-center justify-center space-y-3">
+                                            <div className="w-8 h-8 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fetching receipts...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : currentReceiptsSlice.length === 0 ? (
+                                <tr>
+                                    <td colSpan={columns.length + 2} className="px-6 py-20 text-center">
+                                        <p className="text-slate-400 font-medium">No receipts found.</p>
+                                    </td>
+                                </tr>
+                            ) : currentReceiptsSlice.map((item) => (
                                 <tr key={item.id} className={`group hover:bg-slate-50/80 transition-all duration-300 ${selectedIds.includes(item.id) ? 'bg-indigo-50/40' : ''}`}>
                                     {isSelectionMode && (
                                         <td className="px-6 py-4 text-center">

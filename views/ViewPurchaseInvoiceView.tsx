@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockPurchaseInvoices, getSuppliers } from '../mockData';
 import { PurchaseInvoice, Supplier } from '../types';
+import apiService from '../services/apiService';
 import {
     Printer,
     FileText,
@@ -18,7 +18,8 @@ import {
     Hash,
     CheckCircle2,
     XCircle,
-    Package
+    Package,
+    Loader2
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -28,10 +29,39 @@ const ViewPurchaseInvoiceView = () => {
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const pdfRef = useRef<HTMLDivElement>(null);
+    const [invoice, setInvoice] = useState<PurchaseInvoice | null>(null);
+    const [allInvoices, setAllInvoices] = useState<PurchaseInvoice[]>([]);
+    const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    const allSuppliers = useMemo(() => getSuppliers(), []);
-    const invoiceIndex = mockPurchaseInvoices.findIndex(inv => inv.id === id);
-    const invoice = mockPurchaseInvoices[invoiceIndex];
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const [inv, invs, supps, codes] = await Promise.all([
+                    apiService.getPurchaseInvoice(id),
+                    apiService.getPurchaseInvoices(),
+                    apiService.getSuppliers(),
+                    apiService.getTaxCodes().catch(() => [])
+                ]);
+                setInvoice(inv);
+                setAllInvoices(invs);
+                setAllSuppliers(supps);
+                setTaxCodes(codes);
+            } catch (err) {
+                console.error('Failed to fetch purchase invoice data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
+
+    const invoiceIndex = useMemo(() => {
+        return allInvoices.findIndex(inv => inv.id === id);
+    }, [allInvoices, id]);
 
     const supplierData = useMemo(() => {
         if (!invoice) return null;
@@ -42,20 +72,85 @@ const ViewPurchaseInvoiceView = () => {
 
     const totals = useMemo(() => {
         if (!invoice) return { subtotal: 0, tax: 0, total: 0 };
-        if (!invoice.items || invoice.items.length === 0) return { subtotal: invoice.invoiceAmount, tax: 0, total: invoice.invoiceAmount };
+        const invoiceAmount = parseFloat(invoice.invoiceAmount as any) || 0;
+        const options = invoice.options || {};
+        const isTaxInclusive = options.amountsAreTaxInclusive || false;
+
+        if (!invoice.items || invoice.items.length === 0) {
+            const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+            const taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+            const tax = isTaxInclusive ? invoiceAmount * taxRate / (1 + taxRate) : invoiceAmount * taxRate;
+            return { subtotal: isTaxInclusive ? invoiceAmount - tax : invoiceAmount, tax, total: invoiceAmount };
+        }
+
         let subtotal = 0;
         let tax = 0;
         invoice.items.forEach(item => {
             const qty = parseFloat(item.qty as any) || 0;
             const price = parseFloat(item.unitPrice as any) || 0;
             const lineTotal = qty * price;
-            subtotal += lineTotal;
-            if (item.taxCode && item.taxCode.includes('16%')) {
-                tax += lineTotal * 0.16;
+            
+            let taxRate = 0;
+            const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
+            const selectedTax = taxCodes.find(tc => 
+                tc.id === item.taxCode || 
+                tc.name.toLowerCase() === itemTaxCode ||
+                (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
+                (itemTaxCode === 'exempt' && tc.name === 'Exempt')
+            );
+            
+            if (selectedTax) {
+                taxRate = parseFloat(selectedTax.rate) / 100;
+            } else {
+                // Fallback for historical data - check if it looks like it should be 16%
+                if (itemTaxCode.includes('16') || itemTaxCode.includes('vat') || !itemTaxCode) {
+                    const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+                    taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+                } else {
+                    taxRate = 0; // Default to 0 for unknown non-empty tax codes
+                }
+            }
+
+            if (isTaxInclusive) {
+                const lineTax = lineTotal - (lineTotal / (1 + taxRate));
+                tax += lineTax;
+                subtotal += (lineTotal - lineTax);
+            } else {
+                subtotal += lineTotal;
+                tax += lineTotal * taxRate;
             }
         });
-        return { subtotal, tax, total: invoice.invoiceAmount };
-    }, [invoice]);
+        return { subtotal, tax, total: invoiceAmount || subtotal + tax };
+    }, [invoice, taxCodes]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-8">
+                <div className="flex flex-col items-center justify-center space-y-4">
+                    <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading Purchase Invoice...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!invoice) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-8">
+                <div className="bg-white p-12 rounded-[32px] shadow-xl border border-slate-100 text-center max-w-md">
+                    <XCircle className="w-16 h-16 text-rose-500 mx-auto mb-6 opacity-20" />
+                    <h2 className="text-2xl font-black text-slate-900 mb-2">Invoice Not Found</h2>
+                    <p className="text-slate-500 font-medium mb-8 text-sm">The purchase invoice you are looking for does not exist or has been removed.</p>
+                    <button
+                        onClick={() => navigate('/purchase-invoices')}
+                        className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-black uppercase text-[12px] tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                    >
+                        Return to List
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -120,34 +215,34 @@ const ViewPurchaseInvoiceView = () => {
                         <button onClick={() => window.print()} className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
                             <Printer size={14} /> Print
                         </button>
-                        <button 
+                        <button
                             onClick={async () => {
                                 if (!pdfRef.current) return;
                                 const html2canvas = (await import('html2canvas')).default;
                                 const jsPDF = (await import('jspdf')).jsPDF;
-                                
+
                                 const element = pdfRef.current;
                                 const originalStyle = element.getAttribute('style') || '';
                                 element.style.maxWidth = 'none';
                                 element.style.width = '850px';
-                                
+
                                 const canvas = await html2canvas(element, {
                                     scale: 2,
                                     useCORS: true,
                                     backgroundColor: '#ffffff'
                                 });
-                                
+
                                 element.setAttribute('style', originalStyle);
-                                
+
                                 const imgData = canvas.toDataURL('image/png');
                                 const pdf = new jsPDF('p', 'mm', 'a4');
                                 const imgProps = pdf.getImageProperties(imgData);
                                 const pdfWidth = pdf.internal.pageSize.getWidth();
                                 const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                                
+
                                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
                                 pdf.save(`${invoice.reference || 'PurchaseInvoice'}.pdf`);
-                            }} 
+                            }}
                             className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
                         >
                             <Download size={14} /> PDF
@@ -155,7 +250,7 @@ const ViewPurchaseInvoiceView = () => {
                         <button
                             onClick={() => {
                                 const subject = encodeURIComponent(`Purchase Invoice: ${invoice.reference}`);
-                                const body = encodeURIComponent(`Dear ${invoice.customer},\n\nPlease find attached our purchase invoice ${invoice.reference}.\n\nThank you.`);
+                                const body = encodeURIComponent(`Dear ${invoice.supplier},\n\nPlease find attached our purchase invoice ${invoice.reference}.\n\nThank you.`);
                                 window.location.href = `mailto:${supplierEmail}?subject=${subject}&body=${body}`;
                             }}
                             className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
@@ -168,32 +263,32 @@ const ViewPurchaseInvoiceView = () => {
                 <div className="flex items-center space-x-2">
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => navigate(`/purchase-invoices/view/${mockPurchaseInvoices[0].id}`)}
+                            onClick={() => navigate(`/purchase-invoices/view/${allInvoices[0].id}`)}
                             disabled={invoiceIndex <= 0}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronLeft size={14} /> <ChevronLeft size={14} className="-ml-2" />
                         </button>
                         <button
-                            onClick={() => navigate(`/purchase-invoices/view/${mockPurchaseInvoices[Math.max(0, invoiceIndex - 1)].id}`)}
+                            onClick={() => navigate(`/purchase-invoices/view/${allInvoices[Math.max(0, invoiceIndex - 1)].id}`)}
                             disabled={invoiceIndex <= 0}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
                             <ChevronLeft size={14} />
                         </button>
                     </div>
-                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">{invoiceIndex + 1} / {mockPurchaseInvoices.length}</span>
+                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">{invoiceIndex + 1} / {allInvoices.length}</span>
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => navigate(`/purchase-invoices/view/${mockPurchaseInvoices[Math.min(mockPurchaseInvoices.length - 1, invoiceIndex + 1)].id}`)}
-                            disabled={invoiceIndex === mockPurchaseInvoices.length - 1}
+                            onClick={() => navigate(`/purchase-invoices/view/${allInvoices[Math.min(allInvoices.length - 1, invoiceIndex + 1)].id}`)}
+                            disabled={invoiceIndex === allInvoices.length - 1}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronRight size={14} />
                         </button>
                         <button
-                            onClick={() => navigate(`/purchase-invoices/view/${mockPurchaseInvoices[mockPurchaseInvoices.length - 1].id}`)}
-                            disabled={invoiceIndex === mockPurchaseInvoices.length - 1}
+                            onClick={() => navigate(`/purchase-invoices/view/${allInvoices[allInvoices.length - 1].id}`)}
+                            disabled={invoiceIndex === allInvoices.length - 1}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
                             <ChevronRight size={14} /> <ChevronRight size={14} className="-ml-2" />
@@ -335,7 +430,7 @@ const ViewPurchaseInvoiceView = () => {
                                 <span className="font-semibold">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center text-gray-500">
-                                <span className="text-[11px] font-bold uppercase tracking-widest">Tax Component (16%)</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">Tax Component</span>
                                 <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2 print-bg-slate-50">

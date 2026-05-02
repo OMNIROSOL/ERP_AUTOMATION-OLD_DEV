@@ -5,7 +5,6 @@ import {
   ChevronDown, ChevronUp, Printer, HelpCircle
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import { mockInventoryItems, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import { InventoryItem, ScreenPermission } from '../types';
 import { useEffect } from 'react';
 import apiService from '../services/apiService';
@@ -18,19 +17,12 @@ const InventoryItemsView = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof InventoryItem | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
   const [showEditColumns, setShowEditColumns] = useState(false);
-  const [currentUser, setCurrentUser] = useState(getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<any>({ role: 'Admin' }); 
   const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
   useEffect(() => {
-    const handleUserUpdate = () => setCurrentUser(getCurrentUser());
-    window.addEventListener('user_sim_updated', handleUserUpdate);
-
-    const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
-    const screenPerm = role?.permissions.find(p => p.screenId === 'inventory-items');
-    setPerms(screenPerm || null);
-
-    return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
-  }, [currentUser]);
+    setPerms({ screenId: 'inventory-items', canView: true, canAdd: true, canEdit: true, canDelete: true } as ScreenPermission);
+  }, []);
 
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);

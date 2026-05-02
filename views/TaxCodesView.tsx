@@ -13,9 +13,9 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/shared/Card';
-import { getTaxCodes, saveTaxCodes } from '../mockData';
 import { TaxCode } from '../types';
 import { cn } from '../utils/cn';
+import apiService from '../services/apiService';
 
 const TaxCodesView = () => {
   const navigate = useNavigate();
@@ -23,11 +23,23 @@ const TaxCodesView = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewModal, setShowNewModal] = useState(false);
   const [editingCode, setEditingCode] = useState<Partial<TaxCode> | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setTaxCodes(getTaxCodes());
+    const fetchTaxCodes = async () => {
+      setIsLoading(true);
+      try {
+        const data = await apiService.getTaxCodes();
+        setTaxCodes(data);
+      } catch (err) {
+        console.error('Failed to fetch tax codes:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTaxCodes();
     
-    const handleUpdate = () => setTaxCodes(getTaxCodes());
+    const handleUpdate = () => fetchTaxCodes();
     window.addEventListener('tax_codes_updated', handleUpdate);
     return () => window.removeEventListener('tax_codes_updated', handleUpdate);
   }, []);
@@ -37,32 +49,56 @@ const TaxCodesView = () => {
     code.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCode?.name || editingCode.rate === undefined) return;
 
-    const newCode: TaxCode = {
-      id: editingCode.id || `tax-${Date.now()}`,
+    const dataToSave = {
       name: editingCode.name,
       rate: Number(editingCode.rate),
       description: editingCode.description || '',
       inactive: editingCode.inactive || false
     };
 
-    const updatedCodes = editingCode.id 
-      ? taxCodes.map(c => c.id === editingCode.id ? newCode : c)
-      : [...taxCodes, newCode];
-
-    saveTaxCodes(updatedCodes);
-    setShowNewModal(false);
-    setEditingCode(null);
+    try {
+      if (editingCode.id) {
+        await apiService.updateTaxCode(editingCode.id, dataToSave);
+      } else {
+        await apiService.createTaxCode(dataToSave);
+      }
+      const data = await apiService.getTaxCodes();
+      setTaxCodes(data);
+      setShowNewModal(false);
+      setEditingCode(null);
+    } catch (err) {
+      console.error('Failed to save tax code:', err);
+      alert('Failed to save tax code to database');
+    }
   };
 
-  const toggleStatus = (id: string) => {
-    const updated = taxCodes.map(c => 
-      c.id === id ? { ...c, inactive: !c.inactive } : c
-    );
-    saveTaxCodes(updated);
+  const toggleStatus = async (id: string) => {
+    const code = taxCodes.find(c => c.id === id);
+    if (!code) return;
+    try {
+      await apiService.updateTaxCode(id, { ...code, inactive: !code.inactive });
+      const data = await apiService.getTaxCodes();
+      setTaxCodes(data);
+    } catch (err) {
+      console.error('Failed to toggle tax code status:', err);
+      alert('Failed to update status in database');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this tax code?')) return;
+    try {
+      await apiService.deleteTaxCode(id);
+      const data = await apiService.getTaxCodes();
+      setTaxCodes(data);
+    } catch (err) {
+      console.error('Failed to delete tax code:', err);
+      alert('Failed to delete tax code from database');
+    }
   };
 
   return (
@@ -165,7 +201,10 @@ const TaxCodesView = () => {
                       >
                         <Edit2 size={18} />
                       </button>
-                      <button className="p-2 text-slate-400 hover:text-error hover:bg-error/5 rounded-lg transition-all">
+                      <button 
+                        onClick={() => handleDelete(code.id)}
+                        className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      >
                         <Trash2 size={18} />
                       </button>
                     </div>

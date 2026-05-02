@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockPurchaseOrders, mockPurchaseInvoices, savePurchaseOrders, savePurchaseInvoices, getSuppliers } from '../mockData';
 import { PurchaseOrder, Supplier } from '../types';
+import apiService from '../services/apiService';
 import {
     Printer,
     FileText,
@@ -18,7 +18,9 @@ import {
     Hash,
     CheckCircle2,
     XCircle,
-    Package
+    Package,
+    Loader2,
+    Truck
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -29,9 +31,39 @@ const ViewPurchaseOrderView = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
     const pdfRef = useRef<HTMLDivElement>(null);
 
-    const allSuppliers = useMemo(() => getSuppliers(), []);
-    const orderIndex = mockPurchaseOrders.findIndex(o => o.id === id);
-    const order = mockPurchaseOrders[orderIndex];
+    const [order, setOrder] = useState<PurchaseOrder | null>(null);
+    const [allOrders, setAllOrders] = useState<PurchaseOrder[]>([]);
+    const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const [ord, ords, supps, codes] = await Promise.all([
+                    apiService.getPurchaseOrder(id),
+                    apiService.getPurchaseOrders(),
+                    apiService.getSuppliers(),
+                    apiService.getTaxCodes().catch(() => [])
+                ]);
+                setOrder(ord);
+                setAllOrders(ords);
+                setAllSuppliers(supps);
+                setTaxCodes(codes);
+            } catch (err) {
+                console.error('Failed to fetch purchase order data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
+
+    const orderIndex = useMemo(() => {
+        return allOrders.findIndex(ord => ord.id === id);
+    }, [allOrders, id]);
 
     const supplierData = useMemo(() => {
         if (!order) return null;
@@ -43,36 +75,61 @@ const ViewPurchaseOrderView = () => {
     const totals = useMemo(() => {
         if (!order) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0 };
         const isTaxInclusive = order.options?.amountsAreTaxInclusive || false;
+        let subtotal = 0;
+        let tax = 0;
 
         if (order.items && order.items.length > 0) {
             order.items.forEach((item: any) => {
                 const qty = parseFloat(item.qty as any) || 0;
                 const price = parseFloat(item.unitPrice as any) || 0;
                 const discountValue = parseFloat(item.discount || '0') || 0;
-                
+
                 let lineTotal = qty * price;
                 if (order.options?.columnDiscount) {
                     if (order.options?.columnDiscountType === 'Percentage') lineTotal *= (1 - (discountValue / 100));
                     else lineTotal = Math.max(0, lineTotal - discountValue);
                 }
 
+                let taxRate = 0;
+                const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
+                const selectedTax = taxCodes.find(tc => 
+                    tc.id === item.taxCode || 
+                    tc.name.toLowerCase() === itemTaxCode ||
+                    (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
+                    (itemTaxCode === 'exempt' && tc.name === 'Exempt')
+                );
+                
+                if (selectedTax) {
+                    taxRate = parseFloat(selectedTax.rate) / 100;
+                } else {
+                    // Fallback for historical data - check if it looks like it should be 16%
+                    if (itemTaxCode.includes('16') || itemTaxCode.includes('vat') || !itemTaxCode) {
+                        const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+                        taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+                    } else {
+                        taxRate = 0; // Default to 0 for unknown non-empty tax codes
+                    }
+                }
+
                 if (isTaxInclusive) {
-                    const lineTax = lineTotal - (lineTotal / 1.16);
+                    const lineTax = lineTotal - (lineTotal / (1 + taxRate));
                     tax += lineTax;
                     subtotal += (lineTotal - lineTax);
                 } else {
                     subtotal += lineTotal;
-                    tax += lineTotal * 0.16;
+                    tax += lineTotal * taxRate;
                 }
             });
         } else {
             const grandTotal = parseFloat(order.amount as any) || 0;
+            const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+            const taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
             if (isTaxInclusive) {
-                tax = grandTotal - (grandTotal / 1.16);
+                tax = grandTotal - (grandTotal / (1 + taxRate));
                 subtotal = grandTotal - tax;
             } else {
                 subtotal = grandTotal;
-                tax = grandTotal * 0.16;
+                tax = grandTotal * taxRate;
             }
         }
 
@@ -84,40 +141,39 @@ const ViewPurchaseOrderView = () => {
         }
 
         return { subtotal, tax, total: subtotal + tax - whtAmount, whtAmount };
-    }, [order]);
+    }, [order, taxCodes]);
 
-    const handleStatusChange = (newStatus: string, shouldInvoice: boolean = false) => {
-        const orders = [...mockPurchaseOrders];
-        const index = orders.findIndex(o => o.id === id);
-        if (index !== -1) {
+    const handleStatusChange = async (newStatus: string, shouldInvoice: boolean = false) => {
+        if (!id || !order) return;
+        try {
             const finalStatus = shouldInvoice ? 'Invoiced' : newStatus;
-            (orders[index] as any).status = finalStatus;
+            await apiService.updatePurchaseOrder(id, { ...order, status: finalStatus });
 
             if (shouldInvoice) {
-                const newInvoice = {
-                    id: `PINV-${Date.now()}`,
-                    issueDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                    dueDate: '30 Days',
-                    reference: order.reference,
-                    purchaseOrder: order.reference,
-                    supplier: order.supplier,
-                    description: order.description,
-                    currency: order.currency,
-                    invoiceAmount: order.amount as number,
-                    balanceDue: order.amount as number,
-                    status: 'Coming due',
-                    items: order.items || [],
-                    timestamp: new Date().toISOString()
+                const invoiceData = {
+                    reference: `PINV-${Date.now()}`,
+                    supplier_id: order.supplierId, // We should ensure order has supplierId
+                    grand_total: totals.total,
+                    status: 'Unpaid',
+                    items: order.items?.map(i => ({
+                        itemId: (i as any).itemId,
+                        qty: i.qty,
+                        unitPrice: i.unitPrice,
+                        totalAmount: i.totalAmount
+                    })) || []
                 };
-                mockPurchaseInvoices.unshift(newInvoice as any);
-                savePurchaseInvoices(mockPurchaseInvoices);
-                savePurchaseOrders(orders);
+                await apiService.createPurchaseInvoice(invoiceData);
                 navigate('/purchase-invoices');
                 return;
             }
 
-            savePurchaseOrders(orders);
+            // Refresh order data
+            const updatedOrder = await apiService.getPurchaseOrder(id);
+            setOrder(updatedOrder);
             window.dispatchEvent(new Event('purchase_orders_updated'));
+        } catch (err) {
+            console.error('Failed to update status:', err);
+            alert('Failed to update status in database.');
         }
     };
 
@@ -254,32 +310,32 @@ const ViewPurchaseOrderView = () => {
                 <div className="flex items-center space-x-2">
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => navigate(`/purchase-orders/view/${mockPurchaseOrders[0].id}`)}
+                            onClick={() => navigate(`/purchase-orders/view/${allOrders[0].id}`)}
                             disabled={orderIndex <= 0}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronLeft size={14} /> <ChevronLeft size={14} className="-ml-2" />
                         </button>
                         <button
-                            onClick={() => navigate(`/purchase-orders/view/${mockPurchaseOrders[Math.max(0, orderIndex - 1)].id}`)}
+                            onClick={() => navigate(`/purchase-orders/view/${allOrders[Math.max(0, orderIndex - 1)].id}`)}
                             disabled={orderIndex <= 0}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
                             <ChevronLeft size={14} />
                         </button>
                     </div>
-                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">{orderIndex + 1} / {mockPurchaseOrders.length}</span>
+                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">{orderIndex + 1} / {allOrders.length}</span>
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => navigate(`/purchase-orders/view/${mockPurchaseOrders[Math.min(mockPurchaseOrders.length - 1, orderIndex + 1)].id}`)}
-                            disabled={orderIndex === mockPurchaseOrders.length - 1}
+                            onClick={() => navigate(`/purchase-orders/view/${allOrders[Math.min(allOrders.length - 1, orderIndex + 1)].id}`)}
+                            disabled={orderIndex === allOrders.length - 1}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronRight size={14} />
                         </button>
                         <button
-                            onClick={() => navigate(`/purchase-orders/view/${mockPurchaseOrders[mockPurchaseOrders.length - 1].id}`)}
-                            disabled={orderIndex === mockPurchaseOrders.length - 1}
+                            onClick={() => navigate(`/purchase-orders/view/${allOrders[allOrders.length - 1].id}`)}
+                            disabled={orderIndex === allOrders.length - 1}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
                             <ChevronRight size={14} /> <ChevronRight size={14} className="-ml-2" />
@@ -405,10 +461,10 @@ const ViewPurchaseOrderView = () => {
                                         )}
                                         {!order.options?.amountsAreTaxInclusive && (
                                             <td className="px-4 py-4 text-right font-medium text-slate-400">
-                                                {(( (parseFloat(item.qty || '0') * parseFloat(item.unitPrice || '0')) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0')/100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0) ) * (item.taxCode === 'VAT 16%' ? 0.16 : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                {(((parseFloat(item.qty || '0') * parseFloat(item.unitPrice || '0')) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0') / 100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0)) * (item.taxCode === 'VAT 16%' ? 0.16 : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </td>
                                         )}
-                                        <td className="px-4 py-4 text-right font-semibold">{( ( (parseFloat(item.qty as any) || 0) * (parseFloat(item.unitPrice as any) || 0) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0')/100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0) ) * (item.taxCode === 'VAT 16%' ? (order.options?.amountsAreTaxInclusive ? 1 : 1.16) : 1) ).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        <td className="px-4 py-4 text-right font-semibold">{(((parseFloat(item.qty as any) || 0) * (parseFloat(item.unitPrice as any) || 0) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0') / 100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0)) * (item.taxCode === 'VAT 16%' ? (order.options?.amountsAreTaxInclusive ? 1 : 1.16) : 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     </tr>
                                 )) : (
                                     <tr>
@@ -431,7 +487,7 @@ const ViewPurchaseOrderView = () => {
                                 <span className="font-semibold">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center text-gray-500 pb-2 border-b border-gray-50">
-                                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Sales Tax (16%)</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Tax Component</span>
                                 <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             {order.options?.withholdingTax && (

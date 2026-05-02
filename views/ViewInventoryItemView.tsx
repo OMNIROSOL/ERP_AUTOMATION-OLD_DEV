@@ -1,12 +1,37 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit, Package, History, TrendingUp, AlertCircle } from 'lucide-react';
-import { mockInventoryItems } from '../mockData';
+import { apiService } from '../services/apiService';
 
 const ViewInventoryItemView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const item = mockInventoryItems.find(i => i.id === id);
+  const [item, setItem] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchItem = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const data = await apiService.getItem(id);
+        setItem(data);
+      } catch (err) {
+        console.error('Failed to fetch item:', err);
+        // Fallback
+        try {
+          const items = await apiService.getItems();
+          const found = items.find((i: any) => i.id === id);
+          if (found) setItem(found);
+        } catch (e) {}
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchItem();
+  }, [id]);
+
+  if (loading) return <div className="p-8 text-center text-slate-500 font-black uppercase tracking-widest">Loading item...</div>;
 
   if (!item) {
     return (
@@ -65,7 +90,7 @@ const ViewInventoryItemView = () => {
               </div>
               <div className="col-span-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-300 block mb-1">Description</label>
-                <div className="text-sm font-medium text-slate-600 leading-relaxed">{item.description}</div>
+                <div className="text-sm font-medium text-slate-600 leading-relaxed">{item.description || 'No description provided.'}</div>
               </div>
             </div>
           </div>
@@ -85,12 +110,12 @@ const ViewInventoryItemView = () => {
                 <div className="text-xl font-black text-slate-900">{item.qtyOnHand}</div>
               </div>
               <div className="p-4 bg-slate-50 rounded-xl">
-                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Average Cost</label>
-                <div className="text-xl font-black text-slate-900">ZMW {item.avgCost.toLocaleString()}</div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Selling Price</label>
+                <div className="text-xl font-black text-slate-900">ZMW {(parseFloat(item.sellingPrice) || 0).toLocaleString()}</div>
               </div>
               <div className="p-4 bg-slate-50 rounded-xl">
-                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Total Value</label>
-                <div className="text-xl font-black text-slate-900">ZMW {item.totalValue.toLocaleString()}</div>
+                <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Purchase Price</label>
+                <div className="text-xl font-black text-slate-900">ZMW {(parseFloat(item.purchasePrice) || 0).toLocaleString()}</div>
               </div>
             </div>
           </div>
@@ -114,8 +139,8 @@ const ViewInventoryItemView = () => {
                   <History size={16} />
                 </div>
                 <div>
-                  <div className="text-xs font-bold text-slate-200 uppercase tracking-widest mb-1">Last Transaction</div>
-                  <div className="text-sm font-black text-white">24 Feb 2026</div>
+                  <div className="text-xs font-bold text-slate-200 uppercase tracking-widest mb-1">Created At</div>
+                  <div className="text-sm font-black text-white">{new Date(item.createdAt).toLocaleDateString('en-GB')}</div>
                 </div>
               </div>
             </div>

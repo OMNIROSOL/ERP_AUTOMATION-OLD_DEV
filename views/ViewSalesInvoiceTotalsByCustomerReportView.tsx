@@ -9,7 +9,7 @@ import {
   Users,
   Search
 } from 'lucide-react';
-import { getCustomers, getInvoices } from '../mockData';
+import apiService from '../services/apiService';
 import { cn } from '../utils/cn';
 
 interface SalesInvoiceTotalRow {
@@ -37,8 +37,28 @@ const ViewSalesInvoiceTotalsByCustomerReportView: React.FC = () => {
     };
   }, [id]);
 
-  const customers = useMemo(() => getCustomers(), []);
-  const allInvoices = useMemo(() => getInvoices(), []);
+  const [customers, setCustomers] = React.useState<any[]>([]);
+  const [allInvoices, setAllInvoices] = React.useState<any[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const [custs, invs] = await Promise.all([
+          apiService.getCustomers(),
+          apiService.getInvoices()
+        ]);
+        setCustomers(custs);
+        setAllInvoices(invs);
+      } catch (err) {
+        console.error('Failed to load report data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const formatCurrency = (val: number) => {
     if (val === 0) return '—';
@@ -49,13 +69,13 @@ const ViewSalesInvoiceTotalsByCustomerReportView: React.FC = () => {
   const totalsByCustomer = useMemo(() => {
     return customers.map(customer => {
       const customerInvoices = allInvoices.filter(inv => 
-        inv.customerName === customer.name &&
+        (inv.customerId === customer.id || inv.customer?.id === customer.id) &&
         inv.status !== 'Draft'
       );
 
-      const totalValue = customerInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+      const totalValue = customerInvoices.reduce((sum, inv) => sum + (parseFloat(inv.grandTotal) || 0), 0);
       const paidAmount = customerInvoices.reduce((sum, inv) => 
-        sum + (inv.status === 'Paid' ? inv.totalAmount : 0), 0
+        sum + (inv.status === 'Paid' ? (parseFloat(inv.grandTotal) || 0) : 0), 0
       );
 
       return {
@@ -64,7 +84,7 @@ const ViewSalesInvoiceTotalsByCustomerReportView: React.FC = () => {
         totalValue: totalValue,
         paidAmount: paidAmount,
         balance: totalValue - paidAmount,
-        currency: 'ZMW' // Defaulting to ZMW for mock
+        currency: customer.currency?.split(' - ')[0] || 'ZMW'
       };
     }).filter(row => row.invoiceCount > 0);
   }, [customers, allInvoices]);
@@ -85,6 +105,10 @@ const ViewSalesInvoiceTotalsByCustomerReportView: React.FC = () => {
       return a.localeCompare(b);
     });
   }, [groupedData]);
+
+  if (isLoading) {
+    return <div className="p-20 text-center font-bold text-slate-400">LOADING DATABASE REPORT...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-8 space-y-8 animate-in fade-in duration-700 font-sans">

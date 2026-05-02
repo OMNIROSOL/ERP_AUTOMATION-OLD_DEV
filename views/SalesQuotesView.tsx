@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockSalesOrders, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import apiService from '../services/apiService';
 import { SalesQuote, ScreenPermission } from '../types';
 import { useEffect } from 'react';
@@ -13,6 +12,7 @@ import {
     ChevronsLeft, ChevronsRight, ChevronDown, ChevronUp, LayoutGrid, HelpCircle, ArrowUpDown
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { formatTimestamp } from '../utils/dateUtils';
 
 const SalesQuotesView = () => {
     const navigate = useNavigate();
@@ -32,19 +32,12 @@ const SalesQuotesView = () => {
     const [showEditColumns, setShowEditColumns] = useState(false);
     const [isBatchOpsOpen, setIsBatchOpsOpen] = useState(false);
     const batchOpsRef = React.useRef<HTMLDivElement>(null);
-    const [currentUser, setCurrentUser] = useState(getCurrentUser());
+    const [currentUser, setCurrentUser] = useState<any>({ role: 'Admin' });
     const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
     useEffect(() => {
-        const handleUserUpdate = () => setCurrentUser(getCurrentUser());
-        window.addEventListener('user_sim_updated', handleUserUpdate);
-
-        const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
-        const screenPerm = role?.permissions.find(p => p.screenId === 'sales-quotes');
-        setPerms(screenPerm || null);
-
-        return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
-    }, [currentUser]);
+        setPerms({ screenId: 'sales-quotes', canView: true, canAdd: true, canEdit: true, canDelete: true } as ScreenPermission);
+    }, []);
 
     useEffect(() => {
         const fetchQuotes = async () => {
@@ -54,8 +47,10 @@ const SalesQuotesView = () => {
                 // Map API data to match view expectations
                 const mappedQuotes = data.map((q: any) => ({
                     ...q,
-                    customer: q.customer?.name || 'Unknown',
+                    customer: q.customer?.name || q.customer || 'Unknown',
+                    currency: q.currency || q.customer?.currency?.split(' - ')[0] || 'ZMW',
                     issueDate: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    timestamp: formatTimestamp(q.createdAt),
                     // Ensure numeric fields are correctly handled
                     amount: parseFloat(q.amount || 0)
                 }));
@@ -137,18 +132,18 @@ const SalesQuotesView = () => {
 
     const handleStatusChange = async (id: string, newStatus: SalesQuote['status']) => {
         try {
-            await apiService.updateQuoteStatus(id, newStatus);
             if (newStatus === 'Accepted') {
-                // For now, conversion to order still uses mock logic or we could implement it in backend
-                // Since user asked for database, we'll just refresh for now
+                await apiService.convertQuoteToOrder(id);
                 setRefreshTrigger(prev => prev + 1);
                 navigate('/sales-orders');
                 return;
             }
+            await apiService.updateQuoteStatus(id, newStatus);
             setRefreshTrigger(prev => prev + 1);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to update status:', err);
-            alert('Failed to update status');
+            const errorMessage = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Failed to update status: ${errorMessage}`);
         }
     };
 
@@ -214,15 +209,24 @@ const SalesQuotesView = () => {
 
     const filteredData = useMemo(() => {
         let result = [...quotes].filter(q => {
-            if (q.status === 'Accepted' || q.status === 'Rejected') return false;
-            
-            // Filter out Expired quotes
+            // Filter out only Accepted quotes from the list
+            if (q.status === 'Accepted') {
+                return false;
+            }
+
+            // Filter out Expired quotes if status is Active
             if (q.status === 'Active' && q.issueDate && q.expiryDays) {
-                const [d, m, y] = q.issueDate.split('.');
-                const expDate = new Date(`${y}-${m}-${d}`);
-                expDate.setHours(23, 59, 59, 999);
-                expDate.setDate(expDate.getDate() + parseInt(q.expiryDays));
-                if (new Date() > expDate) return false;
+                try {
+                    const [d, m, y] = q.issueDate.split('.');
+                    if (d && m && y) {
+                        const expDate = new Date(`${y}-${m}-${d}`);
+                        expDate.setHours(23, 59, 59, 999);
+                        expDate.setDate(expDate.getDate() + parseInt(q.expiryDays));
+                        if (new Date() > expDate) return false;
+                    }
+                } catch (e) {
+                    console.error('Date parsing failed for quote:', q.reference, e);
+                }
             }
             return true;
         });
@@ -264,7 +268,7 @@ const SalesQuotesView = () => {
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [searchQuery, refreshTrigger, customerName, statusFilter, sortColumn, sortDirection]);
+    }, [searchQuery, refreshTrigger, customerName, statusFilter, sortColumn, sortDirection, quotes]);
 
     const currencyTotals = useMemo(() => {
         const totals: Record<string, number> = {};
@@ -332,7 +336,7 @@ const SalesQuotesView = () => {
                         onClick={() => navigate(`/sales-quotes/view/${o.id}`)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
                         title="View Details"
-                      >
+                    >
                         <Eye size={14} />
                     </button>
                     {perms?.edit !== false && (
@@ -409,7 +413,7 @@ const SalesQuotesView = () => {
             className: 'whitespace-nowrap text-right',
             accessor: (o: any) => (
                 <div className="text-right">
-                    <span className="text-[10px] text-slate-400 font-bold mr-1">{o.currency || 'ZMW'}</span>
+                    <span className="text-[10px] text-slate-400 font-bold mr-1">{o.currency}</span>
                     <span className="font-black text-slate-900">
                         {parseFloat(o.amount as any || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
@@ -440,11 +444,11 @@ const SalesQuotesView = () => {
                     <div className="flex items-center gap-4">
                         <Badge variant={
                             isExpired ? 'danger' :
-                            displayStatus === 'Active' || displayStatus === 'Accepted' ? 'success' : 
-                            displayStatus === 'Pending Approval' ? 'warning' : 
-                            displayStatus === 'Rejected' ? 'error' : 
-                            displayStatus === 'Inactive' ? 'default' :
-                            'default'
+                                displayStatus === 'Active' || displayStatus === 'Accepted' ? 'success' :
+                                    displayStatus === 'Pending Approval' ? 'warning' :
+                                        displayStatus === 'Rejected' ? 'error' :
+                                            displayStatus === 'Inactive' ? 'default' :
+                                                'default'
                         } className="text-[10px]">
                             {displayStatus.toUpperCase()}
                         </Badge>
@@ -458,25 +462,7 @@ const SalesQuotesView = () => {
                                     <Check size={13} strokeWidth={3} />
                                 </button>
                                 <button
-                                    onClick={() => handleStatusChange(o.id, 'Rejected')}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:border-rose-500 transition-all shadow-sm"
-                                    title="Reject Quote"
-                                >
-                                    <X size={13} strokeWidth={3} />
-                                </button>
-                            </div>
-                        )}
-                        {displayStatus === 'Pending Approval' && perms?.edit !== false && (
-                            <div className="flex items-center gap-1.5">
-                                <button
-                                    onClick={() => handleStatusChange(o.id, 'Accepted')}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50 hover:border-emerald-500 transition-all shadow-sm"
-                                    title="Approve Quote"
-                                >
-                                    <Check size={13} strokeWidth={3} />
-                                </button>
-                                <button
-                                    onClick={() => handleStatusChange(o.id, 'Rejected')}
+                                    onClick={() => handleStatusChange(o.id, 'Inactive')}
                                     className="w-7 h-7 flex items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:border-rose-500 transition-all shadow-sm"
                                     title="Reject Quote"
                                 >
@@ -574,6 +560,7 @@ const SalesQuotesView = () => {
                         <option value="Active">Active</option>
                         <option value="Pending Approval">Pending</option>
                         <option value="Inactive">Inactive</option>
+                        <option value="Rejected">Rejected</option>
                     </select>
                 </div>
 
@@ -623,39 +610,62 @@ const SalesQuotesView = () => {
             )}
 
             {/* Table Container - Invoice Style */}
-            <div className="mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 bg-white">
-                <DataTable
-                    data={paginatedData}
-                    columns={columns as any}
-                    tableClassName="w-full"
-                    className="border-none shadow-none bg-transparent"
-                    hideDefaultPagination={true}
-                    disableInternalScroll={true}
-                    tableFooter={
-                        <tr className="bg-slate-50/50">
-                            {columns.map((col: any) => {
-                                if (col.id === 'Amount') {
-                                    const activeCurs = Object.keys(currencyTotals).filter(cur => currencyTotals[cur] !== 0);
-                                    return (
-                                        <td key={col.id} className="px-6 py-4 text-right">
-                                            <div className="flex flex-col gap-1">
-                                                {activeCurs.map(cur => (
-                                                    <div key={cur} className="flex items-center justify-end gap-1.5">
-                                                        <span className="text-[9px] font-black text-slate-400 uppercase">{cur}</span>
-                                                        <span className="text-[12px] font-black text-slate-900 underline decoration-slate-200 decoration-2 underline-offset-4 pointer-events-none">
-                                                            {currencyTotals[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </td>
-                                    );
-                                }
-                                return <td key={col.id} className="px-6 py-4"></td>;
-                            })}
-                        </tr>
-                    }
-                />
+            <div className="mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 bg-white min-h-[400px] flex flex-col">
+                {isLoading ? (
+                    <div className="flex-1 flex flex-col items-center justify-center py-20">
+                        <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+                        <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Loading quotations...</p>
+                    </div>
+                ) : paginatedData.length > 0 ? (
+                    <DataTable
+                        data={paginatedData}
+                        columns={columns as any}
+                        tableClassName="w-full"
+                        className="border-none shadow-none bg-transparent"
+                        hideDefaultPagination={true}
+                        disableInternalScroll={true}
+                        tableFooter={
+                            <tr className="bg-slate-50/50">
+                                {columns.map((col: any) => {
+                                    if (col.id === 'Amount') {
+                                        const activeCurs = Object.keys(currencyTotals).filter(cur => currencyTotals[cur] !== 0);
+                                        return (
+                                            <td key={col.id} className="px-6 py-4 text-right">
+                                                <div className="flex flex-col gap-1">
+                                                    {activeCurs.map(cur => (
+                                                        <div key={cur} className="flex items-center justify-end gap-1.5">
+                                                            <span className="text-[9px] font-black text-slate-400 uppercase">{cur}</span>
+                                                            <span className="text-[12px] font-black text-slate-900 underline decoration-slate-200 decoration-2 underline-offset-4 pointer-events-none">
+                                                                {currencyTotals[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                        );
+                                    }
+                                    return <td key={col.id} className="px-6 py-4"></td>;
+                                })}
+                            </tr>
+                        }
+                    />
+                ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center py-32 space-y-4">
+                        <div className="w-16 h-16 bg-slate-50 rounded-3xl flex items-center justify-center text-slate-300">
+                            <FileText size={32} />
+                        </div>
+                        <div className="text-center">
+                            <p className="text-slate-900 font-black uppercase tracking-widest text-[13px]">No Quotations Found</p>
+                            <p className="text-slate-400 text-xs font-medium mt-1">Try adjusting your filters or create a new proposal</p>
+                        </div>
+                        <button
+                            onClick={() => navigate('/sales-quotes/new')}
+                            className="bg-blue-50 text-blue-600 px-6 py-2 rounded-xl text-[10px] font-black hover:bg-blue-100 transition-all uppercase tracking-widest"
+                        >
+                            Create First Quote
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Management Card - Sales Order Style */}

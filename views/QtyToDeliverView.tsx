@@ -1,27 +1,65 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronRight, LayoutGrid, HelpCircle, X } from 'lucide-react';
-import { getCustomers, getCustomerDeliveryDetails } from '../mockData';
+import apiService from '../services/apiService';
+import { Customer } from '../types';
 import { cn } from '../utils/cn';
 
 const QtyToDeliverView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const customers = useMemo(() => getCustomers(), []);
-    const customer = useMemo(() => customers.find(c => c.id === id), [customers, id]);
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [deliveryItems, setDeliveryItems] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-    const mockItems = useMemo(() => {
-        if (!customer) return [];
-        return getCustomerDeliveryDetails(customer.name);
-    }, [customer]);
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const [custData, deliveryNotes] = await Promise.all([
+                    apiService.getCustomer(id),
+                    apiService.getDeliveryNotes()
+                ]);
+                setCustomer(custData);
+                
+                const itemMap = new Map();
+                deliveryNotes
+                    .filter((dn: any) => dn.customerName === custData.name && dn.status !== 'Delivered')
+                    .forEach((dn: any) => {
+                        dn.items?.forEach((it: any) => {
+                            const current = itemMap.get(it.itemName) || 0;
+                            itemMap.set(it.itemName, current + (it.qty || 0));
+                        });
+                    });
+                
+                const aggregated = Array.from(itemMap.entries()).map(([item, qty]) => ({ item, qty }));
+                setDeliveryItems(aggregated);
+            } catch (err) {
+                console.error('Failed to fetch delivery details:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
 
     const filteredItems = useMemo(() => {
-        return mockItems.filter(i =>
+        return deliveryItems.filter(i =>
             i.item.toLowerCase().includes(searchQuery.toLowerCase())
         );
-    }, [mockItems, searchQuery]);
+    }, [deliveryItems, searchQuery]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading delivery details...</p>
+            </div>
+        );
+    }
 
     const handleSelectAll = (checked: boolean) => {
         if (checked) {

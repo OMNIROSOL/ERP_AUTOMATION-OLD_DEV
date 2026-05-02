@@ -12,13 +12,13 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { AppUser, UserRole } from '../types';
-import { mockUsers, getCurrentUser, setCurrentUser, getUsers, saveUsers, getRoleDefinitions } from '../mockData';
+import apiService from '../services/apiService';
 import { cn } from '../utils/cn';
 
 const UserPermissionsView: React.FC = () => {
-  const [users, setUsers] = useState<AppUser[]>(getUsers());
-  const [roles, setRoles] = useState(getRoleDefinitions());
-  const [currentUser, setCurrentUserLocal] = useState<AppUser>(getCurrentUser());
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
+  const [currentUser, setCurrentUserLocal] = useState<AppUser>(apiService.getCurrentUser());
   const [showToast, setShowToast] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [showNewUserModal, setShowNewUserModal] = useState(false);
@@ -31,10 +31,21 @@ const UserPermissionsView: React.FC = () => {
   });
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const uData = await apiService.getUsers();
+        const rData = await apiService.getRoles();
+        setUsers(uData);
+        setRoles(rData);
+      } catch (err) {
+        console.error('Failed to fetch user/role data:', err);
+      }
+    };
+    fetchData();
+
     const handleUpdate = () => {
-      setUsers(getUsers());
-      setCurrentUserLocal(getCurrentUser());
-      setRoles(getRoleDefinitions());
+      fetchData();
+      setCurrentUserLocal(apiService.getCurrentUser());
     };
     window.addEventListener('user_sim_updated', handleUpdate);
     window.addEventListener('users_updated', handleUpdate);
@@ -47,21 +58,20 @@ const UserPermissionsView: React.FC = () => {
   }, []);
 
   const handleSwitchUser = (user: AppUser) => {
-    setCurrentUser(user);
+    apiService.setCurrentUser(user);
     setCurrentUserLocal(user);
     setToastMsg(`Simulated login as ${user.name} (${user.role})`);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
   };
 
-  const handleAddNewUser = (e: React.FormEvent) => {
+  const handleAddNewUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUser.name || !newUser.email) return;
 
     const selectedRole = roles.find(r => r.id === newUser.roleId) || roles[0];
 
-    const user: AppUser = {
-      id: `u-${Date.now()}`,
+    const userData = {
       name: newUser.name,
       email: newUser.email,
       role: selectedRole.name as any,
@@ -69,13 +79,19 @@ const UserPermissionsView: React.FC = () => {
       avatar: newUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
     };
 
-    saveUsers([...users, user]);
-    setShowNewUserModal(false);
-    setNewUser({ name: '', email: '', role: 'Staff', roleId: 'r-staff', avatar: '' });
-    
-    setToastMsg(`User ${user.name} added successfully`);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
+    try {
+      await apiService.createUser(userData);
+      const updatedUsers = await apiService.getUsers();
+      setUsers(updatedUsers);
+      setShowNewUserModal(false);
+      setNewUser({ name: '', email: '', role: 'Staff', roleId: 'r-staff', avatar: '' });
+      
+      setToastMsg(`User ${userData.name} added successfully`);
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 3000);
+    } catch (err) {
+      console.error('Failed to create user:', err);
+    }
   };
 
   const getRoleBadgeColor = (role: UserRole) => {

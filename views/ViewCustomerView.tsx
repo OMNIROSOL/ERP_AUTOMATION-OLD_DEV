@@ -18,14 +18,21 @@ const ViewCustomerView = () => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                const customers = await apiService.getCustomers();
-                setAllCustomers(customers);
+                const data = await apiService.getCustomer(id!);
+                setCustomer(data);
                 
-                // Find current customer
-                const cust = customers.find(c => c.id === id || c.code === id);
-                setCustomer(cust || null);
+                // Also get all for navigation
+                const all = await apiService.getCustomers();
+                setAllCustomers(all);
             } catch (err) {
                 console.error('Failed to fetch customer data:', err);
+                // Fallback
+                try {
+                    const customers = await apiService.getCustomers();
+                    setAllCustomers(customers);
+                    const cust = customers.find(c => c.id === id || c.code === id);
+                    if (cust) setCustomer(cust);
+                } catch (e) {}
             } finally {
                 setIsLoading(false);
             }

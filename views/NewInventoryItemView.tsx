@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, Package, Trash2, ArrowLeft, HelpCircle } from 'lucide-react';
-import { mockInventoryItems, getInventoryLocations } from '../mockData';
 import { InventoryItem, Division } from '../types';
 import apiService from '../services/apiService';
 
@@ -9,7 +8,6 @@ const NewInventoryItemView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const existingItem = isEdit ? mockInventoryItems.find(i => i.id === id) : null;
 
   const [formData, setFormData] = useState<Partial<InventoryItem>>({
     itemCode: '',
@@ -82,8 +80,7 @@ const NewInventoryItemView = () => {
       };
 
       if (isEdit) {
-        // await apiService.updateItem(id!, dataToSave);
-        alert('Update functionality not fully implemented in API yet.');
+        await apiService.updateItem(id!, dataToSave);
       } else {
         await apiService.createItem(dataToSave);
       }

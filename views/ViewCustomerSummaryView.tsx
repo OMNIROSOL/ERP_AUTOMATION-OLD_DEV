@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
+import apiService from '../services/apiService';
+
 interface CustomerSummaryData {
   customer: string;
   openingBalance: number;
@@ -21,20 +23,6 @@ interface CustomerSummaryData {
   closingBalance: number;
   currency: string;
 }
-
-const mockSummaryData: CustomerSummaryData[] = [
-  // ZMW Records
-  { customer: 'UNICORN LOGISTICS ZAMBIA LTD JB', openingBalance: 450000.00, invoices: 1200000.00, receipts: 300000.00, journalEntries: 0, creditNotes: 2366.18, refunds: 0, closingBalance: 1347633.82, currency: 'ZMW' },
-  { customer: 'MACHI AUTO PARTS LIMITED - JACOB', openingBalance: 0, invoices: 1526270.00, receipts: 200000.00, journalEntries: 0, creditNotes: 0, refunds: 0, closingBalance: 1326270.00, currency: 'ZMW' },
-  { customer: 'TERMITES MEAT SUPPLIERS LIMITED', openingBalance: 100000.00, invoices: 732800.00, receipts: 0, journalEntries: 0, creditNotes: 0, refunds: 0, closingBalance: 832800.00, currency: 'ZMW' },
-
-  // USD Records
-  { customer: 'GLOBAL FREIGHT SERVICES (USD)', openingBalance: 15000.00, invoices: 31900.00, receipts: 15000.00, journalEntries: 0, creditNotes: 0, refunds: 0, closingBalance: 31900.00, currency: 'USD' },
-  { customer: 'TRANS-AFRICA LOGISTICS (USD)', openingBalance: 0, invoices: 50000.00, receipts: 20000.00, journalEntries: 0, creditNotes: 0, refunds: 0, closingBalance: 30000.00, currency: 'USD' },
-
-  // More ZMW
-  { customer: 'FIRST CHOICE LOGISTICS LIMITED', openingBalance: 552770.00, invoices: 0, receipts: 0, journalEntries: 0, creditNotes: 0, refunds: 0, closingBalance: 552770.00, currency: 'ZMW' }
-];
 
 const ViewCustomerSummaryView: React.FC = () => {
   const navigate = useNavigate();
@@ -53,6 +41,47 @@ const ViewCustomerSummaryView: React.FC = () => {
     return null;
   }, [id]);
 
+  const [dbData, setDbData] = React.useState<CustomerSummaryData[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const [customers, invoices] = await Promise.all([
+          apiService.getCustomers(),
+          apiService.getInvoices()
+        ]);
+
+        const summary = customers.map(cust => {
+          const custInvoices = invoices.filter(inv => (inv.customerId === cust.id || inv.customer?.id === cust.id) && inv.status !== 'Draft');
+          
+          const totalInvoiced = custInvoices.reduce((acc, inv) => acc + (parseFloat(inv.grandTotal) || 0), 0);
+          const totalPaid = custInvoices.filter(inv => inv.status === 'Paid').reduce((acc, inv) => acc + (parseFloat(inv.grandTotal) || 0), 0);
+
+          return {
+            customer: cust.name,
+            openingBalance: 0, // Placeholder
+            invoices: totalInvoiced,
+            receipts: totalPaid,
+            journalEntries: 0,
+            creditNotes: 0,
+            refunds: 0,
+            closingBalance: totalInvoiced - totalPaid,
+            currency: cust.currency?.split(' - ')[0] || 'ZMW'
+          };
+        }).filter(s => s.invoices > 0 || s.closingBalance !== 0);
+
+        setDbData(summary);
+      } catch (err) {
+        console.error('Failed to load summary data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   const formatCurrency = (val: number) => {
     if (val === 0) return '—';
     return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -60,12 +89,12 @@ const ViewCustomerSummaryView: React.FC = () => {
 
   const groupedData = useMemo(() => {
     const groups: Record<string, CustomerSummaryData[]> = {};
-    mockSummaryData.forEach(item => {
+    dbData.forEach(item => {
       if (!groups[item.currency]) groups[item.currency] = [];
       groups[item.currency].push(item);
     });
     return groups;
-  }, []);
+  }, [dbData]);
 
   const currencies = useMemo(() => {
     return Object.keys(groupedData).sort((a, b) => {
@@ -74,6 +103,10 @@ const ViewCustomerSummaryView: React.FC = () => {
       return a.localeCompare(b);
     });
   }, [groupedData]);
+
+  if (isLoading) {
+    return <div className="p-20 text-center font-bold text-slate-400">LOADING DATABASE SUMMARY...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-8 space-y-8 animate-in fade-in duration-700 font-sans">
@@ -135,7 +168,7 @@ const ViewCustomerSummaryView: React.FC = () => {
             <div className="flex items-center gap-8 text-right">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest block mb-0.5 text-slate-400">Total Accounts</span>
-                <span className="text-[12px] font-bold text-slate-900">{mockSummaryData.length}</span>
+                <span className="text-[12px] font-bold text-slate-900">{dbData.length}</span>
               </div>
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest block mb-0.5">Division</span>

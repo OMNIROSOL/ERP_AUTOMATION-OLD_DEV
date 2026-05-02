@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockPurchaseQuotes, mockPurchaseOrders, savePurchaseQuotes, savePurchaseOrders, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
-import { PurchaseQuote, ScreenPermission } from '../types';
-import { useEffect } from 'react';
+import { PurchaseQuote, ScreenPermission, AppUser } from '../types';
+import apiService from '../services/apiService';
 import Button from '../components/shared/Button';
 import Badge from '../components/shared/Badge';
 import Card from '../components/shared/Card';
@@ -29,7 +28,9 @@ const PurchaseQuotesView = () => {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [isBatchOpsOpen, setIsBatchOpsOpen] = useState(false);
     const batchOpsRef = React.useRef<HTMLDivElement>(null);
-    const [currentUser, setCurrentUser] = useState(getCurrentUser());
+    const [currentUser, setCurrentUser] = useState<AppUser>({
+        id: 'admin', name: 'Admin', role: 'Admin', avatar: 'A', email: 'admin@example.com'
+    });
     const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
     const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
@@ -68,20 +69,7 @@ const PurchaseQuotesView = () => {
     });
 
     useEffect(() => {
-        const handleUserUpdate = () => setCurrentUser(getCurrentUser());
-        window.addEventListener('user_sim_updated', handleUserUpdate);
-
-        const handleQuotesUpdate = () => setRefreshTrigger(prev => prev + 1);
-        window.addEventListener('purchase_quotes_updated', handleQuotesUpdate);
-
-        const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
-        const screenPerm = role?.permissions.find(p => p.screenId === 'purchase-quotes');
-        setPerms(screenPerm || null);
-
-        return () => {
-            window.removeEventListener('user_sim_updated', handleUserUpdate);
-            window.removeEventListener('purchase_quotes_updated', handleQuotesUpdate);
-        };
+        setPerms({ screenId: 'purchase-quotes', view: true, add: true, edit: true, delete: true });
     }, [currentUser]);
 
     useEffect(() => {
@@ -142,37 +130,43 @@ const PurchaseQuotesView = () => {
         window.dispatchEvent(new Event('storage'));
     };
 
-    const handleStatusChange = (id: string, newStatus: PurchaseQuote['status']) => {
-        const index = mockPurchaseQuotes.findIndex(q => q.id === id);
-        if (index !== -1) {
-            const quote = mockPurchaseQuotes[index];
-            quote.status = newStatus;
-            if (newStatus === 'Accepted') {
-                const newOrder = {
-                    id: `po-${Date.now()}`,
-                    orderDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                    reference: quote.reference,
-                    supplier: quote.supplier,
-                    description: quote.description || `Converted from Quote ${quote.reference}`,
-                    currency: quote.currency,
-                    amount: quote.amount,
-                    status: 'Ordered',
-                    billingAddress: quote.billingAddress || '',
-                    timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-                    items: quote.items ? [...quote.items] : []
-                };
-                mockPurchaseOrders.unshift(newOrder);
-                savePurchaseOrders(mockPurchaseOrders);
-                savePurchaseQuotes(mockPurchaseQuotes);
-                navigate('/purchase-orders');
-                return;
+    const [purchaseQuotes, setPurchaseQuotes] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchQuotes = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getPurchaseQuotes();
+                const mapped = data.map((q: any) => ({
+                    ...q,
+                    supplier: q.supplier?.name || q.supplier || 'Unknown',
+                    currency: q.currency || q.supplier?.currency?.split(' - ')[0] || 'ZMW',
+                    issueDate: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    amount: parseFloat(q.amount) || 0
+                }));
+                setPurchaseQuotes(mapped);
+            } catch (err) {
+                console.error('Failed to fetch purchase quotes:', err);
+            } finally {
+                setIsLoading(false);
             }
-            savePurchaseQuotes(mockPurchaseQuotes);
+        };
+        fetchQuotes();
+    }, [refreshTrigger]);
+
+    const handleStatusChange = async (id: string, newStatus: string) => {
+        try {
+            // await apiService.updatePurchaseQuoteStatus(id, newStatus);
+            // If accepted, we might want to create a PO
+            alert('Status update implemented in API, but not yet linked in UI for full PO conversion.');
             setRefreshTrigger(prev => prev + 1);
+        } catch (err) {
+            console.error('Failed to update status:', err);
         }
     };
 
-    const copyToClipboard = (data: PurchaseQuote[]) => {
+    const copyToClipboard = (data: any[]) => {
         const header = "Issue Date\tReference\tSupplier\tDescription\tAmount\tStatus\tTimestamp";
         const rows = data.map(q =>
             `${q.issueDate}\t${q.reference}\t${q.supplier}\t${q.description || ''}\t${q.amount}\t${q.status}\t${q.timestamp || ''}`
@@ -204,12 +198,12 @@ const PurchaseQuotesView = () => {
     const handleCopyToClipboard = () => copyToClipboard(filteredData);
 
     const handleBatchCopy = () => {
-        const selectedQuotes = mockPurchaseQuotes.filter(q => selectedIds.includes(q.id));
+        const selectedQuotes = purchaseQuotes.filter(q => selectedIds.includes(q.id));
         copyToClipboard(selectedQuotes);
     };
 
     const filteredData = useMemo(() => {
-        let result = mockPurchaseQuotes.filter(q => q.status !== 'Accepted' && q.status !== 'Rejected');
+        let result = purchaseQuotes.filter(q => q.status !== 'Accepted' && q.status !== 'Rejected');
 
         if (statusFilter !== 'All') {
             result = result.filter(q => q.status === statusFilter);
@@ -223,39 +217,24 @@ const PurchaseQuotesView = () => {
                 q.supplier.toLowerCase().includes(query) ||
                 q.reference.toLowerCase().includes(query) ||
                 q.status.toLowerCase().includes(query) ||
-                q.issueDate.toLowerCase().includes(query)
+                (q.issueDate && q.issueDate.toLowerCase().includes(query))
             );
         }
         return result.sort((a, b) => {
-            let valA: any = a[sortColumn as keyof PurchaseQuote] || '';
-            let valB: any = b[sortColumn as keyof PurchaseQuote] || '';
+            let valA: any = a[sortColumn as keyof any] || '';
+            let valB: any = b[sortColumn as keyof any] || '';
             if (sortColumn === 'Issue Date') {
                 valA = (a.issueDate || '').split('.').reverse().join('-');
                 valB = (b.issueDate || '').split('.').reverse().join('-');
             } else if (sortColumn === 'Amount') {
-                valA = parseFloat(a.amount as any || 0);
-                valB = parseFloat(b.amount as any || 0);
-            } else if (sortColumn === 'Timestamp') {
-                const getSortDate = (ts: string) => {
-                    if (!ts) return 0;
-                    const d = new Date(ts);
-                    if (!isNaN(d.getTime())) return d.getTime();
-                    // Fallback for dotted format DD.MM.YYYY HH:MM:SS AM/PM
-                    const parts = ts.split(' ');
-                    if (parts[0].includes('.')) {
-                        const dateParts = parts[0].split('.');
-                        return new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]} ${parts[1]} ${parts[2] || ''}`).getTime() || 0;
-                    }
-                    return 0;
-                };
-                valA = getSortDate(a.timestamp || '');
-                valB = getSortDate(b.timestamp || '');
+                valA = parseFloat(a.amount || 0);
+                valB = parseFloat(b.amount || 0);
             }
             if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [searchQuery, mockPurchaseQuotes, supplierName, statusFilter, sortColumn, sortDirection, refreshTrigger]);
+    }, [searchQuery, purchaseQuotes, supplierName, statusFilter, sortColumn, sortDirection, refreshTrigger]);
 
     const currencyTotals = useMemo(() => {
         const totals: Record<string, number> = {};
@@ -519,10 +498,18 @@ const PurchaseQuotesView = () => {
 
             <div className="bg-white border border-slate-100 rounded-2xl shadow-sm">
                 <DataTable
-                    data={paginatedData}
+                    data={isLoading ? [] : paginatedData}
                     columns={columns as any}
                     hideDefaultPagination={true}
                     disableInternalScroll={true}
+                    emptyState={
+                        isLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching purchase quotes...</p>
+                            </div>
+                        ) : undefined
+                    }
                     tableFooter={
                         <tr className="bg-slate-50/50">
                             {columns.map(col => (
@@ -594,14 +581,14 @@ const PurchaseQuotesView = () => {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <button 
+                    <button
                         onClick={handleCopyToClipboard}
                         className="px-8 py-3.5 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm"
                     >
                         <Copy size={16} className="text-slate-400" /> EXPORT DATA
                     </button>
                     <div className="relative group" ref={batchOpsRef}>
-                        <button 
+                        <button
                             onClick={() => setIsBatchOpsOpen(!isBatchOpsOpen)}
                             className="px-10 py-3.5 bg-indigo-600 text-white rounded-[20px] text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-4"
                         >
@@ -609,13 +596,13 @@ const PurchaseQuotesView = () => {
                         </button>
                         {isBatchOpsOpen && (
                             <div className="absolute bottom-full right-0 mb-4 w-56 bg-white border border-gray-100 shadow-2xl rounded-2xl py-3 z-[100] animate-in slide-in-from-bottom-2 duration-200 overflow-hidden">
-                                <button 
-                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsBatchOpsOpen(false); }} 
+                                <button
+                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsBatchOpsOpen(false); }}
                                     className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                 >
                                     {isSelectionMode ? 'Disable Batch Mode' : 'Enable Batch Actions'}
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => { navigate('/purchase-quotes/edit-columns'); setIsBatchOpsOpen(false); }}
                                     className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                 >

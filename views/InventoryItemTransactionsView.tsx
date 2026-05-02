@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { ChevronRight, LayoutGrid, HelpCircle, Edit, Eye, Search } from 'lucide-react';
-import { getCustomers, getDeliveryTransactionsByItem } from '../mockData';
+import apiService from '../services/apiService';
+import { Customer, InventoryItem } from '../types';
 
 const InventoryItemTransactionsView = () => {
     const { id } = useParams();
@@ -10,29 +11,50 @@ const InventoryItemTransactionsView = () => {
     const queryParams = new URLSearchParams(location.search);
     const itemName = queryParams.get('item');
 
-    const customers = useMemo(() => getCustomers(), []);
-    const customer = useMemo(() => customers.find(c => c.id === id), [customers, id]);
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [transactions, setTransactions] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
-    const transactions = useMemo(() => {
-        if (!customer || !itemName) return [];
-        const items = getDeliveryTransactionsByItem(customer.name, itemName);
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!id || !itemName) return;
+            setIsLoading(true);
+            try {
+                const [custData, transData] = await Promise.all([
+                    apiService.getCustomer(id),
+                    apiService.getDeliveryNotes() // Fallback to filtering all delivery notes if specialized endpoint missing
+                ]);
+                setCustomer(custData);
+                
+                // Filtering logic to match the legacy behavior
+                const filtered = transData
+                    .filter((dn: any) => dn.customerName === custData.name && dn.items?.some((it: any) => it.itemName === itemName))
+                    .map((dn: any) => ({
+                        id: dn.id,
+                        date: dn.date,
+                        transaction: 'Delivery Note',
+                        reference: dn.reference,
+                        inventoryItem: itemName,
+                        customer: custData.name,
+                        qtyToDeliver: dn.items.find((it: any) => it.itemName === itemName)?.qty || 0
+                    }));
 
-        let runningBalance = 0;
-        return items.map(t => {
-            runningBalance += t.qty;
-            return {
-                id: t.id,
-                date: t.date,
-                transaction: t.transaction,
-                reference: t.reference,
-                inventoryItem: itemName,
-                customer: customer.name,
-                qtyToDeliver: t.qty,
-                balance: runningBalance
-            };
-        });
-    }, [customer, itemName]);
+                let runningBalance = 0;
+                const withBalance = filtered.map((t: any) => {
+                    runningBalance += t.qtyToDeliver;
+                    return { ...t, balance: runningBalance };
+                });
+                
+                setTransactions(withBalance);
+            } catch (err) {
+                console.error('Failed to fetch transactions:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id, itemName]);
 
     const filteredTransactions = useMemo(() => {
         return transactions.filter(t =>

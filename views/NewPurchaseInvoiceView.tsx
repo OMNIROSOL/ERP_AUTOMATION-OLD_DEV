@@ -1,14 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
-import {
-    mockPurchaseOrders,
-    mockPurchaseInvoices,
-    mockInventory,
-    getSuppliers,
-    savePurchaseInvoices,
-    getFooters
-} from '../mockData';
-import { PurchaseInvoice } from '../types';
+import apiService from '../services/apiService';
+import { PurchaseInvoice, FooterTemplate } from '../types';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -115,67 +108,36 @@ const NewPurchaseInvoiceView = () => {
         footerValue: 'Terms & Conditions apply.'
     });
 
-    const getNextReference = () => {
-        const refs = mockPurchaseInvoices
-            .map(i => i.reference)
-            .filter(ref => ref && ref.startsWith('PI-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1001;
-        return `PI-${nextNum.toString().padStart(4, '0')}`;
-    };
+    const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
+    const [dbItems, setDbItems] = useState<any[]>([]);
+    const [dbFooters, setDbFooters] = useState<FooterTemplate[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
-        const searchParams = new URLSearchParams(location.search);
-        const copyFromId = searchParams.get('copyFrom');
-        if (id || copyFromId) {
-            const invoiceId = id || copyFromId;
-            const sourceInvoice = mockPurchaseInvoices.find(i => i.id === invoiceId);
-            const sourceOrder = !sourceInvoice ? mockPurchaseOrders.find(o => o.id === invoiceId) : null;
-            const doc = sourceInvoice || sourceOrder;
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const [sups, itemsData, footersData] = await Promise.all([
+                    apiService.getSuppliers(),
+                    apiService.getItems(),
+                    apiService.getFooters()
+                ]);
+                setDbSuppliers(sups);
+                setDbItems(itemsData);
+                setDbFooters(footersData);
 
-            if (doc) {
-                setIssueDate(new Date().toISOString().split('T')[0]);
-                setDueDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-                setSupplier(doc.supplier);
-                setCurrency(doc.currency || 'ZMW');
-                setBillingAddress((doc as any).billingAddress || getSuppliers().find(s => s.name === doc.supplier)?.billingAddress || '');
-                if (id) {
-                    setReference(doc.reference);
-                    setUseManualRef(true);
-                } else {
-                    setReference(getNextReference());
-                    setUseManualRef(false);
+                if (!id && !location.search.includes('copyFrom')) {
+                    const nextRef = await apiService.getNextReference('purchase-invoice');
+                    setReference(nextRef);
                 }
-                setDescription(doc.description || '');
-
-                const itemsToSet = doc.items && doc.items.length > 0
-                    ? doc.items
-                    : [{ id: Date.now(), item: 'General Item', description: doc.description || '', qty: 1, unitPrice: (doc as any).invoiceAmount || (doc as any).amount || 0, discount: '', taxCode: 'No tax' }];
-
-                setItems(itemsToSet.map(i => ({
-                    id: i.id || Date.now() + Math.random(),
-                    item: i.item || 'Select Item',
-                    account: (i as any).account || 'Inventory',
-                    description: i.description || '',
-                    qty: i.qty ? i.qty.toString() : '1',
-                    unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
-                    discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax'
-                })));
+            } catch (err) {
+                console.error('Failed to load invoice data:', err);
+            } finally {
+                setIsLoading(false);
             }
-        } else {
-            setIssueDate(new Date().toISOString().split('T')[0]);
-            setDueDate(new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-            setSupplier('');
-            setCurrency('ZMW');
-            setBillingAddress('');
-            setReference(getNextReference());
-            setUseManualRef(false);
-            setDescription('');
-            setItems([{ id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
-        }
-    }, [id, location.search]);
+        };
+        loadData();
+    }, [id]);
 
     const calculations = useMemo(() => {
         let subtotal = 0;
@@ -214,32 +176,56 @@ const NewPurchaseInvoiceView = () => {
     }, [items, options, freightItems]);
 
     const handleSave = async () => {
-        const newInvoice: PurchaseInvoice = {
-            id: isEditing ? id! : `PI-${Date.now()}`,
-            issueDate: issueDate.split('-').reverse().join('.'),
-            dueDate: dueDate.split('-').reverse().join('.'),
-            reference: reference || getNextReference(),
-            supplier: supplier,
-            description: description,
-            currency: currency,
-            invoiceAmount: calculations.grandTotal,
-            balanceDue: calculations.grandTotal,
-            status: 'Coming due',
-            billingAddress: billingAddress,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) }))
-        };
-
-        if (isEditing) {
-            const index = mockPurchaseInvoices.findIndex(inv => inv.id === id);
-            if (index !== -1) mockPurchaseInvoices[index] = newInvoice;
-        } else {
-            mockPurchaseInvoices.unshift(newInvoice);
+        if (!supplier) {
+            alert('Please select a supplier.');
+            return;
         }
 
-        savePurchaseInvoices(mockPurchaseInvoices);
-        window.dispatchEvent(new Event('storage'));
-        navigate('/purchase-invoices');
+        const validItems = items.filter(i => i.item !== 'Select Item' && i.item !== '');
+        if (validItems.length === 0) {
+            alert('Please add at least one valid item.');
+            return;
+        }
+
+        const selectedSup = dbSuppliers.find(s => s.name === supplier);
+        if (!selectedSup) {
+            alert('Selected supplier not found in database.');
+            return;
+        }
+
+        const invoiceData = {
+            reference: reference,
+            supplierId: selectedSup.id,
+            issueDate: issueDate,
+            dueDate: dueDate,
+            grandTotal: calculations.grandTotal,
+            balanceDue: calculations.grandTotal,
+            description: description,
+            currency: currency,
+            items: validItems.map(i => {
+                const dbItem = dbItems.find(it => it.itemName === i.item);
+                return {
+                    itemId: dbItem?.id,
+                    description: i.description,
+                    qty: parseFloat(i.qty),
+                    unitPrice: parseFloat(i.unitPrice),
+                    totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
+                };
+            })
+        };
+
+        try {
+            if (isEditing) {
+                // await apiService.updatePurchaseInvoice(id!, invoiceData);
+                alert('Update not yet implemented in backend.');
+            } else {
+                await apiService.createPurchaseInvoice(invoiceData);
+            }
+            navigate('/purchase-invoices');
+        } catch (err) {
+            console.error('Failed to save purchase invoice:', err);
+            alert('Failed to save purchase invoice to database.');
+        }
     };
 
     return (
@@ -310,14 +296,14 @@ const NewPurchaseInvoiceView = () => {
                                     <SelectField label="Selected Supplier" value={supplier} onChange={(e: any) => {
                                         const supName = e.target.value;
                                         setSupplier(supName);
-                                        const selected = getSuppliers().find(s => s.name === supName);
+                                        const selected = dbSuppliers.find(s => s.name === supName);
                                         if (selected) {
-                                            setCurrency(selected.currency.split(' - ')[0]);
+                                            setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
                                             setBillingAddress(selected.billingAddress || '');
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Supplier...</option>
-                                        {getSuppliers().map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                     </SelectField>
                                 </div>
                                 <TextareaField label="Supplier Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address of supplier..." rows={3} />
@@ -364,7 +350,7 @@ const NewPurchaseInvoiceView = () => {
                                                             value={item.item}
                                                             onChange={(e) => {
                                                                 const val = e.target.value;
-                                                                const invItem = (mockInventory as any)[val];
+                                                                const invItem = dbItems.find(it => it.itemName === val);
                                                                 setItems(prev => prev.map(i => i.id === item.id ? {
                                                                     ...i,
                                                                     item: val,
@@ -375,8 +361,8 @@ const NewPurchaseInvoiceView = () => {
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                         >
                                                             <option value="Select Item">Select Item</option>
-                                                            {Object.keys(mockInventory).map(name => (
-                                                                <option key={name} value={name}>{name}</option>
+                                                            {dbItems.map(it => (
+                                                                <option key={it.id} value={it.itemName}>{it.itemName}</option>
                                                             ))}
                                                         </select>
                                                     </td>
@@ -735,13 +721,13 @@ const NewPurchaseInvoiceView = () => {
                                                             <select
                                                                 onMouseDown={(e) => e.stopPropagation()}
                                                                 onChange={(e) => {
-                                                                    const footer = getFooters().find(f => f.id === e.target.value);
+                                                                    const footer = dbFooters.find(f => f.id === e.target.value);
                                                                     if (footer) setOptions(prev => ({ ...prev, footerValue: footer.content }));
                                                                 }}
                                                                 className="w-full appearance-none bg-white border border-indigo-100 rounded-full px-6 py-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer pr-12 shadow-sm"
                                                             >
                                                                 <option value="">-- Choose template --</option>
-                                                                {getFooters().map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                                {dbFooters.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                                             </select>
                                                             <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-indigo-400">
                                                                 <ChevronDown size={12} />

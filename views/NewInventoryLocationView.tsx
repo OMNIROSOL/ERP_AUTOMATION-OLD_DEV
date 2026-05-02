@@ -8,7 +8,7 @@ import {
   Trash2,
   AlertCircle
 } from 'lucide-react';
-import { getInventoryLocations, saveInventoryLocations } from '../mockData';
+import apiService from '../services/apiService';
 import { InventoryLocation } from '../types';
 
 const NewInventoryLocationView = () => {
@@ -16,6 +16,7 @@ const NewInventoryLocationView = () => {
   const { id } = useParams();
   const isEdit = !!id;
 
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<Partial<InventoryLocation>>({
     name: '',
     description: '',
@@ -23,13 +24,23 @@ const NewInventoryLocationView = () => {
   });
 
   useEffect(() => {
-    if (isEdit) {
-      const locations = getInventoryLocations();
-      const loc = locations.find(l => l.id === id);
-      if (loc) {
-        setFormData(loc);
+    const fetchLocation = async () => {
+      if (isEdit && id) {
+        setIsLoading(true);
+        try {
+          const locations = await apiService.getInventoryLocations();
+          const loc = locations.find((l: any) => l.id === id);
+          if (loc) {
+            setFormData(loc);
+          }
+        } catch (err) {
+          console.error('Failed to fetch location:', err);
+        } finally {
+          setIsLoading(false);
+        }
       }
-    }
+    };
+    fetchLocation();
   }, [id, isEdit]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -38,34 +49,53 @@ const NewInventoryLocationView = () => {
     setFormData(prev => ({ ...prev, [name]: val }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const locations = getInventoryLocations();
-    
-    if (isEdit) {
-      const updated = locations.map(l => l.id === id ? { ...l, ...formData } : l);
-      saveInventoryLocations(updated as InventoryLocation[]);
-    } else {
-      const newLoc: InventoryLocation = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: formData.name || '',
-        description: formData.description,
-        inactive: formData.inactive || false
-      };
-      saveInventoryLocations([...locations, newLoc]);
+    setIsLoading(true);
+    try {
+      if (isEdit && id) {
+        await apiService.updateLocation(id, formData);
+      } else {
+        await apiService.createLocation({
+          name: formData.name || '',
+          description: formData.description,
+          inactive: formData.inactive || false
+        });
+      }
+      navigate('/settings/inventory-locations');
+    } catch (err) {
+      console.error('Failed to save location:', err);
+      alert('Failed to save location to database');
+    } finally {
+      setIsLoading(false);
     }
-    
-    navigate('/settings/inventory-locations');
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (window.confirm('Are you sure you want to delete this location? This action cannot be undone.')) {
-      const locations = getInventoryLocations();
-      const filtered = locations.filter(l => l.id !== id);
-      saveInventoryLocations(filtered);
-      navigate('/settings/inventory-locations');
+      if (id) {
+        setIsLoading(true);
+        try {
+          await apiService.deleteLocation(id);
+          navigate('/settings/inventory-locations');
+        } catch (err) {
+          console.error('Failed to delete location:', err);
+          alert('Failed to delete location from database');
+        } finally {
+          setIsLoading(false);
+        }
+      }
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">{isEdit ? 'Updating location...' : 'Creating location...'}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">

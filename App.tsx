@@ -118,8 +118,7 @@ import NewSupplierView from './views/NewSupplierView';
 import EditSupplierView from './views/EditSupplierView';
 import ViewSupplierView from './views/ViewSupplierView';
 
-import { mockApprovalRequests } from './mockData';
-import { ApprovalRequest } from './types';
+
 
 // Not Found Component
 const NotFound = () => (
@@ -134,7 +133,6 @@ const NotFound = () => (
 
 
 const App = () => {
-  const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>(mockApprovalRequests);
 
   return (
     <Router>
@@ -234,8 +232,8 @@ const App = () => {
           {/* Sales Quotes Routes */}
           <Route path="/sales-quotes" element={<SalesQuotesView />} />
           <Route path="/sales-quotes/customer/:customerName" element={<SalesQuotesView />} />
-          <Route path="/sales-quotes/new" element={<EditSalesQuoteView setApprovalRequests={setApprovalRequests} />} />
-          <Route path="/sales-quotes/edit/:id" element={<EditSalesQuoteView setApprovalRequests={setApprovalRequests} />} />
+          <Route path="/sales-quotes/new" element={<EditSalesQuoteView />} />
+          <Route path="/sales-quotes/edit/:id" element={<EditSalesQuoteView />} />
           <Route path="/sales-quotes/view/:id" element={<ViewSalesQuoteView />} />
 
           <Route path="/sales-quotes/edit-columns" element={<EditColumnsView />} />
@@ -331,7 +329,7 @@ const App = () => {
           <Route path="/receipts/edit/:id" element={<NewReceiptView />} />
 
           {/* Approvals Routes */}
-          <Route path="/approvals" element={<ApprovalsView requests={approvalRequests} setRequests={setApprovalRequests} />} />
+          <Route path="/approvals" element={<ApprovalsView />} />
 
           {/* Sales History Routes */}
           <Route path="/sales-history" element={<SalesHistoryView />} />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { mockSalesQuotes } from '../mockData';
+import apiService from '../services/apiService';
 
 const NewDebitNoteView = () => {
     const navigate = useNavigate();
@@ -8,7 +8,7 @@ const NewDebitNoteView = () => {
     const dateInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [issueDate, setIssueDate] = useState('2026-02-24');
+    const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [supplier, setSupplier] = useState('');
     const [description, setDescription] = useState('');
     const [reference, setReference] = useState('');
@@ -16,23 +16,30 @@ const NewDebitNoteView = () => {
     const [fileName, setFileName] = useState('No file chosen');
     const [items, setItems] = useState([{ id: Date.now(), item: '', account: 'Inventory on hand', qty: '1', unitPrice: '0', taxCode: 'VAT 16%' }]);
 
+    const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
+    const [dbItems, setDbItems] = useState<any[]>([]);
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [sups, itemsData] = await Promise.all([
+                    apiService.getSuppliers(),
+                    apiService.getItems()
+                ]);
+                setDbSuppliers(sups);
+                setDbItems(itemsData);
+            } catch (err) {
+                console.error('Failed to load debit note data:', err);
+            }
+        };
+        loadData();
+    }, []);
+
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const copyFromId = params.get('copyFrom');
         if (copyFromId) {
-            const quote = mockSalesQuotes.find(q => q.id === copyFromId);
-            if (quote) {
-                setIssueDate('2026-02-24');
-                setDescription(quote.description);
-                setItems([{
-                    id: Date.now(),
-                    item: 'MI0084 315/80 R22.5 UNIVERSAL',
-                    account: 'Inventory on hand',
-                    qty: '8',
-                    unitPrice: '230',
-                    taxCode: 'VAT 16%'
-                }]);
-            }
+            // Placeholder: logic for copying if needed
         }
     }, [location.search]);
 
@@ -122,6 +129,7 @@ const NewDebitNoteView = () => {
                                     onChange={(e) => setSupplier(e.target.value)}
                                 >
                                     <option value=""></option>
+                                    {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                 </select>
                                 <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] pointer-events-none"></i>
                             </div>
@@ -168,14 +176,16 @@ const NewDebitNoteView = () => {
                                     <tr key={item.id} className="group">
                                         <td className="pr-4 pb-2">
                                             <div className="relative">
-                                                <input
-                                                    type="text"
+                                                <select
+                                                    className="w-full border border-[#cfd8dc] rounded-[4px] px-3 py-1.5 text-[13px] outline-none focus:border-[#2196f3] appearance-none bg-white"
                                                     value={item.item}
                                                     onChange={(e) => updateItem(item.id, 'item', e.target.value)}
-                                                    className="w-full border border-[#cfd8dc] rounded-[4px] px-3 py-1.5 text-[13px] outline-none focus:border-[#2196f3]"
-                                                />
-                                                <button className="absolute right-2 top-1/2 -translate-y-1/2 text-[#cfd8dc] hover:text-[#90a4ae]">×</button>
-                                                <i className="fas fa-caret-down absolute right-6 top-1/2 -translate-y-1/2 text-[#cfd8dc]"></i>
+                                                >
+                                                    <option value=""></option>
+                                                    {dbItems.map(it => (
+                                                        <option key={it.id} value={it.itemName}>{it.itemName}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                         </td>
                                         <td className="pr-4 pb-2">

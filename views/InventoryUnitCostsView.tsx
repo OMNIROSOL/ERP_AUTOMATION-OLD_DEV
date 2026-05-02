@@ -1,23 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Edit2, Calendar, Package, DollarSign, ArrowLeft, Settings } from 'lucide-react';
-import { getInventoryUnitCosts } from '../mockData';
+import apiService from '../services/apiService';
 import { InventoryUnitCost } from '../types';
 
 const InventoryUnitCostsView = () => {
   const navigate = useNavigate();
   const [unitCosts, setUnitCosts] = useState<InventoryUnitCost[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const loadData = () => {
-    setUnitCosts(getInventoryUnitCosts());
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const data = await apiService.getInventoryUnitCosts();
+      setUnitCosts(data);
+    } catch (err) {
+      console.error('Failed to fetch inventory unit costs:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     loadData();
-    window.addEventListener('inventory_unit_costs_updated', loadData);
-    return () => window.removeEventListener('inventory_unit_costs_updated', loadData);
   }, []);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading inventory costs...</p>
+      </div>
+    );
+  }
 
   const filteredCosts = unitCosts.filter(cost => 
     (cost.itemName || '').toLowerCase().includes(searchTerm.toLowerCase())

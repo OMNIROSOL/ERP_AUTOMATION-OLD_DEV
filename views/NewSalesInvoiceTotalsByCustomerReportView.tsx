@@ -75,8 +75,8 @@ const NewSalesInvoiceTotalsByCustomerReportView: React.FC = () => {
       division: formData.division,
       description: formData.description,
       sortBy: formData.sortBy,
-      totalAmount: Math.floor(Math.random() * 200000) + 50000, // Mock amount
-      customerCount: Math.floor(Math.random() * 20) + 5 // Mock count
+      totalAmount: 0, 
+      customerCount: 0
     };
 
     const saved = localStorage.getItem('sales_invoice_totals_reports');

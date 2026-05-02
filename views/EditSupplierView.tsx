@@ -1,7 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Building2, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, Save, ChevronUp, UserX } from 'lucide-react';
-import { getSuppliers, saveSuppliers, getInventoryLocations } from '../mockData';
 import { Supplier, Division } from '../types';
 import apiService from '../services/apiService';
 
@@ -60,11 +59,8 @@ const EditSupplierView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const allSuppliers = useMemo(() => getSuppliers(), []);
-
-    const existingSupplier = useMemo(() => {
-        return allSuppliers.find(s => s.id === id) || allSuppliers.find(s => s.code === id);
-    }, [id, allSuppliers]);
+    const [existingSupplier, setExistingSupplier] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
     const [name, setName] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -78,25 +74,42 @@ const EditSupplierView = () => {
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
 
     useEffect(() => {
-        apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
-    }, []);
+        const loadSupplier = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                // Try fetching all and finding for fallback if ID vs Code is ambiguous
+                const suppliers = await apiService.getSuppliers();
+                const found = suppliers.find((s: any) => s.id === id || s.code === id);
+                if (found) {
+                    setExistingSupplier(found);
+                    setName(found.name || '');
+                    setCurrency(found.currency || 'ZMW');
+                    setAddress(found.billingAddress || found.address || '');
+                    setEmail(found.email || '');
+                    setDivision(found.division || 'General');
+                    setFileName(found.documentation || 'No file chosen');
+                    setInactive(found.inactive || false);
+                }
+            } catch (err) {
+                console.error('Failed to load supplier:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-    const validateEmail = (email: string) => {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(email);
-    };
+        const loadDivisions = async () => {
+            try {
+                const divs = await apiService.getDivisions();
+                setAvailableDivisions(divs);
+            } catch (err) {
+                console.error('Failed to fetch divisions:', err);
+            }
+        };
 
-    useEffect(() => {
-        if (existingSupplier) {
-            setName(existingSupplier.name || '');
-            setCurrency(existingSupplier.currency || 'ZMW');
-            setAddress(existingSupplier.billingAddress || (existingSupplier as any).address || '');
-            setEmail(existingSupplier.email || '');
-            setDivision(existingSupplier.division || 'General');
-            setFileName(existingSupplier.documentation || 'No file chosen');
-            setInactive(existingSupplier.inactive || false);
-        }
-    }, [existingSupplier]);
+        loadSupplier();
+        loadDivisions();
+    }, [id]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -253,7 +266,12 @@ const EditSupplierView = () => {
                             Discard Changes
                         </button>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
+                                const validateEmail = (email: string) => {
+                                    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                    return re.test(email);
+                                };
+
                                 if (email && !validateEmail(email)) {
                                     setEmailError('Invalid email format');
                                     return;
@@ -268,21 +286,22 @@ const EditSupplierView = () => {
                                     ? `${name} - ${currencyCode}` 
                                     : name;
 
-                                const updatedSupplier: Supplier = {
-                                    ...existingSupplier,
-                                    name: finalName || 'Unnamed Supplier',
-                                    division: division,
-                                    email: email,
-                                    billingAddress: address,
-                                    currency: currency,
-                                    documentation: fileName !== 'No file chosen' ? fileName : undefined,
-                                    inactive: inactive
-                                };
-
-                                const updatedSuppliers = allSuppliers.map(s => s.id === existingSupplier.id ? updatedSupplier : s);
-                                saveSuppliers(updatedSuppliers);
-                                alert('Supplier profile updated successfully!');
-                                navigate('/suppliers');
+                                try {
+                                    await apiService.updateSupplier(existingSupplier.id, {
+                                        name: finalName || 'Unnamed Supplier',
+                                        division: division,
+                                        email: email,
+                                        billingAddress: address,
+                                        currency: currency,
+                                        documentation: fileName !== 'No file chosen' ? fileName : undefined,
+                                        inactive: inactive
+                                    });
+                                    alert('Supplier profile updated successfully!');
+                                    navigate('/suppliers');
+                                } catch (err) {
+                                    console.error('Failed to update supplier:', err);
+                                    alert('Error updating supplier profile.');
+                                }
                             }}
                             className="bg-indigo-600 text-white px-12 py-4 rounded-2xl text-[14px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 uppercase tracking-[0.2em] flex items-center gap-2"
                         >

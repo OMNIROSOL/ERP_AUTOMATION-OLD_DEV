@@ -1,28 +1,51 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronRight, LayoutGrid, HelpCircle, Search, FileText, ArrowLeft } from 'lucide-react';
-import { getCustomers, mockInvoices, mockInventory } from '../mockData';
+import apiService from '../services/apiService';
+import { Customer, SalesInvoice, InventoryItem } from '../types';
 
 const CustomerCostOfSalesView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const customers = useMemo(() => getCustomers(), []);
-    const customer = useMemo(() => customers.find(c => c.id === id), [customers, id]);
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [invoices, setInvoices] = useState<SalesInvoice[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const [custData, invList, items] = await Promise.all([
+                    apiService.getCustomer(id),
+                    apiService.getInvoices(),
+                    apiService.getItems()
+                ]);
+                setCustomer(custData);
+                setInvoices(invList.filter((inv: any) => inv.customerName === custData.name || inv.customerId === id));
+                setInventoryItems(items);
+            } catch (err) {
+                console.error('Failed to fetch customer COGS data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id]);
 
     const costOfSalesData = useMemo(() => {
         if (!customer) return [];
         
-        const customerInvoices = mockInvoices.filter(inv => inv.customer === customer.name);
-        
         const lines: any[] = [];
-        customerInvoices.forEach(inv => {
+        invoices.forEach(inv => {
             if (inv.items) {
                 inv.items.forEach(item => {
-                    const inventoryItem = mockInventory[item.item];
-                    const purchasePrice = inventoryItem ? inventoryItem.purchasePrice : 0;
-                    const qty = parseFloat(item.qty) || 0;
+                    const inventoryItem = inventoryItems.find(ii => ii.itemName === item.item || ii.itemCode === item.item);
+                    const purchasePrice = inventoryItem ? (inventoryItem.avgCost || 0) : 0;
+                    const qty = parseFloat(item.qty as any) || 0;
                     const totalCost = qty * purchasePrice;
                     
                     lines.push({
@@ -41,11 +64,11 @@ const CustomerCostOfSalesView = () => {
         });
         
         return lines.sort((a, b) => {
-            const dateA = a.date.split('.').reverse().join('-');
-            const dateB = b.date.split('.').reverse().join('-');
+            const dateA = (a.date || '').split('.').reverse().join('-');
+            const dateB = (b.date || '').split('.').reverse().join('-');
             return dateB.localeCompare(dateA);
         });
-    }, [customer]);
+    }, [customer, invoices, inventoryItems]);
 
     const filteredData = useMemo(() => {
         const query = searchQuery.toLowerCase();
@@ -55,6 +78,15 @@ const CustomerCostOfSalesView = () => {
             (line.description && line.description.toLowerCase().includes(query))
         );
     }, [costOfSalesData, searchQuery]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading COGS data...</p>
+            </div>
+        );
+    }
 
     const grandTotalCost = useMemo(() => {
         return filteredData.reduce((sum, line) => sum + line.totalCost, 0);

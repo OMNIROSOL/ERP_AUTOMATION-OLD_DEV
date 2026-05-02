@@ -1,13 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
-import {
-    mockSalesOrders,
-    mockInvoices,
-    mockApprovalRequests,
-    getCurrentUser,
-} from '../mockData';
-import apiService from '../services/apiService';
 import { SalesQuote, ApprovalRequest, Division } from '../types';
+import apiService from '../services/apiService';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -127,7 +121,7 @@ const TextareaField = ({ label, value, onChange, placeholder, rows = 3 }: any) =
     </div>
 );
 
-const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: React.Dispatch<React.SetStateAction<ApprovalRequest[]>> }) => {
+const EditSalesQuoteView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -158,8 +152,10 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
     const [status, setStatus] = useState('Active');
     const [customers, setCustomers] = useState<any[]>([]);
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
+    const [footers, setFooters] = useState<any[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: '' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         rounding: false,
@@ -188,21 +184,6 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         return map;
     }, [inventoryItems]);
 
-    const requiresApproval = useMemo(() => {
-        return items.some(item => {
-            if (item.item === 'Select Item') return false;
-            const inv = inventoryMap[item.item];
-            if (!inv) return false;
-            const qty = parseFloat(item.qty) || 0;
-            const price = parseFloat(item.unitPrice) || 0;
-            // Map Prisma fields: sellingPrice -> (not present, use avgCost or assume 0), stock -> qtyOnHand
-            const stock = parseFloat(inv.qtyOnHand || 0);
-            const sellingPrice = parseFloat(inv.sellingPrice || 0);
-            const purchasePrice = parseFloat(inv.purchasePrice || 0);
-            const minMarginPrice = sellingPrice * (1 - marginThreshold / 100);
-            return price < purchasePrice || price < minMarginPrice || qty > stock;
-        });
-    }, [items, marginThreshold, inventoryMap]);
 
     const fetchReference = async () => {
         try {
@@ -216,16 +197,26 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
     useEffect(() => {
         const loadMasterData = async () => {
             try {
-                const [custs, itemsData, divs] = await Promise.all([
-                    apiService.getCustomers(),
-                    apiService.getItems(),
-                    apiService.getDivisions()
+                // Fetch basic master data
+                const [custs, itemsData, divs, taxCodesData] = await Promise.all([
+                    apiService.getCustomers().catch(e => { console.error('Customers failed:', e); return []; }),
+                    apiService.getItems().catch(e => { console.error('Items failed:', e); return []; }),
+                    apiService.getDivisions().catch(e => { console.error('Divisions failed:', e); return []; }),
+                    apiService.getTaxCodes().catch(e => { console.error('Tax codes failed:', e); return []; })
                 ]);
+
                 setCustomers(custs);
                 setInventoryItems(itemsData);
                 setAvailableDivisions(divs);
+                setTaxCodes(taxCodesData);
+
+                // Fetch footers separately as it's a new feature and shouldn't block the form
+                apiService.getFooters()
+                    .then(setFooters)
+                    .catch(err => console.error('Failed to load footers:', err));
+
             } catch (err) {
-                console.error('Failed to load master data:', err);
+                console.error('Critical failure loading master data:', err);
             }
         };
         loadMasterData();
@@ -244,7 +235,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                         setIssueDate(new Date(quote.issueDate).toISOString().split('T')[0]);
                         setExpiryDays(quote.expiryDays?.toString() || '30');
                         setCustomer(quote.customer?.name || '');
-                        setCurrency(quote.currency || 'ZMW');
+                        setCurrency(quote.currency || quote.customer?.currency?.split(' - ')[0] || 'ZMW');
                         setBillingAddress(quote.billingAddress || '');
                         if (copyFromId) {
                             fetchReference();
@@ -262,9 +253,9 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                             description: i.item?.description || '',
                             qty: i.qty.toString(),
                             unitPrice: i.unitPrice.toString(),
+                            discount: i.discount ? i.discount.toString() : '',
                             division: i.division || 'General',
-                            discount: '',
-                            taxCode: 'VAT 16%'
+                            taxCode: i.taxCode || ''
                         })));
                         if (quote.docOptions) {
                             setOptions(prev => ({ ...prev, ...quote.docOptions }));
@@ -283,115 +274,32 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                 setUseManualRef(false);
                 setDescription('');
                 setStatus('Active');
-                setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+                setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: '' }]);
             }
         };
         loadQuote();
     }, [id, location.search]);
 
-    const itemHistory = useMemo(() => {
-        const global: Record<string, any[]> = {};
-        const clientSales: Record<string, any[]> = {};
-        const clientQuotes: Record<string, any[]> = {};
-
-        // Process Invoices (Sales)
-        mockInvoices.forEach(doc => {
-            if (!doc.items) return;
-            doc.items.forEach(i => {
-                const itemName = (i as any).item;
-                if (!itemName || itemName === 'Select Item') return;
-
-                const entry = {
-                    date: doc.issueDate,
-                    price: parseFloat((i as any).unitPrice) || 0,
-                    qty: parseFloat((i as any).qty) || 0,
-                    customer: doc.customer,
-                    ref: doc.reference,
-                    type: 'Invoice'
-                };
-
-                if (!global[itemName]) global[itemName] = [];
-                global[itemName].push(entry);
-
-                if (customer && doc.customer === customer) {
-                    if (!clientSales[itemName]) clientSales[itemName] = [];
-                    clientSales[itemName].push(entry);
-                }
-            });
-        });
-
-        // Process Sales Quotes
-        // (Disabled for now as we transition to database)
-        /*
-        mockSalesQuotes.forEach(doc => {
-            if (!doc.items) return;
-            doc.items.forEach(i => {
-                const itemName = (i as any).item;
-                if (!itemName || itemName === 'Select Item') return;
-
-                const entry = {
-                    date: doc.issueDate,
-                    price: parseFloat((i as any).unitPrice) || 0,
-                    qty: parseFloat((i as any).qty) || 0,
-                    customer: doc.customer,
-                    ref: doc.reference,
-                    type: 'Quote'
-                };
-
-                if (customer && doc.customer === customer) {
-                    if (!clientQuotes[itemName]) clientQuotes[itemName] = [];
-                    clientQuotes[itemName].push(entry);
-                }
-            });
-        });
-        */
-
-
-        const sortAndSlice = (history: Record<string, any[]>) => {
-            Object.keys(history).forEach(item => {
-                history[item].sort((a, b) => {
-                    const getDate = (d: string) => d.includes('.') ? d.split('.').reverse().join('-') : d;
-                    return new Date(getDate(b.date)).getTime() - new Date(getDate(a.date)).getTime();
-                });
-                history[item] = history[item].slice(0, 3);
-            });
-        };
-
-        sortAndSlice(global);
-        sortAndSlice(clientSales);
-        sortAndSlice(clientQuotes);
-
-        return { global, clientSales, clientQuotes };
-    }, [customer]);
-
-    const approvalReason = useMemo(() => {
-        let reason = '';
-        const itemsToValidate = items.filter(i => i.item !== 'Select Item');
-
-        for (const item of itemsToValidate) {
-            const inventoryItem = inventoryMap[item.item];
-            if (inventoryItem) {
-                const qty = parseFloat(item.qty) || 0;
-                const price = parseFloat(item.unitPrice) || 0;
-                const stock = parseFloat(inventoryItem.qtyOnHand || 0);
-                const sellingPrice = parseFloat(inventoryItem.sellingPrice || 0);
-                const purchasePrice = parseFloat(inventoryItem.purchasePrice || 0);
-
-                if (qty > stock) {
-                    reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${stock}). `;
-                }
-
-                const effectiveThreshold = marginThreshold / 100;
-                const minPrice = sellingPrice * (1 - effectiveThreshold);
-                if (price < purchasePrice) {
-                    reason += `Price for ${item.item} (${price}) is below purchase price (${purchasePrice}). `;
-                } else if (price < minPrice) {
-                    reason += `Price for ${item.item} (${price}) is below allowed margin threshold (min: ${minPrice.toFixed(2)}). `;
-                }
+    // Automatically sync currency when customer changes
+    useEffect(() => {
+        if (!customers || customers.length === 0 || !customer) return;
+        const selected = customers.find(c =>
+            c.name.trim().toLowerCase() === customer.trim().toLowerCase() ||
+            c.id === customer
+        );
+        if (selected) {
+            const currencyCode = selected.currency?.split(' - ')[0] || 'ZMW';
+            if (currencyCode !== currency) {
+                setCurrency(currencyCode);
             }
         }
-        return reason.trim();
-    }, [items, marginThreshold, inventoryMap]);
+    }, [customer, customers, currency]);
+
+    const itemHistory = useMemo(() => {
+        // Mocking empty history for now to avoid mockData dependency
+        return { global: {}, clientSales: {}, clientQuotes: {} };
+    }, [customer]);
+
 
     const calculations = useMemo(() => {
         let subtotal = 0;
@@ -413,12 +321,14 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
             }
 
             let taxAmount = 0;
-            if (item.taxCode === 'VAT 16%') {
+            const selectedTax = taxCodes.find(tc => tc.name === item.taxCode);
+            if (selectedTax) {
+                const taxRate = parseFloat(selectedTax.rate) / 100;
                 if (options.amountsAreTaxInclusive) {
-                    taxAmount = netTotal - (netTotal / 1.16);
+                    taxAmount = netTotal - (netTotal / (1 + taxRate));
                     netTotal = netTotal - taxAmount;
                 } else {
-                    taxAmount = netTotal * 0.16;
+                    taxAmount = netTotal * taxRate;
                 }
             }
 
@@ -452,7 +362,46 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         }
 
         return { lineCalcs, subtotal, totalTax, grandTotal, whtAmount };
-    }, [items, options]);
+    }, [items, options, taxCodes]);
+
+    const approvalReason = useMemo(() => {
+        let reason = '';
+        const itemsToValidate = items.filter(i => i.item !== 'Select Item');
+
+        // Check 1: High Value Approval
+        if (calculations.grandTotal > 100000) {
+            reason += `High value document (Total: ${calculations.grandTotal.toLocaleString()}) requires manager approval. `;
+        }
+
+        for (const item of itemsToValidate) {
+            const inventoryItem = inventoryMap[item.item];
+            if (inventoryItem) {
+                const price = parseFloat(item.unitPrice) || 0;
+                const sellingPrice = parseFloat(inventoryItem.sellingPrice || 0);
+                const purchasePrice = parseFloat(inventoryItem.purchasePrice || 0);
+                const stock = parseFloat(inventoryItem.qtyOnHand || 0);
+                const qty = parseFloat(item.qty) || 0;
+
+                if (qty > stock) {
+                    reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${stock}). `;
+                }
+
+                const effectiveThreshold = marginThreshold / 100;
+                const minPrice = sellingPrice * (1 - effectiveThreshold);
+
+                if (price < purchasePrice) {
+                    reason += `Price for ${item.item} (${price}) is below purchase price (${purchasePrice}). `;
+                } else if (price < minPrice) {
+                    reason += `Price for ${item.item} (${price}) is below allowed margin threshold (min: ${minPrice.toFixed(2)}). `;
+                }
+            }
+        }
+        return reason.trim();
+    }, [items, marginThreshold, inventoryMap, calculations.grandTotal]);
+
+    const requiresApproval = useMemo(() => {
+        return Boolean(approvalReason);
+    }, [approvalReason]);
 
     const handleDuplicateItem = (item: any) => {
         const newItem = {
@@ -470,7 +419,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
         try {
             await apiService.updateQuoteStatus(id, newStatus);
             // Also update approval request if it exists (Optional for now)
-            alert(`Quote ${newStatus === 'Active' ? 'Approved' : 'Rejected'} successfully.`);
+            alert(`Quote ${newStatus === 'Active' ? 'Approved' : 'marked as Inactive'} successfully.`);
             navigate('/sales-quotes');
         } catch (err) {
             console.error('Failed to update status:', err);
@@ -497,21 +446,31 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
             return;
         }
 
+        const currentUser = apiService.getCurrentUser();
+        const updatedOptions = {
+            ...options,
+            requestedBy: forceManualApproval ? currentUser.name : (options as any).requestedBy,
+            approvalReason: forceManualApproval ? approvalReason : (options as any).approvalReason
+        };
+
         const quoteData = {
             customerId: selectedCustomer.id,
             reference: reference,
             amount: calculations.grandTotal,
+            currency: currency,
             description: description,
             billingAddress: billingAddress,
             expiryDays: parseInt(expiryDays) || 30,
             issueDate: issueDate, // Pass the date from state
-            status: isEditing ? status : 'Active',
-            docOptions: options,
+            status: forceManualApproval ? 'Pending Approval' : (isEditing ? status : 'Active'),
+            docOptions: updatedOptions,
             items: validItems.map(i => ({
                 itemId: i.itemId,
                 qty: parseFloat(i.qty),
                 unitPrice: parseFloat(i.unitPrice),
+                discount: parseFloat(i.discount) || 0,
                 division: i.division,
+                taxCode: i.taxCode,
                 totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
             }))
         };
@@ -644,10 +603,10 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Line Items</h2>
                                 </div>
-                                    <button
-                                        onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])}
-                                        className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all"
-                                    >
+                                <button
+                                    onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: '' }])}
+                                    className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all"
+                                >
                                     <Plus size={14} /> <span>Add New Row</span>
                                 </button>
                             </div>
@@ -768,7 +727,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                                 value={item.unitPrice}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
-                                                                setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: val } : i));
+                                                                    setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: val } : i));
                                                                 }}
                                                                 className={cn(
                                                                     "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none",
@@ -825,8 +784,11 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                             }}
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                         >
+                                                            <option value="" disabled>Select Tax...</option>
                                                             <option value="No tax">No tax</option>
-                                                            <option value="VAT 16%">VAT 16%</option>
+                                                            {taxCodes.map(tc => (
+                                                                <option key={tc.id} value={tc.name}>{tc.name}</option>
+                                                            ))}
                                                         </select>
                                                     </td>
                                                     {!options.amountsAreTaxInclusive && (
@@ -1081,7 +1043,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                 <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
                                                     <select
                                                         onChange={(e) => {
-                                                            const footer = getFooters().find(f => f.id === e.target.value);
+                                                            const footer = footers.find(f => f.id === e.target.value);
                                                             if (footer) {
                                                                 setOptions(prev => ({ ...prev, footerValue: footer.content }));
                                                             }
@@ -1089,7 +1051,7 @@ const EditSalesQuoteView = ({ setApprovalRequests }: { setApprovalRequests?: Rea
                                                         className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
                                                     >
                                                         <option value="">-- Choose a template --</option>
-                                                        {getFooters().map(f => (
+                                                        {footers.map(f => (
                                                             <option key={f.id} value={f.id}>{f.name}</option>
                                                         ))}
                                                     </select>

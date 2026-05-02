@@ -18,18 +18,17 @@ import {
   ShieldCheck as Shield
 } from 'lucide-react';
 import Card from '../components/shared/Card';
-import { getCurrentUser } from '../mockData';
 import { AppUser } from '../types';
 import { useState, useEffect } from 'react';
 
 const SettingsView = () => {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState<AppUser>(getCurrentUser());
+  const [currentUser, setCurrentUser] = useState<AppUser>({
+    id: 'admin', name: 'Admin', role: 'Admin', avatar: 'A', email: 'admin@example.com'
+  });
 
   useEffect(() => {
-    const handleUpdate = () => setCurrentUser(getCurrentUser());
-    window.addEventListener('user_sim_updated', handleUpdate);
-    return () => window.removeEventListener('user_sim_updated', handleUpdate);
+    // In production, fetch current user from auth service/context
   }, []);
 
   const isAdmin = currentUser.role === 'Admin';

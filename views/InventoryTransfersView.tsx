@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Eye, Edit, Search, Plus, ArrowRightLeft, Check, Copy, 
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, 
   ChevronDown, ChevronUp, Printer, Calendar
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { mockInventoryTransfers } from '../mockData';
+import apiService from '../services/apiService';
 import { InventoryTransfer } from '../types';
 
 const InventoryTransfersView = () => {
@@ -14,6 +14,23 @@ const InventoryTransfersView = () => {
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof InventoryTransfer | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
+  const [transfers, setTransfers] = useState<InventoryTransfer[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTransfers = async () => {
+      setIsLoading(true);
+      try {
+        const data = await apiService.getInventoryTransfers();
+        setTransfers(data);
+      } catch (err) {
+        console.error('Failed to fetch transfers:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchTransfers();
+  }, []);
 
   const columns = [
     { id: 'date', label: 'Date', visible: true },
@@ -32,7 +49,7 @@ const InventoryTransfersView = () => {
 
   const filteredTransfers = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    let result = mockInventoryTransfers.filter(tr => {
+    let result = transfers.filter(tr => {
       const searchStr = `${tr.reference} ${tr.fromLocation} ${tr.toLocation} ${tr.description}`.toLowerCase();
       return searchStr.includes(query);
     });
@@ -112,7 +129,22 @@ const InventoryTransfersView = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {currentSlice.map((tr) => (
+            {isLoading ? (
+              <tr>
+                <td colSpan={7} className="px-6 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center space-y-4">
+                    <div className="w-10 h-10 border-4 border-blue-500/20 border-t-blue-600 rounded-full animate-spin"></div>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching transfers...</p>
+                  </div>
+                </td>
+              </tr>
+            ) : currentSlice.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                  No transfers found
+                </td>
+              </tr>
+            ) : currentSlice.map((tr) => (
               <tr key={tr.id} className="group hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-4 text-center">
                   <div className="flex items-center justify-center space-x-1">

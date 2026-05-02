@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { mockSalesQuotes } from '../mockData';
+import apiService from '../services/apiService';
 
 const NewGoodsReceiptView = () => {
     const navigate = useNavigate();
@@ -8,7 +8,7 @@ const NewGoodsReceiptView = () => {
     const dateInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [date, setDate] = useState('2026-02-20');
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [supplier, setSupplier] = useState('');
     const [inventoryLocation, setInventoryLocation] = useState('Default Inventory Location');
     const [description, setDescription] = useState('');
@@ -16,6 +16,9 @@ const NewGoodsReceiptView = () => {
     const [useManualRef, setUseManualRef] = useState(false);
     const [fileName, setFileName] = useState('No file chosen');
     const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '1' }]);
+    
+    const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
+    const [dbItems, setDbItems] = useState<any[]>([]);
 
     const [options, setOptions] = useState({
         lineNumber: false,
@@ -24,26 +27,27 @@ const NewGoodsReceiptView = () => {
     });
 
     useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [sups, itemsData] = await Promise.all([
+                    apiService.getSuppliers(),
+                    apiService.getItems()
+                ]);
+                setDbSuppliers(sups);
+                setDbItems(itemsData);
+            } catch (err) {
+                console.error('Failed to load goods receipt data:', err);
+            }
+        };
+        loadData();
+    }, []);
+
+    useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
         const copyFromId = searchParams.get('copyFrom');
 
         if (copyFromId) {
-            const quote = mockSalesQuotes.find(q => q.id === copyFromId);
-            if (quote) {
-                let dateVal = quote.issueDate;
-                if (dateVal && dateVal.includes('.')) {
-                    const parts = dateVal.split('.');
-                    if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
-                setDate(dateVal || '2026-02-20');
-                setDescription(quote.description || '');
-                setItems([{
-                    id: Date.now(),
-                    item: 'MI0084 - 315/80 R22.5 UNIVERSAL',
-                    description: '315/80 R22.5 20PR UNIVERSAL TYRE',
-                    qty: '2'
-                }]);
-            }
+            // Placeholder: logic for copying from other documents if needed
         }
     }, [location.search]);
 
@@ -140,6 +144,7 @@ const NewGoodsReceiptView = () => {
                                         className="w-full border border-[#cfd8dc] border-l-0 px-3 py-1.5 text-[14px] text-[#263238] rounded-r-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
                                     >
                                         <option value=""></option>
+                                        {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                     </select>
                                     <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[10px] pointer-events-none"></i>
                                 </div>
@@ -197,7 +202,9 @@ const NewGoodsReceiptView = () => {
                                                     className="w-full border border-[#cfd8dc] px-2 py-1.5 text-[13px] text-[#263238] rounded-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[34px]"
                                                 >
                                                     <option value=""></option>
-                                                    <option value="MI0084 - 315/80 R22.5 UNIVERSAL">MI0084 - 315/80 R22.5 UNIVERSAL</option>
+                                                    {dbItems.map(it => (
+                                                        <option key={it.id} value={it.itemName}>{it.itemName}</option>
+                                                    ))}
                                                 </select>
                                                 <i className="fas fa-caret-down absolute right-2 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[9px] pointer-events-none"></i>
                                             </div>

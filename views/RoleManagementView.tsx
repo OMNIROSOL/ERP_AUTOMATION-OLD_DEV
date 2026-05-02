@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/shared/Card';
-import { getRoleDefinitions, saveRoleDefinitions, SCREENS } from '../mockData';
+import apiService from '../services/apiService';
 import { RoleDefinition, ScreenPermission } from '../types';
 import { cn } from '../utils/cn';
 
@@ -30,21 +30,29 @@ const RoleManagementView = () => {
   const [editingRole, setEditingRole] = useState<Partial<RoleDefinition> | null>(null);
 
   useEffect(() => {
-    setRoles(getRoleDefinitions());
+    const fetchRoles = async () => {
+      try {
+        const data = await apiService.getRoles();
+        setRoles(data);
+      } catch (err) {
+        console.error('Failed to fetch roles:', err);
+      }
+    };
+    fetchRoles();
     
-    const handleUpdate = () => setRoles(getRoleDefinitions());
-    window.addEventListener('roles_updated', handleUpdate);
-    return () => window.removeEventListener('roles_updated', handleUpdate);
+    window.addEventListener('roles_updated', fetchRoles);
+    return () => window.removeEventListener('roles_updated', fetchRoles);
   }, []);
 
   const filteredRoles = roles.filter(role => 
     role.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const startNewRole = () => {
+  const startNewRole = async () => {
+    const screens = await apiService.getScreens();
     const newRole: Partial<RoleDefinition> = {
       name: '',
-      permissions: SCREENS.map(s => ({
+      permissions: screens.map(s => ({
         screenId: s.id,
         screenName: s.name,
         view: false, add: false, edit: false, delete: false, full: false
@@ -54,23 +62,30 @@ const RoleManagementView = () => {
     setShowModal(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRole?.name || !editingRole.permissions) return;
 
-    const role: RoleDefinition = {
-      id: editingRole.id || `r-${Date.now()}`,
+    const roleData = {
       name: editingRole.name,
-      permissions: editingRole.permissions as ScreenPermission[]
+      permissions: editingRole.permissions
     };
 
-    const updated = editingRole.id 
-      ? roles.map(r => r.id === editingRole.id ? role : r)
-      : [...roles, role];
-
-    saveRoleDefinitions(updated);
-    setShowModal(false);
-    setEditingRole(null);
+    try {
+      if (editingRole.id) {
+        await apiService.updateRole(editingRole.id, roleData);
+      } else {
+        await apiService.createRole(roleData);
+      }
+      
+      const updatedRoles = await apiService.getRoles();
+      setRoles(updatedRoles);
+      setShowModal(false);
+      setEditingRole(null);
+    } catch (err) {
+      console.error('Failed to save role:', err);
+      alert('Error saving role definition');
+    }
   };
 
   const updatePermission = (screenId: string, field: keyof Omit<ScreenPermission, 'screenId' | 'screenName'>) => {

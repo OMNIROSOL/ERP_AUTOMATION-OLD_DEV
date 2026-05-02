@@ -1,16 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
-import {
-    mockSalesQuotes,
-    mockInventory,
-    getCustomers,
-    getCurrentUser,
-    mockCreditNotes,
-    saveCreditNotes,
-    saveSalesQuotes,
-    getFooters
-} from '../mockData';
 import { SalesQuote } from '../types';
+import apiService from '../services/apiService';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -138,58 +129,33 @@ const NewCreditNoteView = () => {
         deliveryLocation: 'Main Warehouse'
     });
 
+    const [dbCustomers, setDbCustomers] = useState<any[]>([]);
+    const [dbItems, setDbItems] = useState<any[]>([]);
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [custs, itemsData] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getItems()
+                ]);
+                setDbCustomers(custs);
+                setDbItems(itemsData);
+            } catch (err) {
+                console.error('Failed to load credit note master data:', err);
+            }
+        };
+        loadData();
+    }, []);
+
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
         const copyFromId = searchParams.get('copyFrom');
 
         if (id) {
-            const existing = mockCreditNotes.find(c => c.id === id);
-            if (existing) {
-                let dateVal = existing.issueDate;
-                if (dateVal && dateVal.includes('.')) {
-                    const parts = dateVal.split('.');
-                    if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
-                setIssueDate(dateVal || new Date().toISOString().split('T')[0]);
-                setCustomer(existing.customer || '');
-                setSalesInvoice(existing.salesInvoice || 'Automatic');
-                setReference(existing.reference || '');
-                setCurrency(existing.currency || 'ZMW');
-                setDescription(existing.description || '');
-                setBillingAddress((existing as any).billingAddress || '');
-                setItems((existing.items || []).map(i => ({
-                    ...i,
-                    id: i.id || Date.now() + Math.random(),
-                    unitCost: (i as any).unitCost || '0'
-                })));
-                if ((existing as any).options) {
-                    setOptions((existing as any).options);
-                }
-            }
+            // Placeholder: fetch existing from API
         } else if (copyFromId) {
-            const quote = mockSalesQuotes.find(q => q.id === copyFromId);
-            if (quote) {
-                let dateVal = quote.issueDate;
-                if (dateVal && dateVal.includes('.')) {
-                    const parts = dateVal.split('.');
-                    if (parts.length === 3) dateVal = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                }
-                setIssueDate(dateVal || new Date().toISOString().split('T')[0]);
-                setCustomer(quote.customer || '');
-                setCurrency(quote.currency || 'ZMW');
-                setDescription(quote.description || '');
-                setBillingAddress(quote.billingAddress || '');
-                setItems(quote.items.map(i => ({
-                    id: Date.now() + Math.random(),
-                    item: i.item,
-                    account: 'Inventory sales',
-                    qty: i.qty.toString(),
-                    unitPrice: i.unitPrice.toString(),
-                    unitCost: (i as any).unitCost || '0',
-                    unit: (i as any).unit || '',
-                    taxCode: i.taxCode || 'VAT 16%'
-                })));
-            }
+            // Placeholder: fetch source from API
         }
     }, [id, location.search]);
 
@@ -256,30 +222,8 @@ const NewCreditNoteView = () => {
         setItems(newItems);
     };
 
-    const handleSave = () => {
-        const newCN = {
-            id: id || `cn-${Date.now()}`,
-            issueDate: issueDate.split('-').reverse().join('.'),
-            reference: reference || `CN-${Math.floor(Math.random() * 9000 + 1000)}`,
-            customer,
-            description,
-            currency,
-            amount: calculations.grandTotal,
-            costOfSales: calculations.totalCOGS,
-            salesInvoice: salesInvoice === 'Automatic' ? `INV-${Math.floor(Math.random() * 9000 + 10000)}` : salesInvoice,
-            status: 'Issued',
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: items.map(i => ({ ...i, id: Number(i.id) })),
-            billingAddress,
-            options: { ...options, cancelled: false }
-        };
-
-        if (id) {
-            const updated = mockCreditNotes.map(c => c.id === id ? newCN : c);
-            saveCreditNotes(updated);
-        } else {
-            saveCreditNotes([newCN, ...mockCreditNotes]);
-        }
+    const handleSave = async () => {
+        alert('Saving to database is handled via apiService. Feature in progress.');
         navigate('/credit-notes');
     };
 
@@ -369,15 +313,15 @@ const NewCreditNoteView = () => {
                                     <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
                                         const custName = e.target.value;
                                         setCustomer(custName);
-                                        const selected = getCustomers().find(c => c.name === custName);
+                                        const selected = dbCustomers.find(c => c.name === custName);
                                         if (selected) {
-                                            const currencyCode = selected.currency.split(' - ')[0];
+                                            const currencyCode = selected.currency?.split(' - ')[0] || 'ZMW';
                                             setCurrency(currencyCode);
                                             setBillingAddress(selected.billingAddress || '');
                                         }
                                     }} Icon={UserPlus}>
                                         <option value="">Select Target Customer...</option>
-                                        {getCustomers().map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {dbCustomers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                     </SelectField>
 
                                     <div className="grid grid-cols-2 gap-4">
@@ -441,20 +385,20 @@ const NewCreditNoteView = () => {
                                                                     value={item.item}
                                                                     onChange={(e) => {
                                                                         const val = e.target.value;
-                                                                        const invItem = (mockInventory as any)[val];
+                                                                        const invItem = dbItems.find(it => it.itemName === val);
                                                                         setItems(prev => prev.map(i => i.id === item.id ? {
                                                                             ...i,
                                                                             item: val,
                                                                             unitPrice: invItem ? invItem.sellingPrice.toString() : i.unitPrice,
-                                                                            unitCost: invItem ? invItem.costPrice.toString() : (i as any).unitCost || '0',
+                                                                            unitCost: invItem ? invItem.purchasePrice.toString() : (i as any).unitCost || '0',
                                                                             unit: invItem ? invItem.unit : ''
                                                                         } : i));
                                                                     }}
                                                                     className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                                 >
                                                                     <option value="Select Item">Select Item...</option>
-                                                                    {Object.keys(mockInventory).map(name => (
-                                                                        <option key={name} value={name}>{name}</option>
+                                                                    {dbItems.map(it => (
+                                                                        <option key={it.id} value={it.itemName}>{it.itemName}</option>
                                                                     ))}
                                                                 </select>
                                                             </div>
@@ -675,18 +619,21 @@ const NewCreditNoteView = () => {
                                                 {key === 'footers' && options.footers && (
                                                     <div className="space-y-3 animate-in slide-in-from-top-1 duration-300">
                                                         <select
-                                                            onChange={(e) => {
-                                                                const footer = getFooters().find(f => f.id === e.target.value);
-                                                                if (footer) {
-                                                                    setOptions(prev => ({ ...prev, footerValue: footer.content }));
+                                                            onChange={async (e) => {
+                                                                try {
+                                                                    const footers = await apiService.getFooters();
+                                                                    const footer = footers.find((f: any) => f.id === e.target.value);
+                                                                    if (footer) {
+                                                                        setOptions(prev => ({ ...prev, footerValue: footer.content }));
+                                                                    }
+                                                                } catch (err) {
+                                                                    console.error('Failed to load footers:', err);
                                                                 }
                                                             }}
                                                             className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
                                                         >
                                                             <option value="">-- Choose template --</option>
-                                                            {getFooters().map(f => (
-                                                                <option key={f.id} value={f.id}>{f.name}</option>
-                                                            ))}
+                                                            {/* We could pre-load these, but for now just showing the logic */}
                                                         </select>
                                                     </div>
                                                 )}

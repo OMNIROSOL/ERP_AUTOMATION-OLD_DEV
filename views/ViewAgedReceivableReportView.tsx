@@ -10,7 +10,7 @@ import {
   Building2,
   Filter
 } from 'lucide-react';
-import { cn } from '../utils/cn';
+import apiService from '../services/apiService';
 
 interface AgingData {
   customer: string;
@@ -23,19 +23,6 @@ interface AgingData {
   total: number;
   currency: string;
 }
-
-const mockAgingData: AgingData[] = [
-  { customer: 'UNICORN LOGISTICS ZAMBIA LTD JB', current: 76821.00, days1_30: 416741.60, days31_60: 600677.00, days61_90: 253394.22, days90Plus: 0, lessCredit: 0, total: 1347633.82, currency: 'ZMW' },
-  { customer: 'MACHI AUTO PARTS LIMITED - JACOB', current: 0, days1_30: 1326270.00, days31_60: 0, days61_90: 0, days90Plus: 0, lessCredit: 0, total: 1326270.00, currency: 'ZMW' },
-  { customer: 'TERMITES MEAT SUPPLIERS LIMITED - KITWE', current: 336000.00, days1_30: 284840.00, days31_60: 211960.00, days61_90: 0, days90Plus: 0, lessCredit: 0, total: 832800.00, currency: 'ZMW' },
-  { customer: 'SHAAN CARRIERS LTD MV', current: 52624.40, days1_30: 149317.18, days31_60: 275876.60, days61_90: 211622.24, days90Plus: 0, lessCredit: 0, total: 689440.42, currency: 'ZMW' },
-  { customer: 'GLOBAL FREIGHT SERVICES (USD)', current: 15400.00, days1_30: 4500.00, days31_60: 12000.00, days61_90: 0, days90Plus: 0, lessCredit: 0, total: 31900.00, currency: 'USD' },
-  { customer: 'TRANS-AFRICA LOGISTICS (USD)', current: 0, days1_30: 22800.00, days31_60: 5400.00, days61_90: 1800.00, days90Plus: 0, lessCredit: 0, total: 30000.00, currency: 'USD' },
-  { customer: 'FIRST CHOICE LOGISTICS LIMITED (SG)', current: 1900.00, days1_30: 25988.00, days31_60: 103248.00, days61_90: 13656.00, days90Plus: 407978.00, lessCredit: 0, total: 552770.00, currency: 'ZMW' },
-  { customer: 'JERE TYRES - PCRWL', current: 77300.00, days1_30: 100700.00, days31_60: 334180.00, days61_90: 0, days90Plus: 0, lessCredit: 0, total: 512180.00, currency: 'ZMW' },
-  { customer: 'CHAKALALA FARM MUMBWA TJS', current: 0, days1_30: 0, days31_60: 204150.00, days61_90: 0, days90Plus: 300550.00, lessCredit: 0, total: 504700.00, currency: 'ZMW' },
-  { customer: 'IKHWAAN LOGISTICS LIMITED TJS', current: 98000.00, days1_30: 203240.00, days31_60: 133864.00, days61_90: 0, days90Plus: 0, lessCredit: 0, total: 435104.00, currency: 'ZMW' }
-];
 
 const ViewAgedReceivableReportView: React.FC = () => {
   const navigate = useNavigate();
@@ -54,6 +41,59 @@ const ViewAgedReceivableReportView: React.FC = () => {
     return null;
   }, [id]);
 
+  const [dbData, setDbData] = React.useState<AgingData[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const [customers, invoices] = await Promise.all([
+          apiService.getCustomers(),
+          apiService.getInvoices()
+        ]);
+
+        const today = new Date();
+        const aging = customers.map(cust => {
+          const custInvoices = invoices.filter(inv => (inv.customerId === cust.id || inv.customer?.id === cust.id) && inv.status !== 'Draft' && inv.status !== 'Paid');
+          
+          let current = 0, d1_30 = 0, d31_60 = 0, d61_90 = 0, d90Plus = 0;
+          
+          custInvoices.forEach(inv => {
+            const dueDate = new Date(inv.dueDate || inv.issueDate || inv.createdAt);
+            const diffDays = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 3600 * 24));
+            const amount = parseFloat(inv.grandTotal) || 0;
+
+            if (diffDays <= 0) current += amount;
+            else if (diffDays <= 30) d1_30 += amount;
+            else if (diffDays <= 60) d31_60 += amount;
+            else if (diffDays <= 90) d61_90 += amount;
+            else d90Plus += amount;
+          });
+
+          return {
+            customer: cust.name,
+            current,
+            days1_30: d1_30,
+            days31_60: d31_60,
+            days61_90: d61_90,
+            days90Plus: d90Plus,
+            lessCredit: 0,
+            total: current + d1_30 + d31_60 + d61_90 + d90Plus,
+            currency: cust.currency?.split(' - ')[0] || 'ZMW'
+          };
+        }).filter(a => a.total > 0);
+
+        setDbData(aging);
+      } catch (err) {
+        console.error('Failed to load aging data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   const formatCurrency = (val: number) => {
     if (val === 0) return '—';
     return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -61,12 +101,12 @@ const ViewAgedReceivableReportView: React.FC = () => {
 
   const groupedData = useMemo(() => {
     const groups: Record<string, AgingData[]> = {};
-    mockAgingData.forEach(item => {
+    dbData.forEach(item => {
       if (!groups[item.currency]) groups[item.currency] = [];
       groups[item.currency].push(item);
     });
     return groups;
-  }, []);
+  }, [dbData]);
 
   const currencies = useMemo(() => {
     return Object.keys(groupedData).sort((a, b) => {
@@ -75,6 +115,10 @@ const ViewAgedReceivableReportView: React.FC = () => {
       return a.localeCompare(b);
     });
   }, [groupedData]);
+
+  if (isLoading) {
+    return <div className="p-20 text-center font-bold text-slate-400">LOADING DATABASE AGING...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-8 space-y-8 animate-in fade-in duration-700 font-sans">

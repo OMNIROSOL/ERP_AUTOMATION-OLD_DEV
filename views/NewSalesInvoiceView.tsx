@@ -1,18 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
-import {
-    mockSalesQuotes,
-    mockSalesOrders,
-    mockInvoices,
-    mockInventory,
-    getCustomers,
-    saveInvoices,
-    saveSalesOrders,
-    mockDeliveryNotes,
-    saveDeliveryNotes,
-    getFooters
-} from '../mockData';
-import { Invoice, Division } from '../types';
+import { Invoice, Division, Footer } from '../types';
 import apiService from '../services/apiService';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
@@ -157,22 +145,29 @@ const NewSalesInvoiceView = () => {
     const [status, setStatus] = useState('Coming due');
     const [customers, setCustomers] = useState<any[]>([]);
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: '' }]);
     const [copyFromId, setCopyFromId] = useState<string | null>(null);
 
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+    const [dbFooters, setDbFooters] = useState<Footer[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         const loadMasterData = async () => {
             try {
-                const [custs, itemsData, divs] = await Promise.all([
-                    apiService.getCustomers(),
-                    apiService.getItems(),
-                    apiService.getDivisions()
+                const [custs, itemsData, divs, footersData, taxCodesData] = await Promise.all([
+                    apiService.getCustomers().catch(e => { console.error('Customers failed:', e); return []; }),
+                    apiService.getItems().catch(e => { console.error('Items failed:', e); return []; }),
+                    apiService.getDivisions().catch(e => { console.error('Divisions failed:', e); return []; }),
+                    apiService.getFooters().catch(e => { console.error('Footers failed:', e); return []; }),
+                    apiService.getTaxCodes().catch(e => { console.error('Tax codes failed:', e); return []; })
                 ]);
                 setCustomers(custs);
                 setInventoryItems(itemsData);
                 setAvailableDivisions(divs);
+                setDbFooters(footersData);
+                setTaxCodes(taxCodesData);
             } catch (err) {
                 console.error('Failed to load master data:', err);
             }
@@ -192,6 +187,7 @@ const NewSalesInvoiceView = () => {
         return map;
     }, [inventoryItems]);
 
+    const marginThreshold = 20;
     const approvalReason = useMemo(() => {
         let reason = '';
         const itemsToValidate = items.filter(i => i.item !== 'Select Item');
@@ -209,7 +205,7 @@ const NewSalesInvoiceView = () => {
             }
         }
         return reason.trim();
-    }, [items, marginThreshold, inventoryMap]);
+    }, [items, inventoryMap]);
 
     const fetchReference = async () => {
         try {
@@ -294,11 +290,11 @@ const NewSalesInvoiceView = () => {
                                 item: i.item?.itemName || 'Select Item',
                                 description: i.description || i.item?.description || '',
                                 account: i.account || 'Inventory sales',
-                                division: i.division || 'Main',
                                 qty: i.qty ? i.qty.toString() : '1',
                                 unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
-                                discount: i.discount || '',
-                                taxCode: i.taxCode || 'VAT 16%'
+                                discount: i.discount ? i.discount.toString() : '',
+                                division: i.division || 'General',
+                                taxCode: i.taxCode || i.tax_codes?.name || ''
                             })));
                         }
                     }
@@ -314,51 +310,48 @@ const NewSalesInvoiceView = () => {
                 setUseManualRef(false);
                 setDescription('');
                 setTpin('');
-                setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+                setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: '' }]);
             }
         };
         loadData();
     }, [id, location.search]);
 
+    // Automatically sync currency when customer changes
+    useEffect(() => {
+        if (!customers || customers.length === 0 || !customer) return;
+        const selected = customers.find(c =>
+            c.name.trim().toLowerCase() === customer.trim().toLowerCase() ||
+            c.id === customer
+        );
+        if (selected) {
+            const currencyCode = selected.currency?.split(' - ')[0] || 'ZMW';
+            if (currencyCode !== currency) {
+                setCurrency(currencyCode);
+            }
+        }
+    }, [customer, customers, currency]);
+
     // Insights Logic
     const itemHistory = useMemo(() => {
-        const global: Record<string, any[]> = {};
-        const clientSales: Record<string, any[]> = {};
-        const clientQuotes: Record<string, any[]> = {};
-
-        mockInvoices.forEach(doc => {
-            if (!doc.items) return;
-            doc.items.forEach(i => {
-                const itemName = (i as any).item;
-                if (!itemName || itemName === 'Select Item') return;
-                const entry = { date: doc.issueDate, price: parseFloat((i as any).unitPrice) || 0, qty: parseFloat((i as any).qty) || 0, customer: doc.customer, ref: doc.reference, type: 'Invoice' };
-                if (!global[itemName]) global[itemName] = [];
-                global[itemName].push(entry);
-                if (customer && doc.customer === customer) {
-                    if (!clientSales[itemName]) clientSales[itemName] = [];
-                    clientSales[itemName].push(entry);
-                }
-            });
-        });
-
-        const sortAndSlice = (history: Record<string, any[]>) => {
-            Object.keys(history).forEach(item => {
-                history[item].sort((a, b) => {
-                    const dateA = a.date.includes('.') ? a.date.split('.').reverse().join('-') : a.date;
-                    const dateB = b.date.includes('.') ? b.date.split('.').reverse().join('-') : b.date;
-                    return new Date(dateB).getTime() - new Date(dateA).getTime();
-                });
-                history[item] = history[item].slice(0, 3);
-            });
-        };
-        sortAndSlice(global);
-        sortAndSlice(clientSales);
-        return { global, clientSales, clientQuotes };
+        // Mocking empty history for now to avoid mockData dependency
+        // In a real scenario, we could fetch this from the database
+        return { global: {}, clientSales: {}, clientQuotes: {} };
     }, [customer]);
 
-    const isDeliveryNoteLinked = useMemo(() => {
-        return reference ? mockDeliveryNotes.some(dn => dn.reference === reference) : false;
-    }, [reference, mockDeliveryNotes]);
+    const [isDeliveryNoteLinked, setIsDeliveryNoteLinked] = useState(false);
+    useEffect(() => {
+        const checkDeliveryNote = async () => {
+            if (reference) {
+                try {
+                    const dns = await apiService.getDeliveryNotes();
+                    setIsDeliveryNoteLinked(dns.some((dn: any) => dn.reference === reference));
+                } catch (err) {
+                    console.error('Failed to check delivery notes:', err);
+                }
+            }
+        };
+        checkDeliveryNote();
+    }, [reference]);
 
     // Financial Calculations
     const calculations = useMemo(() => {
@@ -376,12 +369,14 @@ const NewSalesInvoiceView = () => {
             }
 
             let taxAmount = 0;
-            if (item.taxCode === 'VAT 16%') {
+            const selectedTax = taxCodes.find(tc => tc.name === item.taxCode);
+            if (selectedTax) {
+                const taxRate = parseFloat(selectedTax.rate) / 100;
                 if (options.amountsAreTaxInclusive) {
-                    taxAmount = netTotal - (netTotal / 1.16);
+                    taxAmount = netTotal - (netTotal / (1 + taxRate));
                     netTotal = netTotal - taxAmount;
                 } else {
-                    taxAmount = netTotal * 0.16;
+                    taxAmount = netTotal * taxRate;
                 }
             }
 
@@ -406,7 +401,7 @@ const NewSalesInvoiceView = () => {
         }
 
         return { lineCalcs, subtotal, totalTax, grandTotal, whtAmount };
-    }, [items, options]);
+    }, [items, options, taxCodes]);
 
     const handleDuplicateItem = (item: any) => {
         const newItem = { ...item, id: Date.now() + Math.random() };
@@ -447,6 +442,9 @@ const NewSalesInvoiceView = () => {
                 itemId: i.itemId,
                 qty: parseFloat(i.qty),
                 unitPrice: parseFloat(i.unitPrice),
+                discount: parseFloat(i.discount) || 0,
+                division: i.division,
+                tax_code_id: taxCodes.find(tc => tc.name === i.taxCode)?.id,
                 totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
             }))
         };
@@ -531,16 +529,16 @@ const NewSalesInvoiceView = () => {
                                             {!useManualRef && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
                                         </div>
                                     </div>
-                                    <input 
-                                        type="text" 
-                                        value={reference} 
-                                        onChange={(e) => useManualRef && setReference(e.target.value)} 
-                                        readOnly={!useManualRef} 
-                                        placeholder={useManualRef ? "Enter custom ref..." : ""} 
+                                    <input
+                                        type="text"
+                                        value={reference}
+                                        onChange={(e) => useManualRef && setReference(e.target.value)}
+                                        readOnly={!useManualRef}
+                                        placeholder={useManualRef ? "Enter custom ref..." : ""}
                                         className={cn(
-                                            "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors", 
+                                            "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors",
                                             !useManualRef ? "text-indigo-600 font-black" : "text-slate-700"
-                                        )} 
+                                        )}
                                     />
                                 </div>
                             </div>
@@ -558,19 +556,19 @@ const NewSalesInvoiceView = () => {
                             <h2 className="text-lg font-black text-slate-800 tracking-tight">Customer Information</h2>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                                <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
-                                    const custName = e.target.value;
-                                    setCustomer(custName);
-                                    const selected = customers.find(c => c.name === custName);
-                                    if (selected) {
-                                        setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
-                                        setBillingAddress(selected.billingAddress || '');
-                                        setTpin(selected.tpin || '');
-                                    }
-                                }} Icon={User}>
-                                    <option value="">Select Target Customer...</option>
-                                    {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                </SelectField>
+                            <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
+                                const custName = e.target.value;
+                                setCustomer(custName);
+                                const selected = customers.find(c => c.name === custName);
+                                if (selected) {
+                                    setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
+                                    setBillingAddress(selected.billingAddress || '');
+                                    setTpin(selected.tpin || '');
+                                }
+                            }} Icon={User}>
+                                <option value="">Select Target Customer...</option>
+                                {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                            </SelectField>
                             <div className="md:col-span-2">
                                 <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="General description of the invoice contents..." Icon={Briefcase} />
                             </div>
@@ -587,9 +585,9 @@ const NewSalesInvoiceView = () => {
                                 </div>
                                 <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Line Items</h2>
                             </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
-                                    <Plus size={14} /> <span>Add Row</span>
-                                </button>
+                            <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <Plus size={14} /> <span>Add Row</span>
+                            </button>
                         </div>
 
                         <div className="overflow-x-auto overflow-y-visible pb-4 font-sans">
@@ -685,16 +683,16 @@ const NewSalesInvoiceView = () => {
                                                             }}
                                                             className={cn(
                                                                 "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none",
-                                                                (parseFloat(item.qty) || 0) > ((mockInventory as any)[item.item]?.stock || 0) ? "text-amber-600" : "text-slate-700"
+                                                                (parseFloat(item.qty) || 0) > (inventoryMap[item.item]?.stock || 0) ? "text-amber-600" : "text-slate-700"
                                                             )}
                                                             placeholder="0"
                                                         />
                                                         <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-between w-full">
-                                                            <span>Stock: {((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span>
+                                                            <span>Stock: {(inventoryMap[item.item]?.stock || 0).toLocaleString()}</span>
                                                             <span className="text-indigo-500 font-black">{item.unit || ''}</span>
                                                         </div>
                                                     </div>
-                                                    {(parseFloat(item.qty) || 0) > ((mockInventory as any)[item.item]?.stock || 0) && (
+                                                    {(parseFloat(item.qty) || 0) > (inventoryMap[item.item]?.stock || 0) && (
                                                         <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                             <TooltipProvider>
                                                                 <Tooltip>
@@ -702,7 +700,7 @@ const NewSalesInvoiceView = () => {
                                                                         <AlertTriangle size={12} className="text-amber-500" />
                                                                     </TooltipTrigger>
                                                                     <TooltipContent className="bg-amber-50 border-amber-200 text-amber-800 text-[10px] p-2">
-                                                                        Insufficient stock: {(mockInventory as any)[item.item]?.stock || 0} available.
+                                                                        Insufficient stock: {inventoryMap[item.item]?.stock || 0} available.
                                                                     </TooltipContent>
                                                                 </Tooltip>
                                                             </TooltipProvider>
@@ -717,18 +715,18 @@ const NewSalesInvoiceView = () => {
                                                             onChange={(e) => setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: e.target.value } : i))}
                                                             className={cn(
                                                                 "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none transition-colors",
-                                                                (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.purchasePrice || 0) ||
-                                                                    (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.sellingPrice * (1 - marginThreshold / 100))
+                                                                (parseFloat(item.unitPrice) || 0) < (inventoryMap[item.item]?.purchasePrice || 0) ||
+                                                                    (parseFloat(item.unitPrice) || 0) < (inventoryMap[item.item]?.sellingPrice * (1 - 20 / 100))
                                                                     ? "text-amber-600" : "text-slate-700"
                                                             )}
                                                             placeholder="0.00"
                                                         />
                                                         <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter opacity-60">
-                                                            Selling Price: {((mockInventory as any)[item.item]?.sellingPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                            Selling Price: {(inventoryMap[item.item]?.sellingPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                         </div>
                                                     </div>
-                                                    {((parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.purchasePrice || 0) ||
-                                                        (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.sellingPrice * (1 - marginThreshold / 100))) && (
+                                                    {((parseFloat(item.unitPrice) || 0) < (inventoryMap[item.item]?.purchasePrice || 0) ||
+                                                        (parseFloat(item.unitPrice) || 0) < (inventoryMap[item.item]?.sellingPrice * (1 - 20 / 100))) && (
                                                             <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                 <TooltipProvider>
                                                                     <Tooltip>
@@ -763,8 +761,11 @@ const NewSalesInvoiceView = () => {
                                                         onChange={(e) => setItems(prev => prev.map(i => i.id === item.id ? { ...i, taxCode: e.target.value } : i))}
                                                         className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                     >
+                                                        <option value="" disabled>Select Tax...</option>
                                                         <option value="No tax">No tax</option>
-                                                        <option value="VAT 16%">VAT 16%</option>
+                                                        {taxCodes.map(tc => (
+                                                            <option key={tc.id} value={tc.name}>{tc.name}</option>
+                                                        ))}
                                                     </select>
                                                 </td>
                                                 {!options.amountsAreTaxInclusive && (
@@ -1038,7 +1039,7 @@ const NewSalesInvoiceView = () => {
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Footer Template</label>
                                                     <select
                                                         onChange={(e) => {
-                                                            const footer = getFooters().find(f => f.id === e.target.value);
+                                                            const footer = dbFooters.find(f => f.id === e.target.value);
                                                             if (footer) {
                                                                 setOptions(prev => ({ ...prev, footerValue: footer.content }));
                                                             }
@@ -1046,7 +1047,7 @@ const NewSalesInvoiceView = () => {
                                                         className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-3 text-xs font-bold text-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer appearance-none"
                                                     >
                                                         <option value="">-- Choose a template from settings --</option>
-                                                        {getFooters().map(f => (
+                                                        {dbFooters.map(f => (
                                                             <option key={f.id} value={f.id}>{f.name}</option>
                                                         ))}
                                                     </select>

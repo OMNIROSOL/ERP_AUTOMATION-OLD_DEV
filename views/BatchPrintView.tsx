@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { getCustomers, getSuppliers, mockInvoices, mockSalesQuotes, mockPurchaseQuotes, mockPurchaseOrders, mockSalesOrders, getDeliveryNotes, mockReceipts, getFooters } from '../mockData';
 import { Printer, ChevronLeft } from 'lucide-react';
+import { Customer } from '../types';
 import apiService from '../services/apiService';
 
 const BatchPrintView = () => {
@@ -26,18 +26,45 @@ const BatchPrintView = () => {
 
     const [allCustomers, setAllCustomers] = React.useState<Customer[]>([]);
     const [allSuppliers, setAllSuppliers] = React.useState<any[]>([]);
+    const [allQuotes, setAllQuotes] = React.useState<any[]>([]);
+    const [allOrders, setAllOrders] = React.useState<any[]>([]);
+    const [allInvoices, setAllInvoices] = React.useState<any[]>([]);
+    const [allDeliveryNotes, setAllDeliveryNotes] = React.useState<any[]>([]);
+    const [allReceipts, setAllReceipts] = React.useState<any[]>([]);
+    const [allPurchaseQuotes, setAllPurchaseQuotes] = React.useState<any[]>([]);
+    const [allPurchaseOrders, setAllPurchaseOrders] = React.useState<any[]>([]);
+    const [allFooters, setAllFooters] = React.useState<any[]>([]);
+    const [taxCodes, setTaxCodes] = React.useState<any[]>([]);
     const [isLoading, setIsLoading] = React.useState(true);
 
     useEffect(() => {
         const fetchBaseData = async () => {
             setIsLoading(true);
             try {
-                const [custs, supps] = await Promise.all([
+                const [custs, supps, quotes, orders, invoices, dns, receipts, pQuotes, pOrders, footers, codes] = await Promise.all([
                     apiService.getCustomers(),
-                    apiService.getSuppliers()
+                    apiService.getSuppliers(),
+                    apiService.getQuotes(),
+                    apiService.getOrders(),
+                    apiService.getInvoices(),
+                    apiService.getDeliveryNotes(),
+                    apiService.getReceipts(),
+                    apiService.getPurchaseQuotes(),
+                    apiService.getPurchaseOrders(),
+                    apiService.getFooters(),
+                    apiService.getTaxCodes().catch(() => [])
                 ]);
                 setAllCustomers(custs);
                 setAllSuppliers(supps);
+                setAllQuotes(quotes);
+                setAllOrders(orders);
+                setAllInvoices(invoices);
+                setAllDeliveryNotes(dns);
+                setAllReceipts(receipts);
+                setAllPurchaseQuotes(pQuotes);
+                setAllPurchaseOrders(pOrders);
+                setAllFooters(footers);
+                setTaxCodes(codes);
             } catch (err) {
                 console.error('Failed to fetch print data:', err);
             } finally {
@@ -50,19 +77,19 @@ const BatchPrintView = () => {
     const items = useMemo(() => {
         // Handle Single-Invoice Detail Reports (Selected Lines)
         if (singleInvoiceId && reportType) {
-            const invoice = mockInvoices.find(inv => inv.id === singleInvoiceId || inv.id === `inv-${singleInvoiceId}` || inv.id.toString() === singleInvoiceId);
+            const invoice = allInvoices.find(inv => inv.id === singleInvoiceId || inv.id === `inv-${singleInvoiceId}` || inv.id.toString() === singleInvoiceId);
             if (!invoice) return [];
 
             if (reportType === 'cogs') {
-                const cogsLines = (invoice.items || []).map((item, idx) => ({
+                const cogsLines = (invoice.items || []).map((item: any, idx: number) => ({
                     id: item.id || `cogs-${idx}`,
-                    itemName: (item as any).item || (item as any).itemName,
+                    itemName: item.item || item.itemName,
                     description: item.description,
                     qty: parseFloat(item.qty) || 0,
                     unitCost: (parseFloat(item.unitPrice) || 0) * 0.7,
                     totalCost: ((parseFloat(item.qty) || 0) * (parseFloat(item.unitPrice) || 0)) * 0.7,
                     invoiceRef: invoice.reference,
-                    customer: invoice.customer,
+                    customer: invoice.customer?.name || invoice.customer,
                     issueDate: invoice.issueDate,
                     reportType: 'cogs'
                 }));
@@ -72,15 +99,13 @@ const BatchPrintView = () => {
                     title: 'Cost of Sales Report',
                     label: 'COGS BREAKDOWN',
                     invoice,
-                    data: cogsLines.filter(line => selectedIds.includes(line.id.toString()))
+                    data: cogsLines.filter((line: any) => selectedIds.includes(line.id.toString()))
                 }];
             }
 
             if (reportType === 'transactions') {
                 const transactions = [
-                    { id: 't1', date: invoice.issueDate, type: 'Sales Invoice', reference: invoice.reference, amount: invoice.invoiceAmount, balance: invoice.invoiceAmount },
-                    { id: 't2', date: '21.02.2027', type: 'Receipt', reference: 'REC-001', amount: -500, balance: invoice.invoiceAmount - 500 },
-                    { id: 't3', date: '22.02.2027', type: 'Credit Note', reference: 'CN-001', amount: -200, balance: invoice.invoiceAmount - 700 },
+                    { id: 't1', date: invoice.issueDate, type: 'Sales Invoice', reference: invoice.reference, amount: invoice.invoiceAmount || invoice.grandTotal, balance: invoice.invoiceAmount || invoice.grandTotal },
                 ];
                 return [{
                     id: `report-${invoice.id}`,
@@ -95,18 +120,18 @@ const BatchPrintView = () => {
 
         // Handle Multi-Invoice Detail Reports (Batch from Main List)
         if (!singleInvoiceId && reportType && isSalesInvoices) {
-            const invoices = mockInvoices.filter(inv => selectedIds.includes(inv.id));
+            const invoices = allInvoices.filter(inv => selectedIds.includes(inv.id));
             return invoices.map(inv => {
                 if (reportType === 'cogs') {
-                    const cogsLines = (inv.items || []).map((item, idx) => ({
+                    const cogsLines = (inv.items || []).map((item: any, idx: number) => ({
                         id: item.id || `cogs-${idx}`,
-                        itemName: (item as any).item || (item as any).itemName,
+                        itemName: item.item || item.itemName,
                         description: item.description,
                         qty: parseFloat(item.qty) || 0,
                         unitCost: (parseFloat(item.unitPrice) || 0) * 0.7,
                         totalCost: ((parseFloat(item.qty) || 0) * (parseFloat(item.unitPrice) || 0)) * 0.7,
                         invoiceRef: inv.reference,
-                        customer: inv.customer,
+                        customer: inv.customer?.name || inv.customer,
                         issueDate: inv.issueDate,
                         reportType: 'cogs'
                     }));
@@ -121,8 +146,7 @@ const BatchPrintView = () => {
                 }
 
                 const transactions = [
-                    { id: 't1', date: inv.issueDate, type: 'Sales Invoice', reference: inv.reference, amount: inv.invoiceAmount, balance: inv.invoiceAmount },
-                    { id: 't2', date: '21.02.2027', type: 'Receipt', reference: 'REC-001', amount: -500, balance: inv.invoiceAmount - 500 },
+                    { id: 't1', date: inv.issueDate, type: 'Sales Invoice', reference: inv.reference, amount: inv.invoiceAmount || inv.grandTotal, balance: inv.invoiceAmount || inv.grandTotal },
                 ];
                 return {
                     id: `report-${inv.id}`,
@@ -141,65 +165,39 @@ const BatchPrintView = () => {
         }
 
         if (isCustomers) {
-            const allCustomerNamesFromTransactions = [
-                ...mockInvoices.map(i => i.customer),
-                ...mockSalesQuotes.map(q => q.customer),
-                ...mockSalesOrders.map(o => o.customer)
-            ];
-            const savedCustomerNames = new Set(allCustomers.map(c => c.name));
-            const uniqueDerived = Array.from(new Set(allCustomerNamesFromTransactions))
-                .filter(name => !savedCustomerNames.has(name))
-                .map((name, index) => ({
-                    id: `cust-derived-${index + 1}`,
-                    name: name,
-                    code: `CUST-${(index + 1).toString().padStart(4, '0')}`,
-                    division: 'Global Division',
-                    status: (mockInvoices.filter(i => i.customer === name).reduce((sum, inv) => sum + inv.balanceDue, 0) > 0) ? 'Unpaid' as 'Unpaid' : 'Paid' as 'Paid',
-                    tpin: `100${Math.floor(Math.random() * 10000000)}`,
-                    salesPerson: ['John Doe', 'Jane Smith', 'Alice Johnson'][index % 3],
-                    creditDays: [15, 30, 45, 60][index % 4],
-                    balance: mockInvoices.filter(i => i.customer === name).reduce((sum, inv) => sum + inv.balanceDue, 0),
-                    creditLimit: 50000,
-                    currency: 'ZMW - Zambian Kwacha',
-                    email: `${name.replace(/\s+/g, '.').toLowerCase()}@example.com`,
-                    billingAddress: '123 Main Street\nLusaka, Zambia',
-                    deliveryAddress: '123 Main Street\nLusaka, Zambia'
-                }));
-
-            const unifiedPool = [...allCustomers, ...uniqueDerived];
-            return unifiedPool.filter(c => selectedIds.includes(c.id));
+            return allCustomers.filter(c => selectedIds.includes(c.id));
         }
 
         if (isSalesQuotes) {
-            return mockSalesQuotes.filter(q => selectedIds.includes(q.id));
+            return allQuotes.filter(q => selectedIds.includes(q.id));
         }
 
         if (isSalesOrders) {
-            return mockSalesOrders.filter(o => selectedIds.includes(o.id));
+            return allOrders.filter(o => selectedIds.includes(o.id));
         }
 
         if (isSalesInvoices) {
-            return mockInvoices.filter(i => selectedIds.includes(i.id));
+            return allInvoices.filter(i => selectedIds.includes(i.id));
         }
 
         if (isDeliveryNotes) {
-            return getDeliveryNotes().filter((dn: any) => selectedIds.includes(dn.id));
+            return allDeliveryNotes.filter((dn: any) => selectedIds.includes(dn.id));
         }
 
         if (isReceipts) {
-            return mockReceipts.filter(r => selectedIds.includes(r.id));
+            return allReceipts.filter(r => selectedIds.includes(r.id));
         }
 
         if (isPurchaseQuotes) {
-            return mockPurchaseQuotes.filter(q => selectedIds.includes(q.id));
+            return allPurchaseQuotes.filter(q => selectedIds.includes(q.id));
         }
 
         if (isPurchaseOrders) {
-            return mockPurchaseOrders.filter(o => selectedIds.includes(o.id));
+            return allPurchaseOrders.filter(o => selectedIds.includes(o.id));
         }
 
         return [];
-    }, [allCustomers, allSuppliers, selectedIds, isCustomers, isSuppliers, isSalesQuotes, isPurchaseQuotes, isPurchaseOrders, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
+    }, [allCustomers, allSuppliers, allQuotes, allOrders, allInvoices, allDeliveryNotes, allReceipts, allPurchaseQuotes, allPurchaseOrders, selectedIds, isCustomers, isSuppliers, isSalesQuotes, isPurchaseQuotes, isPurchaseOrders, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
 
     useEffect(() => {
         if (items.length > 0) {
@@ -427,12 +425,10 @@ const BatchPrintView = () => {
                         const subTitle = isPurchaseQuote ? 'PROCUREMENT REQUEST' : (isQuote ? 'OFFICIAL PROPOSAL' : (isInvoice ? 'TAX INVOICE' : (isDeliveryNote ? 'PROOF OF DELIVERY' : (isReceipt ? 'PAYMENT CONFIRMATION' : (isPurchaseOrder ? 'ORDER TO SUPPLIER' : 'CONFIRMED ORDER')))));
 
                         let footerValue = (item.options?.footers && item.options?.footerValue) ? item.options.footerValue : (item.footer || '');
-                        
-                        // Handle Purchase Docs Default Footer
+
                         if ((isPurchaseOrder || isPurchaseQuote) && !footerValue) {
-                            const footers = getFooters();
-                            const pqFooter = footers.find(f => f.name === 'Purchase Quote');
-                            if (pqFooter) footerValue = pqFooter.content;
+                            const footer = allFooters.find(f => f.name === 'Purchase Quote');
+                            if (footer) footerValue = footer.content;
                         }
 
                         let expiryDate = null;
@@ -614,18 +610,41 @@ const BatchPrintView = () => {
                                                         else lineTotal -= discVal;
                                                     }
 
+                                                    let taxRate = 0;
+                                                    const lineTaxCode = (line.taxCode || '').toString().toLowerCase().trim();
+                                                    const selectedTax = taxCodes.find(tc => 
+                                                        tc.id === line.taxCode || 
+                                                        tc.name.toLowerCase() === lineTaxCode ||
+                                                        (lineTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
+                                                        (lineTaxCode === 'exempt' && tc.name === 'Exempt')
+                                                    );
+                                                    
+                                                    if (selectedTax) {
+                                                        taxRate = parseFloat(selectedTax.rate) / 100;
+                                                    } else {
+                                                        // Fallback for historical data - check if it looks like it should be 16%
+                                                        if (lineTaxCode.includes('16') || lineTaxCode.includes('vat') || !lineTaxCode) {
+                                                            const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+                                                            taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+                                                        } else {
+                                                            taxRate = 0; // Default to 0 for unknown non-empty tax codes
+                                                        }
+                                                    }
+
                                                     if (isTaxInclusive) {
-                                                        const lineTax = lineTotal * 0.16 / 1.16;
+                                                        const lineTax = lineTotal - (lineTotal / (1 + taxRate));
                                                         tax += lineTax;
                                                         subtotal += (lineTotal - lineTax);
                                                     } else {
                                                         subtotal += lineTotal;
-                                                        tax += lineTotal * 0.16;
+                                                        tax += lineTotal * taxRate;
                                                     }
                                                 });
                                             } else {
                                                 const total = parseFloat(item.amount || 0);
-                                                tax = isTaxInclusive ? total * 0.16 / 1.16 : total * 0.16;
+                                                const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+                                                const taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+                                                tax = isTaxInclusive ? total * taxRate / (1 + taxRate) : total * taxRate;
                                                 subtotal = isTaxInclusive ? total - tax : total;
                                             }
 
@@ -645,7 +664,7 @@ const BatchPrintView = () => {
                                                         <span className="font-semibold">{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                     </div>
                                                     <div className="flex justify-between items-center text-gray-500">
-                                                        <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Sales Tax (16%)</span>
+                                                        <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Tax Component</span>
                                                         <span className="font-semibold">{tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                     </div>
                                                     {item.options?.withholdingTax && (

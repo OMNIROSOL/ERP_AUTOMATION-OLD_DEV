@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getPurchaseQuotes, getPurchaseOrders, getPurchaseInvoices, getGoodsReceivedNotes, getDebitNotes } from '../mockData';
+import apiService from '../services/apiService';
 import { Eye, Edit, Copy, FileText, Search, MoreVertical, ChevronDown, Filter, Trash2, X, ChevronUp, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Calendar, Printer, ShoppingCart, Quote } from 'lucide-react';
 import { cn } from '../utils/cn';
 
@@ -44,77 +44,76 @@ const PurchaseHistoryView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const [dbQuotes, setDbQuotes] = useState<any[]>([]);
+    const [dbOrders, setDbOrders] = useState<any[]>([]);
+    const [dbInvoices, setDbInvoices] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchHistory = async () => {
+            setIsLoading(true);
+            try {
+                const [quotes, orders, invoices] = await Promise.all([
+                    apiService.getPurchaseQuotes(),
+                    apiService.getPurchaseOrders(),
+                    apiService.getPurchaseInvoices()
+                ]);
+                setDbQuotes(quotes);
+                setDbOrders(orders);
+                setDbInvoices(invoices);
+            } catch (err) {
+                console.error('Failed to fetch purchase history:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchHistory();
+    }, [refreshTrigger]);
+
     const allHistory = useMemo(() => {
         const history: any[] = [];
-        getPurchaseQuotes().forEach(q => {
+        
+        dbQuotes.forEach(q => {
             history.push({
                 id: q.id,
-                date: q.issueDate,
-                supplier: q.supplier,
-                amount: q.amount,
+                date: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                supplier: q.supplier?.name || 'Unknown',
+                amount: parseFloat(q.amount) || 0,
                 type: 'Quote',
                 reference: q.reference || '—',
                 status: q.status,
-                timestamp: q.timestamp || '—'
+                timestamp: q.createdAt ? new Date(q.createdAt).toLocaleString() : '—'
             });
         });
         
-        getPurchaseOrders().forEach(o => {
+        dbOrders.forEach(o => {
             history.push({
                 id: o.id,
-                date: o.orderDate,
-                supplier: o.supplier,
-                amount: o.amount,
+                date: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                supplier: o.supplier?.name || 'Unknown',
+                amount: parseFloat(o.amount) || 0,
                 type: 'Order',
                 reference: o.reference || '—',
                 status: o.status,
-                timestamp: o.timestamp || '—'
+                timestamp: o.createdAt ? new Date(o.createdAt).toLocaleString() : '—'
             });
         });
 
-        getPurchaseInvoices().forEach(i => {
+        dbInvoices.forEach(i => {
             history.push({
                 id: i.id,
-                date: i.issueDate,
-                supplier: i.supplier,
-                amount: i.invoiceAmount,
+                date: i.created_at ? new Date(i.created_at).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                supplier: i.suppliers?.name || 'Unknown',
+                amount: parseFloat(i.grand_total) || 0,
                 type: 'Invoice',
                 reference: i.reference || '—',
                 status: i.status,
-                dueDate: i.dueDate,
-                balanceDue: i.balanceDue,
-                timestamp: i.timestamp || '—'
-            });
-        });
-
-        getGoodsReceivedNotes().forEach(g => {
-            history.push({
-                id: g.id,
-                date: g.receivedDate,
-                supplier: g.supplier,
-                amount: 0,
-                type: 'GRN',
-                reference: g.reference || '—',
-                status: g.status,
-                timestamp: g.timestamp || '—'
-            });
-        });
-
-        getDebitNotes().forEach(d => {
-            history.push({
-                id: d.id,
-                date: d.issueDate,
-                supplier: d.supplier,
-                amount: d.amount,
-                type: 'Debit Note',
-                reference: d.reference || '—',
-                status: d.status,
-                timestamp: d.timestamp || '—'
+                timestamp: i.created_at ? new Date(i.created_at).toLocaleString() : '—'
             });
         });
 
         return history;
-    }, [refreshTrigger]);
+    }, [dbQuotes, dbOrders, dbInvoices]);
 
     const getComputedStatus = (item: any): string => {
         if (item.type !== 'Invoice') return item.status || '—';

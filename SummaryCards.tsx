@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { FinancialSummary } from '../types';
+import { FinancialSummary } from './types';
 
 interface SummaryCardsProps {
   summary: FinancialSummary;

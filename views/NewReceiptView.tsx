@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
+import apiService from '../services/apiService';
+import { Account, InventoryItem, Receipt as ReceiptType } from '../types';
 import {
     Receipt, ChevronRight, Calculator, ChevronDown,
     Copy, X, Plus, Calendar, Hash, User, Briefcase,
@@ -7,7 +9,6 @@ import {
     CheckCircle2, Info, Image as ImageIcon, Download,
     ChevronUp, Settings
 } from 'lucide-react';
-import { mockReceipts, mockInventory, mockAccounts } from '../mockData';
 import { cn } from '../utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -77,7 +78,8 @@ const NewReceiptView = () => {
     const dateInputRef = useRef<HTMLInputElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const [date, setDate] = useState('2026-02-27');
+    const [isLoading, setIsLoading] = useState(true);
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [customTitleText, setCustomTitleText] = useState('');
     const [fixedTotalValue, setFixedTotalValue] = useState('');
     const [footerText, setFooterText] = useState('');
@@ -110,28 +112,65 @@ const NewReceiptView = () => {
     const [withholdingTaxRate, setWithholdingTaxRate] = useState('10');
     const [withholdingTaxMethod, setWithholdingTaxMethod] = useState('Rate');
 
-    const getNextReference = () => {
-        const refs = mockReceipts
-            .map(r => r.reference)
-            .filter(ref => ref && ref.startsWith('REC-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1000;
-        return `REC-${nextNum.toString().padStart(4, '0')}`;
-    };
+    const [accounts, setAccounts] = useState<Account[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
     useEffect(() => {
-        if (!id && !reference) {
-            setReference(getNextReference());
-        }
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [accs, invs] = await Promise.all([
+                    apiService.getAccounts(),
+                    apiService.getItems()
+                ]);
+                setAccounts(accs);
+                setInventoryItems(invs);
+                
+                if (id) {
+                    const receipt = await apiService.getReceipt(id);
+                    if (receipt) {
+                        setDate(receipt.date ? new Date(receipt.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                        setReference(receipt.reference || '');
+                        setUseManualRef(true);
+                        setPaidByContact(receipt.paidByContact || 'Customer');
+                        setPaidByOptional(receipt.paidByOptional || '');
+                        setReceivedInAccount(receipt.receivedInAccount || '');
+                        setDescription(receipt.description || '');
+                        if (receipt.items) {
+                            setItems(receipt.items.map((it: any) => ({
+                                id: it.id || Date.now() + Math.random(),
+                                item: it.item || '',
+                                account: it.account || 'Suspense',
+                                description: it.description || '',
+                                qty: (it.qty || 1).toString(),
+                                discount: it.discount || '',
+                                amount: (it.amount || 0).toString(),
+                                total: (it.total || 0).toString()
+                            })));
+                        }
+                    }
+                } else {
+                    const nextRef = await apiService.getNextReference('receipt');
+                    setReference(nextRef);
+                }
+            } catch (err) {
+                console.error('Failed to fetch initial data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
     }, [id]);
 
     const updateItem = (itemId: number, field: string, value: string) => {
         setItems(items.map(item => {
             if (item.id === itemId) {
                 const newItem = { ...item, [field]: value };
-                if (field === 'item' && value && (mockInventory as any)[value]) {
-                    newItem.amount = (mockInventory as any)[value].sellingPrice.toString();
+                if (field === 'item' && value) {
+                    const selectedItem = inventoryItems.find(i => i.itemName === value || i.itemCode === value);
+                    if (selectedItem) {
+                        newItem.amount = selectedItem.sellingPrice?.toString() || '0';
+                    }
                 }
                 const q = parseFloat(newItem.qty) || 0;
                 const a = parseFloat(newItem.amount) || 0;
@@ -147,7 +186,7 @@ const NewReceiptView = () => {
     const addLine = () => setItems([...items, { id: Date.now(), item: '', account: 'Suspense', description: '', qty: '1', discount: '', amount: '', total: '0' }]);
     const copyLine = (itemId: number) => {
         const item = items.find(i => i.id === itemId);
-        if (item) setItems([...items, { ...item, id: Date.now() }]);
+        if (item) setItems([...items, { ...item, id: Date.now() + Math.random() }]);
     };
     const deleteLine = (itemId: number) => items.length > 1 && setItems(items.filter(item => item.id !== itemId));
     const toggleOption = (key: keyof typeof options) => setOptions(prev => ({ ...prev, [key]: !prev[key] }));
@@ -167,83 +206,53 @@ const NewReceiptView = () => {
         }
     }, [location.search]);
 
-    useEffect(() => {
-        if (id) {
-            const receipt = mockReceipts.find(r => r.id === id);
-            if (receipt) {
-                setDate(receipt.date.split('.').reverse().join('-'));
-                setReference(receipt.reference);
-                setUseManualRef(true);
-                setPaidByContact(receipt.paidByContact || 'Customer');
-                setPaidByOptional(receipt.paidByOptional || '');
-                setReceivedInAccount(receipt.receivedInAccount);
-                setDescription(receipt.description);
-                setCustomTitleText(receipt.customTitle || '');
-                if (receipt.items) {
-                    setItems(receipt.items.map(it => ({
-                        id: it.id || Date.now() + Math.random(),
-                        item: it.item || '',
-                        account: it.account || 'Suspense',
-                        description: it.description || '',
-                        qty: it.qty || '1',
-                        discount: it.discount || '',
-                        amount: it.unitPrice || '',
-                        total: it.total || (parseFloat(it.unitPrice || '0') * parseFloat(it.qty || '0')).toString()
-                    })));
-                } else {
-                    setItems([{ id: Date.now(), item: '', account: 'Suspense', description: '', qty: '1', discount: '', amount: receipt.amount.toString(), total: receipt.amount.toString() }]);
-                }
-                if (receipt.customTitle) setOptions(prev => ({ ...prev, customTitle: true }));
-                if (receipt.footers) {
-                    setOptions(prev => ({ ...prev, footers: true }));
-                    setFooterText(receipt.footers);
-                }
-            }
-        }
-    }, [id]);
-
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         setFileName(file ? file.name : 'No file chosen');
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
         const receiptData = {
-            id: id || `REC-${Date.now()}`,
-            date: date.split('-').reverse().join('.'),
-            reference: reference || getNextReference(),
-            paidBy,
-            paidByContact,
-            paidByOptional,
-            receivedIn,
+            reference: reference,
+            date: date,
+            paidByContact: paidByOptional || paidByContact,
             receivedInAccount: receivedInAccount || 'Suspense',
             description,
             amount: totalAmount || (parseFloat(fixedTotalValue) || 0),
             currency: 'ZMW',
-            items: items.map(it => ({
-                id: it.id,
-                item: it.item,
-                description: it.description,
-                qty: it.qty,
-                unitPrice: it.amount,
-                total: it.total,
-                account: it.account
-            })),
             status: 'Completed',
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            customTitle: customTitleText,
-            footers: footerText
+            items: items.map(it => ({
+                item: it.item,
+                account: it.account,
+                description: it.description,
+                qty: parseFloat(it.qty) || 0,
+                amount: parseFloat(it.amount) || 0,
+                total: parseFloat(it.total) || 0
+            }))
         };
 
-        if (id) {
-            const index = mockReceipts.findIndex(r => r.id === id);
-            if (index !== -1) mockReceipts[index] = receiptData as any;
-        } else {
-            mockReceipts.unshift(receiptData as any);
+        try {
+            if (id) {
+                await apiService.updateReceipt(id, receiptData);
+            } else {
+                await apiService.createReceipt(receiptData);
+            }
+            navigate('/receipts');
+        } catch (err) {
+            console.error('Failed to save receipt:', err);
+            alert('Failed to save receipt to database.');
         }
-        navigate('/receipts');
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing receipt details...</p>
+            </div>
+        );
+    }
 
     const calculations = useMemo(() => {
         const total = items.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
@@ -356,8 +365,8 @@ const NewReceiptView = () => {
                                             className="w-full h-full bg-transparent pl-4 pr-8 py-3 text-[13px] font-semibold text-slate-700 outline-none appearance-none cursor-pointer"
                                         >
                                             <option value="">Select Account...</option>
-                                            {mockAccounts.filter(a => a.isPaymentAccount).map(acc => (
-                                                <option key={acc.name} value={acc.name}>{acc.name}</option>
+                                            {accounts.filter(a => a.isPaymentAccount).map(acc => (
+                                                <option key={acc.id} value={acc.name}>{acc.name}</option>
                                             ))}
                                         </select>
                                         <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-colors group-focus-within:text-indigo-500" />
@@ -408,8 +417,8 @@ const NewReceiptView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-indigo-600 outline-none appearance-none cursor-pointer"
                                                     >
                                                         <option value="">Select Item...</option>
-                                                        {Object.keys(mockInventory).map(invName => (
-                                                            <option key={invName} value={invName}>{invName}</option>
+                                                        {inventoryItems.map(inv => (
+                                                            <option key={inv.id} value={inv.itemName}>{inv.itemName}</option>
                                                         ))}
                                                     </select>
                                                 </div>
@@ -422,8 +431,8 @@ const NewReceiptView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-[13px] font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                     >
                                                         <option value="Suspense">Suspense</option>
-                                                        {mockAccounts.map(acc => (
-                                                            <option key={acc.name} value={acc.name}>{acc.name}</option>
+                                                        {accounts.map(acc => (
+                                                            <option key={acc.id} value={acc.name}>{acc.name}</option>
                                                         ))}
                                                     </select>
                                                 </div>

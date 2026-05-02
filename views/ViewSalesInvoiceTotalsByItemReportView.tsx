@@ -9,7 +9,7 @@ import {
   Package,
   Search
 } from 'lucide-react';
-import { getInventoryItems, getInvoices } from '../mockData';
+import apiService from '../services/apiService';
 import { cn } from '../utils/cn';
 
 interface SalesInvoiceItemTotalRow {
@@ -36,8 +36,28 @@ const ViewSalesInvoiceTotalsByItemReportView: React.FC = () => {
     };
   }, [id]);
 
-  const items = useMemo(() => getInventoryItems(), []);
-  const allInvoices = useMemo(() => getInvoices(), []);
+  const [items, setItems] = React.useState<any[]>([]);
+  const [allInvoices, setAllInvoices] = React.useState<any[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      try {
+        const [itemsData, invs] = await Promise.all([
+          apiService.getItems(),
+          apiService.getInvoices()
+        ]);
+        setItems(itemsData);
+        setAllInvoices(invs);
+      } catch (err) {
+        console.error('Failed to load report data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const formatCurrency = (val: number) => {
     if (val === 0) return '—';
@@ -47,31 +67,32 @@ const ViewSalesInvoiceTotalsByItemReportView: React.FC = () => {
   // Aggregate totals by item
   const totalsByItem = useMemo(() => {
     return items.map(item => {
-      // Find all invoice lines for this item across all invoices
       let quantitySold = 0;
       let totalRevenue = 0;
 
       allInvoices.forEach(inv => {
         if (inv.status === 'Draft') return;
         
-        // Mocking line items since the base invoice type is simplified
-        // In a real app we'd filter through inv.lines
-        // For demonstration, we'll associate some random sales to each item
-        const seed = (parseInt(item.id) || 0) + (inv.totalAmount % 100);
-        if (seed % 3 === 0) {
-            const qty = (seed % 5) + 1;
-            quantitySold += qty;
-            totalRevenue += (inv.totalAmount / 3) * qty; // simplified
-        }
+        // Find line items matching this inventory item
+        const matchingLines = (inv.items || []).filter((line: any) => 
+          line.itemId === item.id || line.item?.id === item.id
+        );
+
+        matchingLines.forEach((line: any) => {
+          const qty = parseFloat(line.qty) || 0;
+          const price = parseFloat(line.unitPrice) || 0;
+          quantitySold += qty;
+          totalRevenue += qty * price;
+        });
       });
 
       return {
-        itemName: item.name,
-        sku: item.code || 'SKU-001',
+        itemName: item.itemName,
+        sku: item.itemCode || 'N/A',
         quantitySold: quantitySold,
         totalRevenue: totalRevenue,
         averagePrice: quantitySold > 0 ? totalRevenue / quantitySold : 0,
-        currency: 'ZMW'
+        currency: 'ZMW' // Assuming default for now
       };
     }).filter(row => row.quantitySold > 0);
   }, [items, allInvoices]);
@@ -92,6 +113,10 @@ const ViewSalesInvoiceTotalsByItemReportView: React.FC = () => {
       return a.localeCompare(b);
     });
   }, [groupedData]);
+
+  if (isLoading) {
+    return <div className="p-20 text-center font-bold text-slate-400">LOADING DATABASE REPORT...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-8 space-y-8 animate-in fade-in duration-700 font-sans text-left">

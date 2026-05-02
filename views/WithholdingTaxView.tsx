@@ -11,23 +11,32 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/shared/Card';
-import { getWithholdingTaxes, saveWithholdingTaxes } from '../mockData';
+import apiService from '../services/apiService';
 import { WithholdingTax } from '../types';
 import { cn } from '../utils/cn';
 
 const WithholdingTaxView = () => {
   const navigate = useNavigate();
   const [taxes, setTaxes] = useState<WithholdingTax[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingTax, setEditingTax] = useState<Partial<WithholdingTax> | null>(null);
 
+  const fetchTaxes = async () => {
+    setIsLoading(true);
+    try {
+      const data = await apiService.getWithholdingTaxes();
+      setTaxes(data);
+    } catch (err) {
+      console.error('Failed to fetch withholding taxes:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setTaxes(getWithholdingTaxes());
-    
-    const handleUpdate = () => setTaxes(getWithholdingTaxes());
-    window.addEventListener('withholding_taxes_updated', handleUpdate);
-    return () => window.removeEventListener('withholding_taxes_updated', handleUpdate);
+    fetchTaxes();
   }, []);
 
   const filteredTaxes = taxes.filter(tax => 
@@ -35,32 +44,39 @@ const WithholdingTaxView = () => {
     tax.description?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTax?.name || editingTax.rate === undefined) return;
 
-    const newTax: WithholdingTax = {
-      id: editingTax.id || `wht-${Date.now()}`,
+    const taxData = {
       name: editingTax.name,
       rate: Number(editingTax.rate),
       description: editingTax.description || '',
       inactive: editingTax.inactive || false
     };
 
-    const updated = editingTax.id 
-      ? taxes.map(t => t.id === editingTax.id ? newTax : t)
-      : [...taxes, newTax];
-
-    saveWithholdingTaxes(updated);
-    setShowModal(false);
-    setEditingTax(null);
+    try {
+      if (editingTax.id) {
+        await apiService.updateWithholdingTax(editingTax.id, taxData);
+      } else {
+        await apiService.createWithholdingTax(taxData);
+      }
+      setShowModal(false);
+      setEditingTax(null);
+      fetchTaxes();
+    } catch (err) {
+      console.error('Failed to save tax:', err);
+      alert('Failed to save tax configuration');
+    }
   };
 
-  const toggleStatus = (id: string) => {
-    const updated = taxes.map(t => 
-      t.id === id ? { ...t, inactive: !t.inactive } : t
-    );
-    saveWithholdingTaxes(updated);
+  const toggleStatus = async (tax: WithholdingTax) => {
+    try {
+      await apiService.updateWithholdingTax(tax.id, { ...tax, inactive: !tax.inactive });
+      fetchTaxes();
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
+    }
   };
 
   return (
@@ -140,7 +156,7 @@ const WithholdingTaxView = () => {
                   </td>
                   <td className="px-6 py-4">
                     <button 
-                      onClick={() => toggleStatus(tax.id)}
+                      onClick={() => toggleStatus(tax)}
                       className={cn(
                         "flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
                         tax.inactive 

@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockDebitNotes } from '../mockData';
+import apiService from '../services/apiService';
 import Badge from '../components/shared/Badge';
 import DataTable from '../components/shared/DataTable';
 import {
@@ -15,9 +15,26 @@ const DebitNotesView = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [pageSize, setPageSize] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
+    const [debitNotes, setDebitNotes] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchDebitNotes = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getDebitNotes();
+                setDebitNotes(data);
+            } catch (err) {
+                console.error('Failed to fetch debit notes:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchDebitNotes();
+    }, []);
 
     const filteredData = useMemo(() => {
-        let result = [...mockDebitNotes];
+        let result = [...debitNotes];
 
         if (supplierName) {
             result = result.filter(dn => (dn.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
@@ -141,10 +158,18 @@ const DebitNotesView = () => {
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden text-[13px]">
                 <DataTable
-                    data={displayData}
+                    data={isLoading ? [] : displayData}
                     columns={columns as any}
                     tableClassName="min-w-[1000px]"
                     hideDefaultPagination={true}
+                    emptyState={
+                        isLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                <div className="w-10 h-10 border-4 border-rose-500/20 border-t-rose-600 rounded-full animate-spin"></div>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching debit notes...</p>
+                            </div>
+                        ) : undefined
+                    }
                 />
             </div>
 

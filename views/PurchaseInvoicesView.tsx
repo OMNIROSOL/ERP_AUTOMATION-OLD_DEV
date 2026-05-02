@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Plus, Eye, Edit, FileText, Check, X, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Printer, Search, ArrowUpDown, ChevronUp, ChevronDown, Copy, Calendar, Clock, Package, FileCheck } from 'lucide-react';
 import { cn } from '../utils/cn';
-import { getPurchaseInvoices, getCurrentUser } from '../mockData';
+import apiService from '../services/apiService';
 import { ScreenPermission } from '../types';
 import DataTable from '../components/shared/DataTable';
 import Badge from '../components/shared/Badge';
@@ -54,18 +54,45 @@ const PurchaseInvoicesView = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const [purchaseInvoices, setPurchaseInvoices] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchInvoices = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getPurchaseInvoices();
+                const mapped = data.map((inv: any) => ({
+                    ...inv,
+                    supplier: inv.suppliers?.name || inv.suppliers || 'Unknown',
+                    issueDate: inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    currency: inv.currency || inv.suppliers?.currency?.split(' - ')[0] || 'ZMW',
+                    invoiceAmount: parseFloat(inv.grand_total) || 0,
+                    balanceDue: parseFloat(inv.grand_total) || 0, // Placeholder
+                    timestamp: inv.created_at ? new Date(inv.created_at).toLocaleString() : ''
+                }));
+                setPurchaseInvoices(mapped);
+            } catch (err) {
+                console.error('Failed to fetch purchase invoices:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchInvoices();
+    }, [refreshTrigger]);
+
     const filteredData = useMemo(() => {
-        let result = getPurchaseInvoices();
+        let result = purchaseInvoices;
 
         if (supplierName) {
             result = result.filter(inv => (inv.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
         }
 
         const query = searchQuery.toLowerCase();
-        result = result.filter(inv => 
+        result = result.filter(inv =>
             inv.supplier.toLowerCase().includes(query) ||
             inv.reference.toLowerCase().includes(query) ||
-            inv.status.toLowerCase().includes(query)
+            (inv.status && inv.status.toLowerCase().includes(query))
         );
 
         return result.sort((a, b) => {
@@ -75,7 +102,7 @@ const PurchaseInvoicesView = () => {
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [searchQuery, supplierName, refreshTrigger, sortColumn, sortDirection]);
+    }, [searchQuery, purchaseInvoices, supplierName, refreshTrigger, sortColumn, sortDirection]);
 
     const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
     const displayData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -242,7 +269,7 @@ const PurchaseInvoicesView = () => {
                 </div>
             </div>
 
-             <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div className="flex items-center gap-4 flex-1">
                     <div className="relative flex-1 group max-w-xl">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
@@ -266,40 +293,71 @@ const PurchaseInvoicesView = () => {
                 <DataTable
                     data={displayData}
                     columns={columns as any}
-                    tableClassName="min-w-[1000px]"
+                    tableClassName="min-w-[1440px]"
                     hideDefaultPagination={true}
                     disableInternalScroll={true}
+                    tableFooter={
+                        <tr className="bg-slate-50/50 font-black">
+                            {columns.map(col => {
+                                if (col.id === 'Invoice Amount' || col.id === 'Balance due') {
+                                    const field = col.id === 'Invoice Amount' ? 'invoiceAmount' : 'balanceDue';
+                                    const totalsByCurrency: Record<string, number> = {};
+                                    filteredData.forEach(o => {
+                                        const cur = o.currency || 'ZMW';
+                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (o[field] || 0);
+                                    });
+                                    const activeCurs = Object.keys(totalsByCurrency);
+                                    return (
+                                        <td key={col.id} className="px-6 py-4 text-right">
+                                            <div className="flex flex-col gap-1">
+                                                {activeCurs.map(cur => (
+                                                    <div key={cur} className="flex items-center justify-end gap-1.5">
+                                                        <span className="text-[9px] text-slate-400 uppercase tracking-tight">{cur}</span>
+                                                        <span className="text-[12px] underline decoration-slate-200 underline-offset-4">{totalsByCurrency[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </td>
+                                    );
+                                }
+                                if (col.id === 'Supplier') {
+                                    return <td key={col.id} className="px-6 py-4 text-left font-black uppercase text-[10px] text-slate-400">Grand Totals</td>;
+                                }
+                                return <td key={col.id} className="px-6 py-4"></td>;
+                            })}
+                        </tr>
+                    }
                 />
             </div>
 
             <div className="flex flex-col md:flex-row items-center justify-between bg-white px-8 py-6 rounded-[32px] border border-slate-100 shadow-sm gap-8 mt-8">
                 <div className="flex flex-col items-start gap-1">
                     <div className="flex items-center gap-2 text-slate-300">
-                        <button 
-                            onClick={() => { setCurrentPage(1); }} 
-                            disabled={currentPage === 1} 
+                        <button
+                            onClick={() => { setCurrentPage(1); }}
+                            disabled={currentPage === 1}
                             className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
                         >
                             <ChevronsLeft size={16} />
                         </button>
-                        <button 
-                            onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); }} 
-                            disabled={currentPage === 1} 
+                        <button
+                            onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); }}
+                            disabled={currentPage === 1}
                             className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
                         >
                             <ChevronLeft size={16} />
                         </button>
                         <span className="text-[12px] font-medium text-slate-500 mx-2 tracking-tight">Page {currentPage} of {totalPages}</span>
-                        <button 
-                            onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); }} 
-                            disabled={currentPage === totalPages} 
+                        <button
+                            onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); }}
+                            disabled={currentPage === totalPages}
                             className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
                         >
                             <ChevronRight size={16} />
                         </button>
-                        <button 
-                            onClick={() => { setCurrentPage(totalPages); }} 
-                            disabled={currentPage === totalPages} 
+                        <button
+                            onClick={() => { setCurrentPage(totalPages); }}
+                            disabled={currentPage === totalPages}
                             className="p-1 hover:text-indigo-600 disabled:opacity-30 transition-all"
                         >
                             <ChevronsRight size={16} />
@@ -330,9 +388,9 @@ const PurchaseInvoicesView = () => {
                     <button className="px-8 py-3.5 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm">
                         <Copy size={16} className="text-slate-400" /> EXPORT DATA
                     </button>
-                    
+
                     <div className="relative group" ref={managementRef}>
-                        <button 
+                        <button
                             onClick={() => setIsManagementOpen(!isManagementOpen)}
                             className="px-10 py-3.5 bg-indigo-600 text-white rounded-[20px] text-[11px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-600/20 flex items-center gap-4"
                         >
@@ -340,13 +398,13 @@ const PurchaseInvoicesView = () => {
                         </button>
                         {isManagementOpen && (
                             <div className="absolute bottom-full right-0 mb-4 w-56 bg-white border border-gray-100 shadow-2xl rounded-2xl py-3 z-[100] animate-in slide-in-from-bottom-2 duration-200 overflow-hidden">
-                                <button 
-                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsManagementOpen(false); }} 
+                                <button
+                                    onClick={() => { setIsSelectionMode(!isSelectionMode); setIsManagementOpen(false); }}
                                     className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                 >
                                     {isSelectionMode ? 'Disable Batch Mode' : 'Enable Batch Actions'}
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => { navigate('/purchase-invoices/columns'); setIsManagementOpen(false); }}
                                     className="w-full text-left px-6 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                                 >

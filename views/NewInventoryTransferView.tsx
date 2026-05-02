@@ -1,19 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, ArrowRightLeft, Plus, Trash2, ArrowLeft } from 'lucide-react';
-import { mockInventoryTransfers, mockInventoryItems, getInventoryLocations } from '../mockData';
-import { InventoryTransfer, Division } from '../types';
 import apiService from '../services/apiService';
+import { InventoryTransfer, Division, InventoryItem } from '../types';
 
 const NewInventoryTransferView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const existingTransfer = isEdit ? mockInventoryTransfers.find(t => t.id === id) : null;
-
-  const [formData, setFormData] = useState<Partial<InventoryTransfer>>(existingTransfer || {
+  const [isLoading, setIsLoading] = useState(true);
+  const [formData, setFormData] = useState<Partial<InventoryTransfer>>({
     date: new Date().toISOString().split('T')[0],
-    reference: `TR-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+    reference: '',
     fromLocation: '',
     toLocation: '',
     description: '',
@@ -22,10 +20,36 @@ const NewInventoryTransferView = () => {
   });
 
   const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+  const [availableItems, setAvailableItems] = useState<InventoryItem[]>([]);
 
-  React.useEffect(() => {
-    apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
-  }, []);
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [divs, items, nextRef] = await Promise.all([
+          apiService.getDivisions(),
+          apiService.getItems(),
+          !id ? apiService.getNextReference('inventory-transfer').catch(() => `TR-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`) : Promise.resolve('')
+        ]);
+        setAvailableDivisions(divs);
+        setAvailableItems(items);
+        
+        if (id) {
+          const transfer = await apiService.getInventoryTransfer(id);
+          if (transfer) {
+            setFormData(transfer);
+          }
+        } else if (nextRef) {
+          setFormData(prev => ({ ...prev, reference: nextRef }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch initial data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -52,11 +76,29 @@ const NewInventoryTransferView = () => {
     setFormData(prev => ({ ...prev, items: newItems }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Post/Saving inventory transfer:', formData);
-    navigate('/inventory-transfers');
+    try {
+      if (id) {
+        await apiService.updateInventoryTransfer(id, formData);
+      } else {
+        await apiService.createInventoryTransfer(formData);
+      }
+      navigate('/inventory-transfers');
+    } catch (err) {
+      console.error('Failed to save transfer:', err);
+      alert('Failed to save inventory transfer to database');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing transfer form...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500 bg-slate-50/30 min-h-screen">
@@ -234,7 +276,7 @@ const NewInventoryTransferView = () => {
                     required
                   >
                     <option value="">Select Item...</option>
-                    {mockInventoryItems.map(mi => (
+                    {availableItems.map(mi => (
                       <option key={mi.id} value={`${mi.itemCode} - ${mi.itemName}`}>
                         {mi.itemCode} - {mi.itemName} ({mi.qtyOnHand} available)
                       </option>

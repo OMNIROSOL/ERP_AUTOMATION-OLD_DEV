@@ -1,15 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
-import {
-    mockSalesQuotes,
-    mockSalesOrders,
-    mockInvoices,
-    mockInventory,
-    mockApprovalRequests,
-    getCustomers,
-    saveSalesOrders,
-    getFooters
-} from '../mockData';
 import apiService from '../services/apiService';
 import { SalesOrder, ApprovalRequest, Division } from '../types';
 import Card from '../components/shared/Card';
@@ -152,7 +142,12 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
     const [customers, setCustomers] = useState<any[]>([]);
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
-    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }]);
+    const [dbInvoices, setDbInvoices] = useState<any[]>([]);
+    const [dbQuotes, setDbQuotes] = useState<any[]>([]);
+    const [dbInventory, setDbInventory] = useState<any[]>([]);
+    const [footers, setFooters] = useState<any[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
+    const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: '' }]);
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         rounding: false,
@@ -184,13 +179,15 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const requiresApproval = useMemo(() => {
         return items.some(item => {
             if (item.item === 'Select Item') return false;
-            const inv = inventoryMap[item.item];
+            const inv = dbInventory.find(i => i.itemName === item.item);
             if (!inv) return false;
             const price = parseFloat(item.unitPrice) || 0;
-            const minMarginPrice = inv.sellingPrice * (1 - marginThreshold / 100);
-            return price < inv.purchasePrice || price < minMarginPrice;
+            const sellingPrice = parseFloat(inv.sellingPrice) || 0;
+            const purchasePrice = parseFloat(inv.purchasePrice) || 0;
+            const minMarginPrice = sellingPrice * (1 - marginThreshold / 100);
+            return price < purchasePrice || price < minMarginPrice;
         });
-    }, [items, marginThreshold, inventoryMap]);
+    }, [items, marginThreshold, dbInventory]);
 
     const fetchReference = async () => {
         try {
@@ -202,21 +199,35 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     };
 
     useEffect(() => {
-        const loadMasterData = async () => {
+        const loadAll = async () => {
             try {
-                const [custs, itemsData, divs] = await Promise.all([
-                    apiService.getCustomers(),
-                    apiService.getItems(),
-                    apiService.getDivisions()
+                const [custs, itemsData, divs, invs, qts, taxCodesData] = await Promise.all([
+                    apiService.getCustomers().catch(e => { console.error('Customers failed:', e); return []; }),
+                    apiService.getItems().catch(e => { console.error('Items failed:', e); return []; }),
+                    apiService.getDivisions().catch(e => { console.error('Divisions failed:', e); return []; }),
+                    apiService.getInvoices().catch(e => { console.error('Invoices failed:', e); return []; }),
+                    apiService.getQuotes().catch(e => { console.error('Quotes failed:', e); return []; }),
+                    apiService.getTaxCodes().catch(e => { console.error('Tax codes failed:', e); return []; })
                 ]);
+
                 setCustomers(custs);
                 setInventoryItems(itemsData);
+                setDbInventory(itemsData);
                 setAvailableDivisions(divs);
+                setDbInvoices(invs);
+                setDbQuotes(qts);
+                setTaxCodes(taxCodesData);
+
+                // Fetch footers separately
+                apiService.getFooters()
+                    .then(setFooters)
+                    .catch(err => console.error('Failed to load footers:', err));
+
             } catch (err) {
-                console.error('Failed to load master data:', err);
+                console.error('Critical failure loading initial data:', err);
             }
         };
-        loadMasterData();
+        loadAll();
     }, []);
 
     useEffect(() => {
@@ -224,36 +235,47 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
         const copyFromId = searchParams.get('copyFrom');
         if (id || copyFromId) {
             const orderId = id || copyFromId;
-            const order = mockSalesOrders.find(o => o.id === orderId);
-            if (order) {
-                setIssueDate(order.orderDate.split('.').reverse().join('-'));
-                setCustomer(order.customer);
-                setCurrency(order.currency);
-                setBillingAddress((order as any).billingAddress || getCustomers().find(c => c.name === order.customer)?.billingAddress || '');
-                setReference(order.reference);
-                setUseManualRef(true);
-                setDescription(order.description || '');
-                setStatus(order.status);
-                const itemsToSet = order.items && order.items.length > 0
-                    ? order.items
-                    : [{ id: Date.now(), item: 'General Item', description: order.description || '', qty: 1, unitPrice: order.amount || 0, discount: '', taxCode: 'No tax' }];
+            const loadOrder = async () => {
+                try {
+                    const orders = await apiService.getOrders();
+                    const order = orders.find((o: any) => o.id === orderId);
+                    if (order) {
+                        setIssueDate(new Date(order.orderDate).toISOString().split('T')[0]);
+                        setCustomer(order.customer?.name || order.customer);
+                        setCurrency(order.currency || order.customer?.currency?.split(' - ')[0] || 'ZMW');
+                        setBillingAddress(order.billingAddress || order.customer?.billingAddress || '');
+                        setReference(order.reference);
+                        setUseManualRef(true);
+                        setDescription(order.description || '');
+                        setStatus(order.status);
 
-                setItems(itemsToSet.map(i => ({
-                    id: i.id || Date.now() + Math.random(),
-                    item: i.item || 'Select Item',
-                    description: i.description || '',
-                    qty: i.qty ? i.qty.toString() : '1',
-                    unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
-                    discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax'
-                })));
-                if (order.customTitle) {
-                    setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: order.customTitle || 'Sales Order' }));
+                        const itemsToSet = order.items && order.items.length > 0
+                            ? order.items
+                            : [];
+
+                        setItems(itemsToSet.map((i: any) => ({
+                            id: i.id || Date.now() + Math.random(),
+                            itemId: i.itemId,
+                            item: i.item?.itemName || i.item || 'Select Item',
+                            description: i.description || '',
+                            qty: i.qty ? i.qty.toString() : '1',
+                            unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
+                            discount: i.discount ? i.discount.toString() : '',
+                            division: i.division || 'General',
+                            taxCode: i.taxCode || ''
+                        })));
+                    }
+                    if (order.customTitle) {
+                        setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: order.customTitle || 'Sales Order' }));
+                    }
+                    if (order.footer) {
+                        setOptions(prev => ({ ...prev, footers: true, footerValue: order.footer || 'Terms & Conditions apply.' }));
+                    }
+                } catch (err) {
+                    console.error('Failed to load order:', err);
                 }
-                if (order.footer) {
-                    setOptions(prev => ({ ...prev, footers: true, footerValue: order.footer || 'Terms & Conditions apply.' }));
-                }
-            }
+            };
+            loadOrder();
         } else {
             setIssueDate(new Date().toISOString().split('T')[0]);
             setCustomer('');
@@ -263,37 +285,52 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             setUseManualRef(false);
             setDescription('');
             setStatus('Ordered');
-            setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
+            setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: '' }]);
         }
-    }, [id, location.search]);
+    }, [id, location.search, dbInventory]);
+
+    // Automatically sync currency when customer changes
+    useEffect(() => {
+        if (!customers || customers.length === 0 || !customer) return;
+        const selected = customers.find(c =>
+            c.name.trim().toLowerCase() === customer.trim().toLowerCase() ||
+            c.id === customer
+        );
+        if (selected) {
+            const currencyCode = selected.currency?.split(' - ')[0] || 'ZMW';
+            if (currencyCode !== currency) {
+                setCurrency(currencyCode);
+            }
+        }
+    }, [customer, customers, currency]);
 
     const itemHistory = useMemo(() => {
         const global: Record<string, any[]> = {};
         const clientSales: Record<string, any[]> = {};
         const clientQuotes: Record<string, any[]> = {};
 
-        mockInvoices.forEach(doc => {
+        dbInvoices.forEach(doc => {
             if (!doc.items) return;
-            doc.items.forEach(i => {
-                const itemName = (i as any).item;
+            doc.items.forEach((i: any) => {
+                const itemName = i.item?.itemName || i.item;
                 if (!itemName || itemName === 'Select Item') return;
-                const entry = { date: doc.issueDate, price: parseFloat((i as any).unitPrice) || 0, qty: parseFloat((i as any).qty) || 0, customer: doc.customer, ref: doc.reference, type: 'Invoice' };
+                const entry = { date: doc.issueDate, price: parseFloat(i.unitPrice) || 0, qty: parseFloat(i.qty) || 0, customer: doc.customer?.name || doc.customer, ref: doc.reference, type: 'Invoice' };
                 if (!global[itemName]) global[itemName] = [];
                 global[itemName].push(entry);
-                if (customer && doc.customer === customer) {
+                if (customer && (doc.customer?.name === customer || doc.customer === customer)) {
                     if (!clientSales[itemName]) clientSales[itemName] = [];
                     clientSales[itemName].push(entry);
                 }
             });
         });
 
-        mockSalesQuotes.forEach(doc => {
+        dbQuotes.forEach(doc => {
             if (!doc.items) return;
-            doc.items.forEach(i => {
-                const itemName = (i as any).item;
+            doc.items.forEach((i: any) => {
+                const itemName = i.item?.itemName || i.item;
                 if (!itemName || itemName === 'Select Item') return;
-                const entry = { date: doc.issueDate, price: parseFloat((i as any).unitPrice) || 0, qty: parseFloat((i as any).qty) || 0, customer: doc.customer, ref: doc.reference, type: 'Quote' };
-                if (customer && doc.customer === customer) {
+                const entry = { date: doc.issueDate, price: parseFloat(i.unitPrice) || 0, qty: parseFloat(i.qty) || 0, customer: doc.customer?.name || doc.customer, ref: doc.reference, type: 'Quote' };
+                if (customer && (doc.customer?.name === customer || doc.customer === customer)) {
                     if (!clientQuotes[itemName]) clientQuotes[itemName] = [];
                     clientQuotes[itemName].push(entry);
                 }
@@ -302,7 +339,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
 
         const sortAndSlice = (history: Record<string, any[]>) => {
             Object.keys(history).forEach(item => {
-                history[item].sort((a, b) => new Date(b.date.split('.').reverse().join('-')).getTime() - new Date(a.date.split('.').reverse().join('-')).getTime());
+                history[item].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 history[item] = history[item].slice(0, 3);
             });
         };
@@ -310,25 +347,29 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
         sortAndSlice(clientSales);
         sortAndSlice(clientQuotes);
         return { global, clientSales, clientQuotes };
-    }, [customer]);
+    }, [customer, dbInvoices, dbQuotes]);
 
     const approvalReason = useMemo(() => {
         let reason = '';
+        const marginThreshold = 20;
         const itemsToValidate = items.filter(i => i.item !== 'Select Item');
         for (const item of itemsToValidate) {
-            const inventoryItem = (mockInventory as any)[item.item];
+            const inventoryItem = dbInventory.find(i => i.itemName === item.item);
             if (inventoryItem) {
                 const qty = parseFloat(item.qty) || 0;
                 const price = parseFloat(item.unitPrice) || 0;
-                if (qty > inventoryItem.stock) reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${inventoryItem.stock}). `;
+                const stock = parseFloat(inventoryItem.qtyOnHand) || 0;
+                if (qty > stock) reason += `Insufficient stock for ${item.item} (Req: ${qty}, Avail: ${stock}). `;
                 const effectiveThreshold = marginThreshold / 100;
-                const minPrice = inventoryItem.sellingPrice * (1 - effectiveThreshold);
-                if (price < inventoryItem.purchasePrice) reason += `Price for ${item.item} (${price}) is below purchase price (${inventoryItem.purchasePrice}). `;
+                const sellingPrice = parseFloat(inventoryItem.sellingPrice) || 0;
+                const purchasePrice = parseFloat(inventoryItem.purchasePrice) || 0;
+                const minPrice = sellingPrice * (1 - effectiveThreshold);
+                if (price < purchasePrice) reason += `Price for ${item.item} (${price}) is below purchase price (${purchasePrice}). `;
                 else if (price < minPrice) reason += `Price for ${item.item} (${price}) is below allowed margin threshold (min: ${minPrice.toFixed(2)}). `;
             }
         }
         return reason.trim();
-    }, [items, marginThreshold]);
+    }, [items, marginThreshold, dbInventory]);
 
     const calculations = useMemo(() => {
         let subtotal = 0;
@@ -343,11 +384,13 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                 else netTotal = Math.max(0, netTotal - discountValue);
             }
             let taxAmount = 0;
-            if (item.taxCode === 'VAT 16%') {
+            const selectedTax = taxCodes.find(tc => tc.name === item.taxCode);
+            if (selectedTax) {
+                const taxRate = parseFloat(selectedTax.rate) / 100;
                 if (options.amountsAreTaxInclusive) {
-                    taxAmount = netTotal - (netTotal / 1.16);
+                    taxAmount = netTotal - (netTotal / (1 + taxRate));
                     netTotal = netTotal - taxAmount;
-                } else taxAmount = netTotal * 0.16;
+                } else taxAmount = netTotal * taxRate;
             }
             subtotal += netTotal;
             totalTax += taxAmount;
@@ -366,7 +409,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             grandTotal -= whtAmount;
         }
         return { lineCalcs, subtotal, totalTax, grandTotal, whtAmount };
-    }, [items, options]);
+    }, [items, options, taxCodes]);
 
     const handleDuplicateItem = (item: any) => {
         const newItem = { ...item, id: Date.now() + Math.random() };
@@ -398,24 +441,26 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             customerId: selectedCustomer.id,
             reference: reference,
             amount: calculations.grandTotal,
+            currency: currency,
             description: description,
             billingAddress: billingAddress,
-            issueDate: issueDate,
+            orderDate: issueDate,
             status: isEditing ? status : 'Ordered',
             docOptions: options,
             items: validItems.map(i => ({
                 itemId: i.itemId,
                 qty: parseFloat(i.qty),
                 unitPrice: parseFloat(i.unitPrice),
+                discount: parseFloat(i.discount) || 0,
                 division: i.division,
+                taxCode: i.taxCode,
                 totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
             }))
         };
 
         try {
             if (isEditing) {
-                // await apiService.updateOrder(id!, orderData);
-                alert('Update functionality not fully implemented in API yet.');
+                await apiService.updateOrder(id!, orderData);
             } else {
                 await apiService.createOrder(orderData);
             }
@@ -467,16 +512,16 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                 {!useManualRef && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
                                             </div>
                                         </div>
-                                        <input 
-                                            type="text" 
-                                            value={reference} 
-                                            onChange={(e) => useManualRef && setReference(e.target.value)} 
-                                            readOnly={!useManualRef} 
-                                            placeholder={useManualRef ? "Enter custom ref..." : ""} 
+                                        <input
+                                            type="text"
+                                            value={reference}
+                                            onChange={(e) => useManualRef && setReference(e.target.value)}
+                                            readOnly={!useManualRef}
+                                            placeholder={useManualRef ? "Enter custom ref..." : ""}
                                             className={cn(
-                                                "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors", 
+                                                "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors",
                                                 !useManualRef ? "text-indigo-600 font-black" : "text-slate-700"
-                                            )} 
+                                            )}
                                         />
                                     </div>
                                 </div>
@@ -503,7 +548,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Customer...</option>
-                                        {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {customers.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
                                     </SelectField>
                                 </div>
                                 <TextareaField label="Billing Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address for delivery..." rows={3} />
@@ -518,7 +563,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Order Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '0', discount: '', taxCode: '' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -530,7 +575,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[200px]">ITEM</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">DIVISION</th>
-                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">QTY</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">QTY</th>
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">UNIT PRICE</th>
                                             {options.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right whitespace-nowrap">DISCOUNT {options.columnDiscountType === 'Percentage' ? '(%)' : `(${currency})`}</th>}
                                             <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">TAX CODE</th>
@@ -563,13 +608,13 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                 className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                             >
                                                                 <option value="Select Item">Select Item</option>
-                                                                {inventoryItems.map(inv => (
+                                                                {dbInventory.map((inv: any) => (
                                                                     <option key={inv.id} value={inv.itemName}>{inv.itemName}</option>
                                                                 ))}
                                                             </select>
                                                         </div>
                                                     </td>
-                                                     <td className="px-4 py-4">
+                                                    <td className="px-4 py-4">
                                                         <input
                                                             type="text"
                                                             value={item.description}
@@ -588,9 +633,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                         >
                                                             <option value="General">General</option>
-                                                            {availableDivisions.map(div => (
-                                                                <option key={div.id} value={div.name}>{div.name}</option>
-                                                            ))}
+                                                            {/* API logic for divisions if needed */}
                                                         </select>
                                                     </td>
                                                     <td className="px-4 py-4 relative group/qty">
@@ -604,15 +647,14 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                 }}
                                                                 className={cn(
                                                                     "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none",
-                                                                    (parseFloat(item.qty) || 0) > ((mockInventory as any)[item.item]?.stock || 0) ? "text-amber-600" : "text-slate-700"
+                                                                    (parseFloat(item.qty) || 0) > (dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0) ? "text-amber-600" : "text-slate-700"
                                                                 )}
                                                             />
                                                             <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-between w-full">
-                                                                <span>Stock: {((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span>
-                                                                <span className="text-indigo-500 font-black">{item.unit || ''}</span>
+                                                                <span>Stock: {(dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0).toLocaleString()}</span>
                                                             </div>
                                                         </div>
-                                                        {(parseFloat(item.qty) || 0) > ((mockInventory as any)[item.item]?.stock || 0) && (
+                                                        {(parseFloat(item.qty) || 0) > (dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0) && (
                                                             <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                 <TooltipProvider>
                                                                     <Tooltip>
@@ -620,7 +662,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                             <AlertTriangle size={12} className="text-amber-500" />
                                                                         </TooltipTrigger>
                                                                         <TooltipContent className="bg-amber-50 border-amber-200 text-amber-800 text-[10px] p-2">
-                                                                            Insufficient stock: {(mockInventory as any)[item.item]?.stock || 0} available. Approval required.
+                                                                            Insufficient stock: {(dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0)} available. Approval required.
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 </TooltipProvider>
@@ -638,18 +680,18 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                 }}
                                                                 className={cn(
                                                                     "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none",
-                                                                    (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.purchasePrice || 0) ||
-                                                                        (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.sellingPrice * (1 - marginThreshold / 100))
+                                                                    (parseFloat(item.unitPrice) || 0) < (dbInventory.find((i: any) => i.itemName === item.item)?.purchasePrice || 0) ||
+                                                                        (parseFloat(item.unitPrice) || 0) < (dbInventory.find((i: any) => i.itemName === item.item)?.sellingPrice * (1 - 20 / 100))
                                                                         ? "text-amber-600" : "text-slate-700"
                                                                 )}
                                                                 placeholder="0.00"
                                                             />
                                                             <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
-                                                                Selling Price: {((mockInventory as any)[item.item]?.sellingPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                Selling Price: {(dbInventory.find(i => i.itemName === item.item)?.sellingPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                             </div>
                                                         </div>
-                                                        {((parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.purchasePrice || 0) ||
-                                                            (parseFloat(item.unitPrice) || 0) < ((mockInventory as any)[item.item]?.sellingPrice * (1 - marginThreshold / 100))) && (
+                                                        {((parseFloat(item.unitPrice) || 0) < (dbInventory.find(i => i.itemName === item.item)?.purchasePrice || 0) ||
+                                                            (parseFloat(item.unitPrice) || 0) < (dbInventory.find(i => i.itemName === item.item)?.sellingPrice * (1 - marginThreshold / 100))) && (
                                                                 <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                     <TooltipProvider>
                                                                         <Tooltip>
@@ -690,8 +732,11 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                             }}
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                         >
+                                                            <option value="" disabled>Select Tax...</option>
                                                             <option value="No tax">No tax</option>
-                                                            <option value="VAT 16%">VAT 16%</option>
+                                                            {taxCodes.map(tc => (
+                                                                <option key={tc.id} value={tc.name}>{tc.name}</option>
+                                                            ))}
                                                         </select>
                                                     </td>
                                                     {!options.amountsAreTaxInclusive && (
@@ -942,15 +987,15 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                 <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
                                                     <select
                                                         onChange={(e) => {
-                                                            const footer = getFooters().find(f => f.id === e.target.value);
+                                                            const footer = footers.find((f: any) => f.id === e.target.value);
                                                             if (footer) {
                                                                 setOptions(prev => ({ ...prev, footerValue: footer.content }));
                                                             }
                                                         }}
                                                         className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
                                                     >
-                                                        <option value="">-- Choose a template --</option>
-                                                        {getFooters().map(f => (
+                                                        <option value="">-- Choose template --</option>
+                                                        {footers.map(f => (
                                                             <option key={f.id} value={f.id}>{f.name}</option>
                                                         ))}
                                                     </select>

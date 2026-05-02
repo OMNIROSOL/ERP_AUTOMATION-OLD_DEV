@@ -140,7 +140,7 @@ export interface DocumentOptions {
 
 export interface ApprovalRequest {
   id: string;
-  quoteId: string;
+  type: 'Quote' | 'Order';
   customer: string;
   amount: number;
   currency: string;
@@ -333,12 +333,16 @@ export interface WithholdingTax {
 
 export interface ScreenPermission {
   screenId: string;
-  screenName: string;
-  view: boolean;
-  add: boolean;
-  edit: boolean;
-  delete: boolean;
-  full: boolean;
+  screenName?: string;
+  view?: boolean;
+  add?: boolean;
+  edit?: boolean;
+  delete?: boolean;
+  full?: boolean;
+  canView?: boolean;
+  canAdd?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 export interface RoleDefinition {
@@ -382,6 +386,7 @@ export interface PurchaseOrder {
   timestamp?: string;
   items?: QuoteItem[];
   billingAddress?: string;
+  customTitle?: string;
   options?: DocumentOptions;
 }
 
@@ -400,6 +405,7 @@ export interface PurchaseInvoice {
   timestamp: string;
   items?: QuoteItem[];
   billingAddress?: string;
+  customTitle?: string;
   options?: DocumentOptions;
 }
 
@@ -446,4 +452,19 @@ export interface PurchaseQuote {
   customTitle?: string;
   footer?: string;
   options?: DocumentOptions;
+}
+export interface PurchaseQuoteItem {
+  id: string;
+  purchaseQuoteId: string;
+  itemId?: string;
+  description?: string;
+  qty: number;
+  unitPrice: number;
+  totalAmount: number;
+}
+
+export interface FooterTemplate {
+  id: string;
+  name: string;
+  content: string;
 }

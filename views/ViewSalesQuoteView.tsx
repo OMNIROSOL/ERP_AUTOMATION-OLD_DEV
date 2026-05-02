@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getCustomers } from '../mockData';
 import apiService from '../services/apiService';
 import { SalesQuote, Customer } from '../types';
 import {
@@ -28,19 +27,28 @@ const ViewSalesQuoteView = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
     const pdfRef = useRef<HTMLDivElement>(null);
     const [quote, setQuote] = useState<any>(null);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchQuote = async () => {
             if (!id) return;
+            setLoading(true);
             try {
-                const quotes = await apiService.getQuotes();
-                const found = quotes.find((q: any) => q.id === id);
-                if (found) {
-                    setQuote(found);
-                }
+                const [data, codes] = await Promise.all([
+                    apiService.getQuote(id),
+                    apiService.getTaxCodes().catch(() => [])
+                ]);
+                setQuote(data);
+                setTaxCodes(codes);
             } catch (err) {
                 console.error('Failed to fetch quote:', err);
+                // Fallback
+                try {
+                    const quotes = await apiService.getQuotes();
+                    const found = quotes.find((q: any) => q.id === id);
+                    if (found) setQuote(found);
+                } catch (e) { }
             } finally {
                 setLoading(false);
             }
@@ -86,17 +94,38 @@ const ViewSalesQuoteView = () => {
                 if (options.columnDiscountType === 'Percentage') {
                     lineTotal = lineTotal * (1 - discount / 100);
                 } else {
-                    lineTotal = lineTotal - discount;
+                    lineTotal = Math.max(0, lineTotal - discount);
+                }
+            }
+
+            let taxRate = 0;
+            const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
+            const selectedTax = taxCodes.find(tc => 
+                tc.id === item.taxCode || 
+                tc.name.toLowerCase() === itemTaxCode ||
+                (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
+                (itemTaxCode === 'exempt' && tc.name === 'Exempt')
+            );
+            
+            if (selectedTax) {
+                taxRate = parseFloat(selectedTax.rate) / 100;
+            } else {
+                // Fallback for historical data - check if it looks like it should be 16%
+                if (itemTaxCode.includes('16') || itemTaxCode.includes('vat') || !itemTaxCode) {
+                    const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+                    taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+                } else {
+                    taxRate = 0; // Default to 0 for unknown non-empty tax codes
                 }
             }
 
             if (isTaxInclusive) {
-                const lineTax = lineTotal * 0.16 / 1.16;
+                const lineTax = lineTotal - (lineTotal / (1 + taxRate));
                 tax += lineTax;
                 subtotal += (lineTotal - lineTax);
             } else {
                 subtotal += lineTotal;
-                tax += lineTotal * 0.16;
+                tax += lineTotal * taxRate;
             }
         });
         let total = subtotal + tax;
@@ -112,7 +141,7 @@ const ViewSalesQuoteView = () => {
         }
 
         return { subtotal, tax, total, withholdingTaxAmount };
-    }, [quote]);
+    }, [quote, taxCodes]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -191,34 +220,34 @@ const ViewSalesQuoteView = () => {
                         <button onClick={() => window.print()} className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
                             <Printer size={14} /> Print
                         </button>
-                        <button 
+                        <button
                             onClick={async () => {
                                 if (!pdfRef.current) return;
                                 const html2canvas = (await import('html2canvas')).default;
                                 const jsPDF = (await import('jspdf')).jsPDF;
-                                
+
                                 const element = pdfRef.current;
                                 const originalStyle = element.getAttribute('style') || '';
                                 element.style.maxWidth = 'none';
                                 element.style.width = '850px';
-                                
+
                                 const canvas = await html2canvas(element, {
                                     scale: 2,
                                     useCORS: true,
                                     backgroundColor: '#ffffff'
                                 });
-                                
+
                                 element.setAttribute('style', originalStyle);
-                                
+
                                 const imgData = canvas.toDataURL('image/png');
                                 const pdf = new jsPDF('p', 'mm', 'a4');
                                 const imgProps = pdf.getImageProperties(imgData);
                                 const pdfWidth = pdf.internal.pageSize.getWidth();
                                 const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                                
+
                                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
                                 pdf.save(`${quote.reference || 'Quote'}.pdf`);
-                            }} 
+                            }}
                             className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
                         >
                             <Download size={14} /> PDF
@@ -245,14 +274,14 @@ const ViewSalesQuoteView = () => {
                 <div className="flex items-center space-x-2">
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => {}}
+                            onClick={() => { }}
                             disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronLeft size={14} /> <ChevronLeft size={14} className="-ml-2" />
                         </button>
                         <button
-                            onClick={() => {}}
+                            onClick={() => { }}
                             disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
@@ -262,14 +291,14 @@ const ViewSalesQuoteView = () => {
                     <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">1 / 1</span>
                     <div className="flex bg-white border border-gray-300 rounded shadow-sm">
                         <button
-                            onClick={() => {}}
+                            onClick={() => { }}
                             disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center"
                         >
                             <ChevronRight size={14} />
                         </button>
                         <button
-                            onClick={() => {}}
+                            onClick={() => { }}
                             disabled={true}
                             className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center"
                         >
@@ -320,7 +349,7 @@ const ViewSalesQuoteView = () => {
                             <div className="mb-6">
                                 <div className="flex justify-between items-start mb-1">
                                     <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">
-                                        {(quote.options?.customTitle && quote.options?.customTitleValue) ? quote.options.customTitleValue : (quote.customTitle || 'Sales Quotation')}
+                                        {(quote.docOptions?.customTitle && quote.docOptions?.customTitleValue) ? quote.docOptions.customTitleValue : (quote.customTitle || 'Sales Quotation')}
                                     </h1>
                                 </div>
                                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {quote.reference}</p>
@@ -351,7 +380,7 @@ const ViewSalesQuoteView = () => {
                                         </div>
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Currency:</span>
-                                            <span className="font-semibold">{quote.currency}</span>
+                                            <span className="font-semibold">{quote.currency || quote.customer?.currency?.split(' - ')[0] || 'ZMW'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -369,19 +398,19 @@ const ViewSalesQuoteView = () => {
                         <table className="w-full text-left">
                             <thead className="bg-[#f8fafc] border-y border-gray-200 overflow-hidden text-right print-bg-slate-50">
                                 <tr>
-                                    {quote.options?.columnLineNumber !== false && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>}
+                                    {quote.docOptions?.columnLineNumber !== false && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>}
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Item</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Qty</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Unit Price</th>
-                                    {quote.options?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Disc</th>}
+                                    {quote.docOptions?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Disc</th>}
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Total</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {quote.items && quote.items.length > 0 ? quote.items.map((item, idx) => (
                                     <tr key={idx}>
-                                        {quote.options?.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
+                                        {quote.docOptions?.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
                                         <td className="px-4 py-4">
                                             <p className="font-semibold text-slate-900">{item.item?.itemName || '-'}</p>
                                         </td>
@@ -390,9 +419,9 @@ const ViewSalesQuoteView = () => {
                                         </td>
                                         <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.item?.unitName || ''}</span></td>
                                         <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                        {quote.options?.columnDiscount && (
+                                        {quote.docOptions?.columnDiscount && (
                                             <td className="px-4 py-4 text-right font-medium text-rose-500">
-                                                {item.discount ? (quote.options?.columnDiscountType === 'Percentage' ? `${item.discount}%` : parseFloat(item.discount).toLocaleString()) : '-'}
+                                                {item.discount ? (quote.docOptions?.columnDiscountType === 'Percentage' ? `${item.discount}%` : parseFloat(item.discount).toLocaleString()) : '-'}
                                             </td>
                                         )}
                                         <td className="px-4 py-4 text-right font-semibold">
@@ -401,8 +430,8 @@ const ViewSalesQuoteView = () => {
                                                 const price = parseFloat(item.unitPrice) || 0;
                                                 const discount = parseFloat(item.discount) || 0;
                                                 let total = qty * price;
-                                                if (quote.options?.columnDiscount) {
-                                                    if (quote.options?.columnDiscountType === 'Percentage') total *= (1 - discount / 100);
+                                                if (quote.docOptions?.columnDiscount) {
+                                                    if (quote.docOptions?.columnDiscountType === 'Percentage') total *= (1 - discount / 100);
                                                     else total -= discount;
                                                 }
                                                 return total.toLocaleString(undefined, { minimumFractionDigits: 2 });
@@ -427,26 +456,26 @@ const ViewSalesQuoteView = () => {
                     <div className="flex justify-end mt-12">
 
                         {/* Summary Section */}
-                        {!quote.options?.hideTotalAmount && (
+                        {!quote.docOptions?.hideTotalAmount && (
                             <div className="w-80 space-y-3">
                                 <div className="flex justify-between items-center text-gray-500">
-                                    <span className="text-[11px] font-bold uppercase tracking-widest">{quote.options?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">{quote.docOptions?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
                                     <span className="font-semibold">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
                                 <div className="flex justify-between items-center text-gray-500">
-                                    <span className="text-[11px] font-bold uppercase tracking-widest">Sales Tax (16%)</span>
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">Tax Component</span>
                                     <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
-                                {quote.options?.withholdingTax && (
+                                {quote.docOptions?.withholdingTax && (
                                     <div className="flex justify-between items-center text-rose-500">
-                                        <span className="text-[11px] font-bold uppercase tracking-widest text-rose-400">Withholding Tax ({quote.options.withholdingTaxType === 'Rate' ? `${quote.options.withholdingTaxValue}%` : 'Amount'})</span>
+                                        <span className="text-[11px] font-bold uppercase tracking-widest text-rose-400">Withholding Tax ({quote.docOptions.withholdingTaxType === 'Rate' ? `${quote.docOptions.withholdingTaxValue}%` : 'Amount'})</span>
                                         <span className="font-semibold">-{totals.withholdingTaxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                     </div>
                                 )}
                                 <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2 print-bg-slate-50">
                                     <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-900">Total</span>
                                     <div className="text-right">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{quote.currency?.split(' ')[0]}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{(quote.currency || quote.customer?.currency?.split(' - ')[0] || 'ZMW').split(' ')[0]}</p>
                                         <p className="text-2xl font-bold text-slate-900 tracking-tighter">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                                     </div>
                                 </div>
@@ -456,11 +485,11 @@ const ViewSalesQuoteView = () => {
 
                     {/* Footers Section */}
                     <div className="mt-12 space-y-12">
-                        {((quote.options?.footers && quote.options?.footerValue) || quote.footer) && (
+                        {((quote.docOptions?.footers && quote.docOptions?.footerValue) || quote.footer) && (
                             <div className="pt-8 border-t border-gray-100">
                                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Terms & Conditions</p>
                                 <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">
-                                    {(quote.options?.footers && quote.options?.footerValue) ? quote.options.footerValue : quote.footer}
+                                    {(quote.docOptions?.footers && quote.docOptions?.footerValue) ? quote.docOptions.footerValue : quote.footer}
                                 </p>
                             </div>
                         )}

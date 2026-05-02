@@ -2,7 +2,6 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Plus, Eye, Edit, FileText, Check, X, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Printer, Search, ArrowUpDown, ChevronUp, ChevronDown, Copy, Calendar, Clock, Package } from 'lucide-react';
 import { cn } from '../utils/cn';
-import { mockInvoices, saveInvoices, mockCustomers, mockInventory, getCurrentUser, getRoleById, initialRoleDefinitions, getDeliveryNotes, saveDeliveryNotes, getCustomers, getInvoices } from '../mockData';
 import { ScreenPermission } from '../types';
 import apiService from '../services/apiService';
 import DataTable from '../components/shared/DataTable';
@@ -24,44 +23,51 @@ const InvoicesView = () => {
     const [pageSize, setPageSize] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
     const batchOpsRef = useRef<HTMLDivElement>(null);
-    const [currentUser, setCurrentUser] = useState(getCurrentUser());
+    const [currentUser, setCurrentUser] = useState<any>({ role: 'Admin' });
     const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
     useEffect(() => {
-        const handleUserUpdate = () => setCurrentUser(getCurrentUser());
         const handleInvoicesUpdate = () => setRefreshTrigger(prev => prev + 1);
-
-        window.addEventListener('user_sim_updated', handleUserUpdate);
-        window.addEventListener('invoices_updated', handleInvoicesUpdate);
         const handleDNUpdate = () => setRefreshTrigger(prev => prev + 1);
+
+        window.addEventListener('invoices_updated', handleInvoicesUpdate);
         window.addEventListener('delivery_notes_updated', handleDNUpdate);
 
-        const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
-        const screenPerm = role?.permissions.find(p => p.screenId === 'sales-invoices');
-        setPerms(screenPerm || null);
+        setPerms({ screenId: 'sales-invoices', canView: true, canAdd: true, canEdit: true, canDelete: true } as ScreenPermission);
 
         return () => {
-            window.removeEventListener('user_sim_updated', handleUserUpdate);
             window.removeEventListener('invoices_updated', handleInvoicesUpdate);
             window.removeEventListener('delivery_notes_updated', handleDNUpdate);
         };
-    }, [currentUser]);
+    }, []);
 
     const [invoices, setInvoices] = useState<any[]>([]);
+    const [dbDeliveryNotes, setDbDeliveryNotes] = useState<any[]>([]);
+    const [dbItems, setDbItems] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchInvoices = async () => {
             setIsLoading(true);
             try {
-                const data = await apiService.getInvoices();
-                const mappedInvoices = data.map((inv: any) => ({
+                const [invData, dnData, itemData] = await Promise.all([
+                    apiService.getInvoices(),
+                    apiService.getDeliveryNotes(),
+                    apiService.getItems()
+                ]);
+
+                const mappedInvoices = invData.map((inv: any) => ({
                     ...inv,
                     customer: inv.customer?.name || inv.customer || 'Unknown',
-                    issueDate: inv.issueDate ? new Date(inv.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    invoiceAmount: parseFloat(inv.grandTotal) || 0,
+                    balanceDue: parseFloat(inv.balanceDue || inv.grandTotal) || 0,
+                    currency: inv.currency || inv.customer?.currency?.split(' - ')[0] || 'ZMW',
+                    issueDate: inv.issueDate ? new Date(inv.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : (inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-GB').replace(/\//g, '.') : ''),
                     dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : (inv.dueDate || '')
                 }));
                 setInvoices(mappedInvoices);
+                setDbDeliveryNotes(dnData);
+                setDbItems(itemData);
             } catch (err) {
                 console.error('Failed to fetch invoices:', err);
             } finally {
@@ -164,7 +170,7 @@ const InvoicesView = () => {
         };
     };
 
-    const deliveryNotes = useMemo(() => getDeliveryNotes(), [refreshTrigger]);
+    const deliveryNotes = dbDeliveryNotes;
 
     const filteredData = useMemo(() => {
         let result = invoices.filter((inv: any) => inv.status !== 'Delivered');
@@ -200,8 +206,9 @@ const InvoicesView = () => {
                 let total = 0;
                 if (inv.items) {
                     inv.items.forEach((item: any) => {
-                        const inventoryItem = mockInventory[item.item];
-                        if (inventoryItem) total += (parseFloat(item.qty) || 0) * inventoryItem.purchasePrice;
+                        const itemRef = item.item;
+                        const inventoryItem = dbItems.find(i => i.itemName === itemRef || i.itemCode === itemRef || i.id === itemRef);
+                        if (inventoryItem) total += (parseFloat(item.qty) || 0) * (parseFloat(inventoryItem.purchasePrice) || 0);
                     });
                 }
                 return total;
@@ -554,9 +561,9 @@ const InvoicesView = () => {
                 let totalCost = 0;
                 if (inv.items) {
                     inv.items.forEach((item: any) => {
-                        const inventoryItem = mockInventory[item.item];
+                        const inventoryItem = dbItems.find((i: any) => i.itemName === item.item || i.itemCode === item.item || i.id === item.item);
                         if (inventoryItem) {
-                            totalCost += (parseFloat(item.qty) || 0) * inventoryItem.purchasePrice;
+                            totalCost += (parseFloat(item.qty) || 0) * (parseFloat(inventoryItem.purchasePrice) || 0);
                         }
                     });
                 }
@@ -622,8 +629,8 @@ const InvoicesView = () => {
                             onClick={() => !isLinked && handleMoveToDeliveryNote(inv)}
                             className={cn(
                                 "w-8 h-8 flex items-center justify-center rounded-xl transition-all shadow-sm border",
-                                isLinked 
-                                    ? "bg-emerald-50 text-emerald-600 border-emerald-100 cursor-not-allowed" 
+                                isLinked
+                                    ? "bg-emerald-50 text-emerald-600 border-emerald-100 cursor-not-allowed"
                                     : "bg-orange-50 text-orange-600 hover:bg-orange-100 border-orange-200"
                             )}
                             title={isLinked ? "Delivery Note already exists" : "Create Delivery Note"}
@@ -638,47 +645,35 @@ const InvoicesView = () => {
         }
     ];
 
-    const handleMoveToDeliveryNote = (inv: any) => {
-        const notes = getDeliveryNotes();
-
-        const nextRef = inv.reference;
-
-        const customerInfo = getCustomers().find(c => c.name === inv.customer);
-        const newId = Date.now().toString();
+    const handleMoveToDeliveryNote = async (inv: any) => {
+        // Could fetch customer if needed, but for now we just use the name if ID is missing
+        const customerId = inv.customerId;
 
         const newNote = {
-            id: newId,
-            deliveryDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-            customer: inv.customer,
-            deliveryAddress: (inv as any).billingAddress || customerInfo?.billingAddress || '',
+            customerId: customerId,
+            reference: inv.reference,
             description: `Shipment for Invoice ${inv.reference}`,
-            reference: nextRef,
-            orderNumber: inv.salesOrder || '',
-            invoiceNumber: inv.reference,
-            status: 'Pending' as 'Pending',
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: (inv.items || []).map((it: any, idx: number) => ({
-                id: Date.now() + idx,
-                item: it.item,
-                description: it.description || '',
-                qty: it.qty,
-                unitPrice: it.unitPrice || '0',
-                taxCode: it.taxCode || ''
+            inventoryLocation: 'Default Warehouse', // Could be made dynamic
+            items: (inv.items || []).map((it: any) => ({
+                itemId: it.itemId || it.item?.id,
+                qty: parseFloat(it.qty)
             }))
         };
 
-        // 1. Save new Delivery Note
-        saveDeliveryNotes([newNote, ...notes]);
+        try {
+            // 1. Create Delivery Note in DB
+            await apiService.createDeliveryNote(newNote);
 
-        // 2. Mark as delivered (to hide from list but keep in history)
-        const allInvoices = getInvoices();
-        const updatedInvoices = allInvoices.map(i => i.id === inv.id ? { ...i, status: 'Delivered' } : i);
-        saveInvoices(updatedInvoices);
+            // 2. Mark invoice as delivered in DB
+            await apiService.updateInvoiceStatus(inv.id, 'Delivered');
 
-        // 3. Update local state & move
-        window.dispatchEvent(new Event('storage'));
-        window.dispatchEvent(new Event('invoices_updated')); // Explicit event for immediate list update
-        navigate(`/delivery-notes`);
+            // 3. Refresh and navigate
+            setRefreshTrigger(prev => prev + 1);
+            navigate(`/delivery-notes`);
+        } catch (err) {
+            console.error('Failed to create delivery note:', err);
+            alert('Failed to create delivery note in database.');
+        }
     };
 
     const columns = useMemo(() => {
@@ -836,16 +831,24 @@ const InvoicesView = () => {
 
                                 if (col.id === 'Invoice Amount' || col.id === 'Balance due') {
                                     const field = col.id === 'Invoice Amount' ? 'invoiceAmount' : 'balanceDue';
-                                    const total = filteredData.reduce((sum, o) => sum + (o[field] || 0), 0);
+                                    const totalsByCurrency: Record<string, number> = {};
+                                    filteredData.forEach(o => {
+                                        const cur = o.currency || 'ZMW';
+                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (o[field] || 0);
+                                    });
+                                    const activeCurs = Object.keys(totalsByCurrency);
+
                                     return (
                                         <td key={`total-${col.id}`} className="px-6 py-3 whitespace-nowrap text-right bg-slate-50/50">
                                             <div className="flex flex-col items-end gap-1">
-                                                <div className="flex items-center gap-1.5 justify-end">
-                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">ZMW</span>
-                                                    <span className="text-[12px] font-black tracking-tight text-slate-900 underline decoration-slate-200 decoration-2 underline-offset-4 pointer-events-none">
-                                                        {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                    </span>
-                                                </div>
+                                                {activeCurs.map(cur => (
+                                                    <div key={cur} className="flex items-center gap-1.5 justify-end">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{cur}</span>
+                                                        <span className="text-[12px] font-black tracking-tight text-slate-900 underline decoration-slate-200 decoration-2 underline-offset-4 pointer-events-none">
+                                                            {totalsByCurrency[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </td>
                                     );

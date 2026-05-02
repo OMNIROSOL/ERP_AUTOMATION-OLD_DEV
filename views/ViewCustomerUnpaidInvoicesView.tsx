@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 
+import apiService from '../services/apiService';
+
 interface UnpaidInvoice {
   customerName: string;
   invoiceNo: string;
@@ -22,15 +24,6 @@ interface UnpaidInvoice {
   balance: number;
   currency: string;
 }
-
-const mockUnpaidData: UnpaidInvoice[] = [
-  { customerName: 'Zambia Electricity Supply Corp', invoiceNo: 'INV/2026/001', date: '01.03.2026', dueDate: '31.03.2026', daysOverdue: 10, totalAmount: 4500.00, paidAmount: 0.00, balance: 4500.00, currency: 'USD' },
-  { customerName: 'Lusaka Water & Sewerage', invoiceNo: 'INV/2026/005', date: '15.02.2026', dueDate: '15.03.2026', daysOverdue: 26, totalAmount: 12500.00, paidAmount: 2500.00, balance: 10000.00, currency: 'USD' },
-  { customerName: 'Copperbelt Energy Corp', invoiceNo: 'INV/2026/012', date: '10.03.2026', dueDate: '10.04.2026', daysOverdue: 0, totalAmount: 8900.00, paidAmount: 0.00, balance: 8900.00, currency: 'ZMW' },
-  { customerName: 'Konkola Copper Mines', invoiceNo: 'INV/2026/018', date: '20.01.2026', dueDate: '20.02.2026', daysOverdue: 49, totalAmount: 25000.00, paidAmount: 5000.00, balance: 20000.00, currency: 'USD' },
-  { customerName: 'Konkola Copper Mines', invoiceNo: 'INV/2026/022', date: '05.03.2026', dueDate: '05.04.2026', daysOverdue: 5, totalAmount: 12000.00, paidAmount: 0.00, balance: 12000.00, currency: 'USD' },
-  { customerName: 'Mopani Copper Mines', invoiceNo: 'INV/2026/028', date: '12.03.2026', dueDate: '12.04.2026', daysOverdue: -2, totalAmount: 7500.00, paidAmount: 0.00, balance: 7500.00, currency: 'ZMW' }
-];
 
 const ViewCustomerUnpaidInvoicesView: React.FC = () => {
     const navigate = useNavigate();
@@ -49,6 +42,47 @@ const ViewCustomerUnpaidInvoicesView: React.FC = () => {
         return null;
     }, [id]);
 
+    const [dbData, setDbData] = React.useState<UnpaidInvoice[]>([]);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const invoices = await apiService.getInvoices();
+                const today = new Date();
+                
+                const unpaid = invoices
+                    .filter((inv: any) => inv.status !== 'Paid' && inv.status !== 'Draft')
+                    .map((inv: any) => {
+                        const dueDate = new Date(inv.dueDate || inv.issueDate || inv.createdAt);
+                        const diffDays = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 3600 * 24));
+                        const totalAmount = parseFloat(inv.grandTotal) || 0;
+                        const paidAmount = 0; // Assuming 0 for now as we don't have detailed payments here
+
+                        return {
+                            customerName: inv.customer?.name || inv.customer || 'Unknown',
+                            invoiceNo: inv.reference,
+                            date: inv.issueDate ? new Date(inv.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                            dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                            daysOverdue: diffDays,
+                            totalAmount,
+                            paidAmount,
+                            balance: totalAmount - paidAmount,
+                            currency: inv.currency || 'ZMW'
+                        };
+                    });
+
+                setDbData(unpaid);
+            } catch (err) {
+                console.error('Failed to load unpaid invoices:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, []);
+
     const formatCurrency = (val: number) => {
         if (val === 0) return '—';
         return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -56,12 +90,12 @@ const ViewCustomerUnpaidInvoicesView: React.FC = () => {
 
     const groupedData = useMemo(() => {
         const groups: Record<string, UnpaidInvoice[]> = {};
-        mockUnpaidData.forEach(item => {
+        dbData.forEach(item => {
             if (!groups[item.currency]) groups[item.currency] = [];
             groups[item.currency].push(item);
         });
         return groups;
-    }, []);
+    }, [dbData]);
 
     const currencies = useMemo(() => {
         return Object.keys(groupedData).sort((a, b) => {
@@ -70,6 +104,10 @@ const ViewCustomerUnpaidInvoicesView: React.FC = () => {
             return a.localeCompare(b);
         });
     }, [groupedData]);
+
+    if (isLoading) {
+        return <div className="p-20 text-center font-bold text-slate-400">LOADING DATABASE UNPAID...</div>;
+    }
 
     return (
         <div className="min-h-screen bg-slate-50/50 p-8 space-y-8 animate-in fade-in duration-700 font-sans">
@@ -129,7 +167,7 @@ const ViewCustomerUnpaidInvoicesView: React.FC = () => {
                         <div className="flex items-center gap-10 text-right font-sans">
                             <div>
                                 <span className="text-[10px] font-black uppercase tracking-widest block mb-1 text-slate-400">Total Unpaid</span>
-                                <span className="text-[16px] font-black text-slate-900 leading-none">{mockUnpaidData.length}</span>
+                                <span className="text-[16px] font-black text-slate-900 leading-none">{dbData.length}</span>
                             </div>
                             <div>
                                 <span className="text-[10px] font-black uppercase tracking-widest block mb-1">Division</span>

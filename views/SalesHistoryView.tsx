@@ -1,8 +1,10 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockSalesQuotes, mockSalesOrders, mockInvoices, getDeliveryNotes, mockReceipts, getInvoices } from '../mockData';
+
 import { Eye, Edit, Copy, FileText, Search, MoreVertical, ChevronDown, Filter, Trash2, X, ChevronUp, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Calendar, Printer } from 'lucide-react';
 import { cn } from '../utils/cn';
+import apiService from '../services/apiService';
+import { formatTimestamp } from '../utils/dateUtils';
 
 const SalesHistoryView = () => {
     const navigate = useNavigate();
@@ -17,12 +19,24 @@ const SalesHistoryView = () => {
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [dbQuotes, setDbQuotes] = useState<any[]>([]);
+    const [dbInvoices, setDbInvoices] = useState<any[]>([]);
+    const [dbOrders, setDbOrders] = useState<any[]>([]);
+    const [dbDeliveryNotes, setDbDeliveryNotes] = useState<any[]>([]);
+
 
     useEffect(() => {
         const fetchDbData = async () => {
             try {
-                const quotes = await apiService.getQuotes();
+                const [quotes, invoices, orders, deliveryNotes] = await Promise.all([
+                    apiService.getQuotes(),
+                    apiService.getInvoices(),
+                    apiService.getOrders(),
+                    apiService.getDeliveryNotes()
+                ]);
                 setDbQuotes(quotes);
+                setDbInvoices(invoices);
+                setDbOrders(orders);
+                setDbDeliveryNotes(deliveryNotes);
             } catch (err) {
                 console.error('Failed to fetch history from database:', err);
             }
@@ -52,102 +66,68 @@ const SalesHistoryView = () => {
 
     const allHistory = useMemo(() => {
         const history: any[] = [];
-        const deliveryNotes = getDeliveryNotes();
         const deliveredRefs = new Set(
-            deliveryNotes.map((dn: any) => dn.reference || dn.invoiceNumber).filter(Boolean)
+            dbDeliveryNotes.map((dn: any) => dn.reference || dn.invoiceNumber).filter(Boolean)
         );
 
         dbQuotes.forEach(q => {
             history.push({
                 id: q.id,
-                date: new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.'),
+                date: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
                 customer: q.customer?.name || 'Unknown',
                 amount: parseFloat(q.amount) || 0,
                 type: 'Quote',
                 reference: q.reference || '—',
                 status: q.status,
-                timestamp: q.createdAt ? new Date(q.createdAt).toLocaleString() : '—'
+                currency: q.currency || q.customer?.currency?.split(' - ')[0] || 'ZMW',
+                timestamp: formatTimestamp(q.createdAt)
             });
         });
 
-        mockSalesQuotes.forEach(q => {
-            let status = q.status;
-            if (status === 'Active' && q.issueDate && q.expiryDays) {
-                const [d, m, y] = q.issueDate.split('.');
-                const expDate = new Date(`${y}-${m}-${d}`);
-                expDate.setHours(23, 59, 59, 999);
-                expDate.setDate(expDate.getDate() + parseInt(q.expiryDays));
-                if (new Date() > expDate) status = 'Expired';
-            }
-            history.push({
-                id: q.id,
-                date: q.issueDate,
-                customer: q.customer,
-                amount: q.amount,
-                type: 'Quote',
-                reference: q.reference || '—',
-                status: status,
-                timestamp: q.timestamp || '—'
-            });
-        });
-
-        mockSalesOrders.forEach(o => {
+        dbOrders.forEach(o => {
             history.push({
                 id: o.id,
-                date: o.orderDate,
-                customer: o.customer,
-                amount: o.amount,
+                date: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                customer: o.customer?.name || 'Unknown',
+                amount: parseFloat(o.amount) || 0,
                 type: 'Order',
                 reference: o.reference || '—',
                 status: o.status,
-                timestamp: o.timestamp || '—'
+                currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
+                timestamp: formatTimestamp(o.createdAt)
             });
         });
 
-        getInvoices().forEach(i => {
-            const isDelivered = deliveredRefs.has(i.reference) || deliveredRefs.has(i.id);
+        dbInvoices.forEach(inv => {
             history.push({
-                id: i.id,
-                date: i.issueDate,
-                customer: i.customer,
-                amount: i.invoiceAmount,
-                type: 'Invoiced',
-                reference: i.reference || '—',
-                status: i.status,
-                dueDate: i.dueDate,
-                balanceDue: i.balanceDue,
-                timestamp: i.timestamp || '—'
+                id: inv.id,
+                date: inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                customer: inv.customer?.name || 'Unknown',
+                amount: parseFloat(inv.grandTotal) || 0,
+                type: 'Invoice',
+                reference: inv.reference || '—',
+                status: inv.status || 'Active',
+                currency: inv.currency || 'ZMW',
+                timestamp: formatTimestamp(inv.createdAt)
             });
         });
 
-        mockReceipts.forEach(r => {
-            history.push({
-                id: r.id,
-                date: r.date,
-                customer: r.paidByContact,
-                amount: r.amount,
-                type: 'Receipt',
-                reference: r.reference || '—',
-                status: r.status,
-                timestamp: r.timestamp || '—'
-            });
-        });
-
-        deliveryNotes.forEach(dn => {
+        dbDeliveryNotes.forEach(dn => {
             history.push({
                 id: dn.id,
-                date: dn.deliveryDate,
-                customer: dn.customer,
+                date: dn.deliveryDate ? new Date(dn.deliveryDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                customer: dn.customer?.name || 'Unknown',
                 amount: 0,
                 type: 'Delivery',
                 reference: dn.reference || '—',
-                status: dn.status,
-                timestamp: dn.timestamp || '—'
+                status: dn.status || 'Issued',
+                currency: dn.currency || 'ZMW',
+                timestamp: formatTimestamp(dn.timestamp)
             });
         });
 
         return history;
-    }, [refreshTrigger]);
+    }, [refreshTrigger, dbQuotes, dbInvoices, dbOrders, dbDeliveryNotes]);
 
     const getComputedStatus = (item: any): string => {
         if (item.type === 'Delivery' && !item.status) return 'Pending';
@@ -176,7 +156,7 @@ const SalesHistoryView = () => {
             const matchesSearch =
                 item.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 item.customer.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchesType = typeFilter === 'All' || item.type === typeFilter;
+            const matchesType = typeFilter === 'All' || item.type === typeFilter || (typeFilter === 'Invoiced' && item.type === 'Invoice');
             const matchesStatus = statusFilter === 'All' || itemStatus === statusFilter;
             return matchesSearch && matchesType && matchesStatus;
         });
@@ -427,7 +407,7 @@ const SalesHistoryView = () => {
                                         <span className="font-medium text-[13px] text-slate-600">{item.customer}</span>
                                     </td>
                                     <td className="px-6 py-4 text-right font-black text-[13px] text-slate-900 whitespace-nowrap">
-                                        {item.amount > 0 ? `ZMW ${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}
+                                        {item.amount > 0 ? `${item.currency} ${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '—'}
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         {(() => {

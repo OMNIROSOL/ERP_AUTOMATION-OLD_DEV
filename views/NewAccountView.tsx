@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { mockAccounts } from '../mockData';
+import apiService from '../services/apiService';
+import { Account } from '../types';
 import { 
     ChevronRight, X, LayoutGrid, Hash, Layers, 
     FileText, Save, Undo2, ChevronDown 
@@ -58,6 +59,7 @@ const TextareaField = ({ label, value, onChange, placeholder, rows = 3 }: any) =
 const NewAccountView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const [isLoading, setIsLoading] = useState(false);
     const [name, setName] = useState('');
     const [code, setCode] = useState('');
     const [type, setType] = useState('Asset');
@@ -65,33 +67,55 @@ const NewAccountView = () => {
 
     useEffect(() => {
         if (id) {
-            const account = mockAccounts.find(a => a.id === id);
-            if (account) {
-                setName(account.name);
-                setCode(account.code || '');
-                setType(account.type);
-            }
+            const fetchAccount = async () => {
+                setIsLoading(true);
+                try {
+                    const account = await apiService.getAccount(id);
+                    if (account) {
+                        setName(account.name || '');
+                        setCode(account.code || '');
+                        setType(account.type || 'Asset');
+                        setDescription(account.description || '');
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch account:', err);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            fetchAccount();
         }
     }, [id]);
 
-    const handleSave = () => {
-        const accountData = {
-            id: id || `acc-${Date.now()}`,
+    const handleSave = async () => {
+        const accountData: Partial<Account> = {
             name,
             code,
             type: type as any,
-            balance: id ? (mockAccounts.find(a => a.id === id)?.balance || 0) : 0,
-            isPaymentAccount: id ? (mockAccounts.find(a => a.id === id)?.isPaymentAccount || false) : false
+            description
         };
 
-        if (id) {
-            const index = mockAccounts.findIndex(a => a.id === id);
-            if (index !== -1) mockAccounts[index] = accountData;
-        } else {
-            mockAccounts.push(accountData);
+        try {
+            if (id) {
+                await apiService.updateAccount(id, accountData);
+            } else {
+                await apiService.createAccount(accountData);
+            }
+            navigate('/accounts');
+        } catch (err) {
+            console.error('Failed to save account:', err);
+            alert('Failed to save account to database');
         }
-        navigate('/accounts');
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading account details...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="p-10 max-w-[1200px] mx-auto space-y-8 selection:bg-indigo-100 selection:text-indigo-900 font-sans animate-in fade-in duration-700">

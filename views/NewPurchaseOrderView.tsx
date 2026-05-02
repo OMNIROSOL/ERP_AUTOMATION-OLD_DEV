@@ -1,15 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
-import {
-    mockPurchaseQuotes,
-    mockPurchaseOrders,
-    mockInvoices,
-    mockInventory,
-    getSuppliers,
-    savePurchaseOrders,
-    getFooters
-} from '../mockData';
-import { PurchaseOrder } from '../types';
+import apiService from '../services/apiService';
+import { PurchaseOrder, Footer } from '../types';
 import Card from '../components/shared/Card';
 import Button from '../components/shared/Button';
 import FormInput from '../components/shared/FormInput';
@@ -124,93 +116,54 @@ const NewPurchaseOrderView = () => {
         footerValue: 'Terms & Conditions apply.'
     });
 
-    const getNextReference = () => {
-        const refs = mockPurchaseOrders
-            .map(o => o.reference)
-            .filter(ref => ref && ref.startsWith('PO-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
+    const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
+    const [dbItems, setDbItems] = useState<any[]>([]);
+    const [dbFooters, setDbFooters] = useState<Footer[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1005;
-        return `PO-${nextNum.toString().padStart(4, '0')}`;
-    };
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const [sups, itemsData, footersData] = await Promise.all([
+                    apiService.getSuppliers(),
+                    apiService.getItems(),
+                    apiService.getFooters()
+                ]);
+                setDbSuppliers(sups);
+                setDbItems(itemsData);
+                setDbFooters(footersData);
+
+                if (!id && !location.search.includes('copyFrom')) {
+                    const nextRef = await apiService.getNextReference('purchase-order');
+                    setReference(nextRef);
+                }
+            } catch (err) {
+                console.error('Failed to load purchase order data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, [id]);
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
         const copyFromId = searchParams.get('copyFrom');
         if (id || copyFromId) {
             const orderId = id || copyFromId;
-            const sourceOrder = mockPurchaseOrders.find(o => o.id === orderId);
-            const sourceQuote = !sourceOrder ? mockPurchaseQuotes.find(q => q.id === orderId) : null;
-            const doc = sourceOrder || sourceQuote;
-
-            if (doc) {
-                setIssueDate(new Date().toISOString().split('T')[0]);
-                setSupplier(doc.supplier);
-                setCurrency(doc.currency || 'ZMW');
-                setBillingAddress((doc as any).billingAddress || getSuppliers().find(s => s.name === doc.supplier)?.billingAddress || '');
-                if (id) {
-                    setReference(doc.reference);
-                    setUseManualRef(true);
-                } else {
-                    setReference(getNextReference());
-                    setUseManualRef(false);
+            // For now we assume we can fetch them or we need to implement getPurchaseOrder(id)
+            const fetchOrder = async () => {
+                try {
+                    // Placeholder: fetch from API if possible
+                    // const doc = await apiService.getPurchaseOrder(orderId);
+                    // For now we'll search in the list if we already fetched it, 
+                    // but usually we need a specific GET /api/purchase-orders/:id
+                } catch (err) {
+                    console.error('Failed to fetch order details:', err);
                 }
-                setDescription(doc.description || '');
-                setStatus((doc as any).status || 'Ordered');
-
-                if (doc.options) {
-                    setOptions({
-                        amountsAreTaxInclusive: doc.options.amountsAreTaxInclusive || false,
-                        columnLineNumber: doc.options.columnLineNumber !== false,
-                        columnDiscount: doc.options.columnDiscount || false,
-                        columnDiscountType: doc.options.columnDiscountType || 'Percentage',
-                        withholdingTax: doc.options.withholdingTax || false,
-                        withholdingTaxType: doc.options.withholdingTaxType || 'Rate',
-                        withholdingTaxValue: doc.options.withholdingTaxValue || '0',
-                        customTitle: doc.options.customTitle || false,
-                        customTitleValue: doc.options.customTitleValue || 'Purchase Order',
-                        footers: doc.options.footers || false,
-                        footerValue: doc.options.footerValue || 'Terms & Conditions apply.'
-                    });
-                }
-
-                const itemsToSet = doc.items && doc.items.length > 0
-                    ? doc.items
-                    : [{ id: Date.now(), item: 'General Item', description: doc.description || '', qty: 1, unitPrice: (doc as any).amount || 0, discount: '', taxCode: 'No tax' }];
-
-                setItems(itemsToSet.map(i => ({
-                    id: i.id || Date.now() + Math.random(),
-                    item: i.item || 'Select Item',
-                    description: i.description || '',
-                    qty: i.qty ? i.qty.toString() : '1',
-                    unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
-                    discount: i.discount || '',
-                    taxCode: i.taxCode || 'No tax'
-                })));
-            }
-        } else {
-            setIssueDate(new Date().toISOString().split('T')[0]);
-            setSupplier('');
-            setCurrency('ZMW');
-            setBillingAddress('');
-            setReference(getNextReference());
-            setUseManualRef(false);
-            setDescription('');
-            setStatus('Ordered');
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', discount: '', taxCode: 'VAT 16%' }]);
-            setOptions({
-                amountsAreTaxInclusive: false,
-                columnLineNumber: true,
-                columnDiscount: false,
-                columnDiscountType: 'Percentage',
-                withholdingTax: false,
-                withholdingTaxType: 'Rate',
-                withholdingTaxValue: '0',
-                customTitle: false,
-                customTitleValue: 'Purchase Order',
-                footers: false,
-                footerValue: 'Terms & Conditions apply.'
-            });
+            };
+            fetchOrder();
         }
     }, [id, location.search]);
 
@@ -264,31 +217,43 @@ const NewPurchaseOrderView = () => {
             return;
         }
 
-        const newOrder: PurchaseOrder = {
-            id: isEditing ? id! : `PO-${Date.now()}`,
-            orderDate: issueDate.split('-').reverse().join('.'),
-            reference: reference || getNextReference(),
-            supplier: supplier,
-            description: description,
-            currency: currency,
-            amount: calculations.grandTotal,
-            status: status,
-            billingAddress: billingAddress,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase(),
-            items: validItems.map(i => ({ ...i, id: Number(i.id) })),
-            options: options
-        };
-
-        if (isEditing) {
-            const index = mockPurchaseOrders.findIndex(o => o.id === id);
-            if (index !== -1) mockPurchaseOrders[index] = newOrder;
-        } else {
-            mockPurchaseOrders.unshift(newOrder);
+        const selectedSup = dbSuppliers.find(s => s.name === supplier);
+        if (!selectedSup) {
+            alert('Selected supplier not found in database.');
+            return;
         }
 
-        savePurchaseOrders(mockPurchaseOrders);
-        window.dispatchEvent(new Event('storage'));
-        navigate('/purchase-orders');
+        const quoteData = {
+            reference: reference,
+            supplierId: selectedSup.id,
+            orderDate: issueDate,
+            amount: calculations.grandTotal,
+            description: description,
+            currency: currency,
+            items: validItems.map(i => {
+                const dbItem = dbItems.find(it => it.itemName === i.item);
+                return {
+                    itemId: dbItem?.id,
+                    description: i.description,
+                    qty: parseFloat(i.qty),
+                    unitPrice: parseFloat(i.unitPrice),
+                    totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
+                };
+            })
+        };
+
+        try {
+            if (isEditing) {
+                // await apiService.updatePurchaseOrder(id!, quoteData);
+                alert('Update not yet implemented in backend.');
+            } else {
+                await apiService.createPurchaseOrder(quoteData);
+            }
+            navigate('/purchase-orders');
+        } catch (err) {
+            console.error('Failed to save purchase order:', err);
+            alert('Failed to save purchase order to database.');
+        }
     };
 
     return (
@@ -358,14 +323,14 @@ const NewPurchaseOrderView = () => {
                                     <SelectField label="Selected Supplier" value={supplier} onChange={(e: any) => {
                                         const supName = e.target.value;
                                         setSupplier(supName);
-                                        const selected = getSuppliers().find(s => s.name === supName);
+                                        const selected = dbSuppliers.find(s => s.name === supName);
                                         if (selected) {
-                                            setCurrency(selected.currency.split(' - ')[0]);
+                                            setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
                                             setBillingAddress(selected.billingAddress || '');
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Supplier...</option>
-                                        {getSuppliers().map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                     </SelectField>
                                 </div>
                                 <TextareaField label="Supplier Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address of supplier..." rows={3} />
@@ -411,7 +376,7 @@ const NewPurchaseOrderView = () => {
                                                             value={item.item}
                                                             onChange={(e) => {
                                                                 const val = e.target.value;
-                                                                const invItem = (mockInventory as any)[val];
+                                                                const invItem = dbItems.find(it => it.itemName === val);
                                                                 setItems(prev => prev.map(i => i.id === item.id ? {
                                                                     ...i,
                                                                     item: val,
@@ -422,8 +387,8 @@ const NewPurchaseOrderView = () => {
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                         >
                                                             <option value="Select Item">Select Item</option>
-                                                            {Object.keys(mockInventory).map(name => (
-                                                                <option key={name} value={name}>{name}</option>
+                                                            {dbItems.map(it => (
+                                                                <option key={it.id} value={it.itemName}>{it.itemName}</option>
                                                             ))}
                                                         </select>
                                                     </td>
@@ -451,8 +416,8 @@ const NewPurchaseOrderView = () => {
                                                                 className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
                                                             />
                                                             <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-between w-full">
-                                                                <span>Stock: {((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span>
-                                                                <span className="text-indigo-500 font-black">{(mockInventory as any)[item.item]?.unit || ''}</span>
+                                                                <span>Stock: {(dbItems.find(it => it.itemName === item.item)?.stock || 0).toLocaleString()}</span>
+                                                                <span className="text-indigo-500 font-black">{dbItems.find(it => it.itemName === item.item)?.unit || ''}</span>
                                                             </div>
                                                         </div>
                                                     </td>
@@ -662,13 +627,13 @@ const NewPurchaseOrderView = () => {
                                                 <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
                                                     <select
                                                         onChange={(e) => {
-                                                            const footer = getFooters().find(f => f.id === e.target.value);
+                                                            const footer = dbFooters.find(f => f.id === e.target.value);
                                                             if (footer) setOptions(prev => ({ ...prev, footerValue: footer.content }));
                                                         }}
                                                         className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
                                                     >
                                                         <option value="">-- Choose template --</option>
-                                                        {getFooters().map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                        {dbFooters.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                                     </select>
                                                 </div>
                                             )}

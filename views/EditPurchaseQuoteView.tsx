@@ -1,114 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useParams, Link, useLocation } from 'react-router-dom';
 import {
-    mockPurchaseQuotes,
-    mockPurchaseOrders,
-    mockPurchaseInvoices,
-    mockInventory,
-    getSuppliers,
-    getCurrentUser,
-    savePurchaseQuotes,
-    getFooters
-} from '../mockData';
-import { PurchaseQuote } from '../types';
-import Card from '../components/shared/Card';
-import Button from '../components/shared/Button';
-import FormInput from '../components/shared/FormInput';
-import Badge from '../components/shared/Badge';
-import {
-    FileText,
-    ChevronRight,
-    CheckCircle2,
-    Clock,
     Plus,
-    Trash2,
-    Copy,
-    User,
     X,
-    Search,
-    AlertTriangle,
-    Package,
+    FileText,
     Calendar,
+    User,
     Briefcase,
-    ChevronDown,
-    ChevronUp,
-    Hash,
-    Save,
+    Copy,
+    Trash2,
     Settings,
-    History,
-    Calculator,
-    Layers,
+    ChevronDown,
+    ChevronRight,
     Image as ImageIcon,
-    TrendingUp
+    CheckCircle2,
+    AlertTriangle,
+    Save
 } from 'lucide-react';
-import { cn } from '../utils/cn';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/shared/Tooltip";
-
-const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, readOnly }: any) => (
-    <div className="space-y-2 text-left">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
-        <div className="relative group">
-            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
-            <input
-                type={type}
-                value={value}
-                onChange={onChange}
-                placeholder={placeholder}
-                readOnly={readOnly}
-                className={`w-full bg-slate-50 border ${error ? 'border-rose-500 ring-4 ring-rose-500/10' : 'border-slate-200'} rounded-2xl ${Icon ? 'pl-11' : 'px-5'} py-3 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 ${error ? 'focus:ring-rose-500/10 focus:border-rose-500' : 'focus:ring-indigo-500/10 focus:border-indigo-500'} transition-all ${readOnly ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
-            />
-        </div>
-        {error && <p className="text-[10px] font-bold text-rose-500 ml-1 mt-1 uppercase tracking-wider">{error}</p>}
-    </div>
-);
-
-const SelectField = ({ label, value, onChange, Icon, children }: any) => (
-    <div className="space-y-2 text-left">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
-        <div className="relative group">
-            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
-            <select
-                value={value}
-                onChange={onChange}
-                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
-            >
-                {children}
-            </select>
-            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-        </div>
-    </div>
-);
-
-const NumericInputField = ({ label, value, onChange, Icon, min = 0 }: any) => (
-    <div className="space-y-2 text-left">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
-        <div className="relative group">
-            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
-            <input
-                type="number"
-                min={min}
-                value={value}
-                onChange={onChange}
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-12 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col -space-y-px">
-                <button
-                    onClick={() => onChange({ target: { value: (parseInt(value || 0) + 1).toString() } })}
-                    className="p-1 hover:text-indigo-600 text-slate-300 transition-colors"
-                >
-                    <ChevronUp size={12} />
-                </button>
-                <button
-                    onClick={() => onChange({ target: { value: Math.max(min, parseInt(value || 0) - 1).toString() } })}
-                    className="p-1 hover:text-indigo-600 text-slate-300 transition-colors"
-                >
-                    <ChevronDown size={12} />
-                </button>
-            </div>
-        </div>
-    </div>
-);
+import apiService from '../services/apiService';
+import { PurchaseQuote, Supplier, InventoryItem, FooterTemplate } from '../types';
 
 const EditPurchaseQuoteView = () => {
     const { id } = useParams();
@@ -117,13 +27,7 @@ const EditPurchaseQuoteView = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
 
-    const formatDateForSave = (dateStr: string) => {
-        if (!dateStr) return new Date().toLocaleDateString('en-GB').replace(/\//g, '.');
-        if (dateStr.includes('.')) return dateStr;
-        const [year, month, day] = dateStr.split('-');
-        return `${day}.${month}.${year}`;
-    };
-
+    const [isLoading, setIsLoading] = useState(true);
     const [issueDate, setIssueDate] = useState('');
     const [supplier, setSupplier] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -134,6 +38,13 @@ const EditPurchaseQuoteView = () => {
     const [fileName, setFileName] = useState('No file chosen');
     const [status, setStatus] = useState('Active');
     const [items, setItems] = useState([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', unit: '', discount: '', taxCode: 'VAT 16%' }]);
+
+    const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+    const [footers, setFooters] = useState<FooterTemplate[]>([]);
+    const [historicalInvoices, setHistoricalInvoices] = useState<any[]>([]);
+    const [historicalQuotes, setHistoricalQuotes] = useState<any[]>([]);
+
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         rounding: false,
@@ -154,63 +65,88 @@ const EditPurchaseQuoteView = () => {
 
     const [showOptionsArea, setShowOptionsArea] = useState(false);
 
-    const getNextReference = () => {
-        const pqReferences = mockPurchaseQuotes
-            .map(q => q.reference)
-            .filter(ref => ref && ref.startsWith('PQ-'))
-            .map(ref => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = pqReferences.length > 0 ? Math.max(...pqReferences) + 1 : 1;
-        return `PQ-${nextNum.toString().padStart(4, '0')}`;
-    };
-
     useEffect(() => {
-        const searchParams = new URLSearchParams(location.search);
-        const copyFromId = searchParams.get('copyFrom');
-        if (id || copyFromId) {
-            const quoteId = id || copyFromId;
-            const quote = mockPurchaseQuotes.find(q => q.id === quoteId);
-            if (quote) {
-                setIssueDate(quote.issueDate.split('.').reverse().join('-'));
-                setSupplier(quote.supplier);
-                setCurrency(quote.currency);
-                setAddress(quote.billingAddress || '');
-                if (copyFromId) {
-                    setReference(getNextReference());
-                    setUseManualRef(false);
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [suppliers, itemsData, footersData, quotes, invoices] = await Promise.all([
+                    apiService.getSuppliers(),
+                    apiService.getItems(),
+                    apiService.getFooters(),
+                    apiService.getPurchaseQuotes(),
+                    apiService.getPurchaseInvoices()
+                ]);
+                setAllSuppliers(suppliers);
+                setInventoryItems(itemsData);
+                setFooters(footersData);
+                setHistoricalQuotes(quotes);
+                setHistoricalInvoices(invoices);
+
+                const searchParams = new URLSearchParams(location.search);
+                const copyFromId = searchParams.get('copyFrom');
+
+                if (id || copyFromId) {
+                    const quoteId = id || copyFromId;
+                    const quote = await apiService.getPurchaseQuote(quoteId!);
+                    if (quote) {
+                        setIssueDate(quote.issueDate ? quote.issueDate.split('.').reverse().join('-') : new Date().toISOString().split('T')[0]);
+                        setSupplier(quote.supplier || '');
+                        setCurrency(quote.currency || 'ZMW');
+                        setAddress(quote.billingAddress || '');
+
+                        if (copyFromId) {
+                            const nextRef = await apiService.getNextReference('purchase-quote');
+                            setReference(nextRef);
+                            setUseManualRef(false);
+                        } else {
+                            setReference(quote.reference || '');
+                            setUseManualRef(true);
+                        }
+
+                        setDescription(quote.description || '');
+                        setStatus(id ? (quote.status || 'Active') : 'Active');
+                        setItems(quote.items?.map((i: any) => ({
+                            id: i.id || Date.now() + Math.random(),
+                            item: i.item || '',
+                            description: i.description || '',
+                            qty: (i.qty || 0).toString(),
+                            unitPrice: (i.unitPrice || 0).toString(),
+                            unit: i.unit || '',
+                            discount: i.discount || '',
+                            taxCode: i.taxCode || 'VAT 16%'
+                        })) || []);
+                        if (quote.options) {
+                            setOptions(prev => ({ ...prev, ...quote.options }));
+                        }
+                    }
                 } else {
-                    setReference(quote.reference);
-                    setUseManualRef(true);
+                    setIssueDate(new Date().toISOString().split('T')[0]);
+                    const nextRef = await apiService.getNextReference('purchase-quote');
+                    setReference(nextRef);
+                    setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', unit: '', discount: '', taxCode: 'VAT 16%' }]);
                 }
-                setDescription(quote.description || '');
-                setStatus(id ? quote.status : 'Active');
-                setItems(quote.items?.map(i => ({
-                    id: i.id,
-                    item: i.item,
-                    description: i.description,
-                    qty: i.qty.toString(),
-                    unitPrice: i.unitPrice.toString(),
-                    unit: (i as any).unit || '',
-                    discount: i.discount || '',
-                    taxCode: i.taxCode || 'VAT 16%'
-                })) || []);
-                if (quote.options) {
-                    setOptions(prev => ({ ...prev, ...quote.options }));
-                }
+            } catch (err) {
+                console.error('Failed to fetch data:', err);
+            } finally {
+                setIsLoading(false);
             }
-        } else {
-            setIssueDate(new Date().toISOString().split('T')[0]);
-            setReference(getNextReference());
-            setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', unit: '', discount: '', taxCode: 'VAT 16%' }]);
-        }
+        };
+        fetchData();
     }, [id, location.search]);
+
+    const formatDateForSave = (dateStr: string) => {
+        if (!dateStr) return new Date().toLocaleDateString('en-GB').replace(/\//g, '.');
+        if (dateStr.includes('.')) return dateStr;
+        const [year, month, day] = dateStr.split('-');
+        return `${day}.${month}.${year}`;
+    };
 
     const itemHistory = useMemo(() => {
         const global: Record<string, any[]> = {};
         const supplierPurchases: Record<string, any[]> = {};
         const supplierQuotes: Record<string, any[]> = {};
 
-        mockPurchaseInvoices.forEach(doc => {
+        historicalInvoices.forEach(doc => {
             if (!doc.items) return;
             doc.items.forEach(i => {
                 const itemName = (i as any).item;
@@ -225,7 +161,7 @@ const EditPurchaseQuoteView = () => {
             });
         });
 
-        mockPurchaseQuotes.forEach(doc => {
+        historicalQuotes.forEach(doc => {
             if (!doc.items) return;
             doc.items.forEach(i => {
                 const itemName = (i as any).item;
@@ -300,42 +236,56 @@ const EditPurchaseQuoteView = () => {
         return { lineCalcs, subtotal, totalTax, grandTotal, whtAmount };
     }, [items, options]);
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!supplier) { alert('Please select a supplier.'); return; }
         const validItems = items.filter(i => i.item && i.item !== 'Select Item');
         if (validItems.length === 0) { alert('Please select at least one valid item.'); return; }
 
-        const newQuote: PurchaseQuote = {
-            id: isEditing ? id! : `PQ-${Date.now()}`,
+        const quoteData: Partial<PurchaseQuote> = {
             issueDate: formatDateForSave(issueDate),
-            reference: reference || getNextReference(),
+            reference: reference,
             supplier: supplier,
             description: description,
             currency: currency,
             amount: calculations.grandTotal,
             status: status as any,
             billingAddress: address,
-            timestamp: new Date().toISOString(),
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({ ...i, id: Number(i.id) })),
+            items: items.filter(i => i.item !== 'Select Item').map(i => ({
+                ...i,
+                qty: parseFloat(i.qty) || 0,
+                unitPrice: parseFloat(i.unitPrice) || 0
+            })),
             options: options
         };
 
-        if (isEditing) {
-            const index = mockPurchaseQuotes.findIndex(q => q.id === id);
-            if (index !== -1) mockPurchaseQuotes[index] = newQuote;
-        } else {
-            mockPurchaseQuotes.unshift(newQuote);
+        try {
+            if (isEditing && id) {
+                await apiService.updatePurchaseQuote(id, quoteData);
+            } else {
+                await apiService.createPurchaseQuote(quoteData);
+            }
+            navigate('/purchase-quotes');
+        } catch (err) {
+            console.error('Failed to save purchase quote:', err);
+            alert('Failed to save purchase quote');
         }
-        savePurchaseQuotes(mockPurchaseQuotes);
-        navigate('/purchase-quotes');
     };
 
     const requiresApproval = useMemo(() => {
         return items.some(item => {
-            const invItem = (mockInventory as any)[item.item];
-            return invItem && parseFloat(item.unitPrice) > invItem.purchasePrice * 1.25;
+            const invItem = inventoryItems.find(i => i.itemName === item.item || i.itemCode === item.item);
+            return invItem && parseFloat(item.unitPrice) > (invItem.purchasePrice || 0) * 1.25;
         });
-    }, [items]);
+    }, [items, inventoryItems]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading quote details...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="p-10 max-w-[1400px] mx-auto space-y-6 font-sans">
@@ -380,14 +330,14 @@ const EditPurchaseQuoteView = () => {
                     <div className="space-y-6">
                         <SelectField label="Supplier" value={supplier} onChange={(e: any) => {
                             setSupplier(e.target.value);
-                            const selected = getSuppliers().find(s => s.name === e.target.value);
+                            const selected = allSuppliers.find(s => s.name === e.target.value);
                             if (selected) {
                                 setCurrency(selected.currency || 'ZMW');
                                 setAddress(selected.billingAddress || (selected as any).address || '');
                             }
                         }} Icon={User}>
                             <option value="">Select Supplier...</option>
-                            {getSuppliers().map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                            {allSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                         </SelectField>
                         <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="Summary of request..." Icon={Briefcase} />
                     </div>
@@ -446,13 +396,13 @@ const EditPurchaseQuoteView = () => {
                                                         value={item.item}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            const invItem = (mockInventory as any)[val];
+                                                            const invItem = inventoryItems.find(i => i.itemName === val || i.itemCode === val);
                                                             setItems(prev => {
                                                                 const newItems = prev.map(i => i.id === item.id ? {
                                                                     ...i,
                                                                     item: val,
-                                                                    description: invItem ? val : i.description,
-                                                                    unit: invItem ? invItem.unit : (i as any).unit
+                                                                    description: invItem ? (invItem.description || val) : i.description,
+                                                                    unit: invItem ? (invItem.unitName || '') : (i as any).unit
                                                                 } : i);
                                                                 return newItems;
                                                             });
@@ -460,8 +410,8 @@ const EditPurchaseQuoteView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer truncate"
                                                     >
                                                         <option value="Select Item">Select Item</option>
-                                                        {Object.keys(mockInventory).map(name => (
-                                                            <option key={name} value={name}>{name}</option>
+                                                        {inventoryItems.map(i => (
+                                                            <option key={i.id} value={i.itemName}>{i.itemName}</option>
                                                         ))}
                                                     </select>
                                                 </div>
@@ -490,7 +440,7 @@ const EditPurchaseQuoteView = () => {
                                                         className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
                                                     />
                                                     <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-between w-full">
-                                                        <span>Stock: {((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span>
+                                                        <span>Stock: {(inventoryItems.find(i => i.itemName === item.item || i.itemCode === item.item)?.qtyOnHand || 0).toLocaleString()}</span>
                                                         <span className="text-indigo-500 font-black">{(item as any).unit || ''}</span>
                                                     </div>
                                                 </div>
@@ -691,13 +641,13 @@ const EditPurchaseQuoteView = () => {
                                         <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
                                             <select
                                                 onChange={(e) => {
-                                                    const footer = getFooters().find(f => f.id === e.target.value);
+                                                    const footer = footers.find(f => f.id === e.target.value);
                                                     if (footer) setOptions(prev => ({ ...prev, footerValue: footer.content }));
                                                 }}
                                                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
                                             >
                                                 <option value="">-- Choose template --</option>
-                                                {getFooters().map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                {footers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                             </select>
                                         </div>
                                     )}

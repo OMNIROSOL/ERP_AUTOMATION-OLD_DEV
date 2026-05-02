@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Eye, Edit, Search, Plus, Trash2, Check, Copy, 
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, 
   ChevronDown, ChevronUp, Printer, Calendar, FileX
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { mockInventoryWriteOffs } from '../mockData';
+import apiService from '../services/apiService';
 import { InventoryWriteOff } from '../types';
 
 const InventoryWriteOffsView = () => {
@@ -14,6 +14,23 @@ const InventoryWriteOffsView = () => {
   const [pageSize, setPageSize] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: keyof InventoryWriteOff | null, direction: 'asc' | 'desc' }>({ key: null, direction: 'asc' });
+  const [writeOffs, setWriteOffs] = useState<InventoryWriteOff[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const data = await apiService.getInventoryWriteOffs();
+        setWriteOffs(data);
+      } catch (err) {
+        console.error('Failed to fetch write-offs:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const columns = [
     { id: 'date', label: 'Date', visible: true },
@@ -33,7 +50,7 @@ const InventoryWriteOffsView = () => {
 
   const filteredWriteOffs = useMemo(() => {
     const query = searchQuery.toLowerCase();
-    let result = mockInventoryWriteOffs.filter(wo => {
+    let result = writeOffs.filter(wo => {
       const searchStr = `${wo.reference} ${wo.inventoryItem} ${wo.description} ${wo.account}`.toLowerCase();
       return searchStr.includes(query);
     });
@@ -129,7 +146,22 @@ const InventoryWriteOffsView = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {currentSlice.map((wo) => (
+            {isLoading ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center space-y-4">
+                    <div className="w-10 h-10 border-4 border-rose-500/20 border-t-rose-600 rounded-full animate-spin"></div>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching write-offs...</p>
+                  </div>
+                </td>
+              </tr>
+            ) : currentSlice.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">
+                  No write-offs found
+                </td>
+              </tr>
+            ) : currentSlice.map((wo) => (
               <tr key={wo.id} className="group hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-4 text-center">
                   <div className="flex items-center justify-center space-x-1">

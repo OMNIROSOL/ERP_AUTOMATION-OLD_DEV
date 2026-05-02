@@ -1,33 +1,44 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Eye, Edit, ChevronRight, LayoutGrid, HelpCircle, Receipt, Search } from 'lucide-react';
-import { getCustomers, getCustomerTransactions } from '../mockData';
+import apiService from '../services/apiService';
+import { Customer } from '../types';
 
 const CustomerTransactionsView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
 
-    const customers = useMemo(() => getCustomers(), []);
-    const customer = useMemo(() => customers.find(c => c.id === id), [customers, id]);
-    const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [customer, setCustomer] = useState<Customer | null>(null);
+    const [transactions, setTransactions] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
-        const handleUpdate = () => setRefreshTrigger(prev => prev + 1);
-        window.addEventListener('invoices_updated', handleUpdate);
-        window.addEventListener('receipts_updated', handleUpdate);
-        window.addEventListener('credit_notes_updated', handleUpdate);
-        return () => {
-            window.removeEventListener('invoices_updated', handleUpdate);
-            window.removeEventListener('receipts_updated', handleUpdate);
-            window.removeEventListener('credit_notes_updated', handleUpdate);
+        const fetchData = async () => {
+            if (!id) return;
+            setIsLoading(true);
+            try {
+                const cData = await apiService.getCustomer(id);
+                setCustomer(cData);
+                const tData = await apiService.getCustomerTransactions(id);
+                setTransactions(tData);
+            } catch (err) {
+                console.error('Failed to fetch customer transactions:', err);
+            } finally {
+                setIsLoading(false);
+            }
         };
-    }, []);
+        fetchData();
 
-    const transactions = useMemo(() => {
-        if (!customer) return [];
-        return getCustomerTransactions(customer.name);
-    }, [customer, refreshTrigger]);
+        window.addEventListener('invoices_updated', fetchData);
+        window.addEventListener('receipts_updated', fetchData);
+        window.addEventListener('credit_notes_updated', fetchData);
+        return () => {
+            window.removeEventListener('invoices_updated', fetchData);
+            window.removeEventListener('receipts_updated', fetchData);
+            window.removeEventListener('credit_notes_updated', fetchData);
+        };
+    }, [id]);
 
     const filteredTransactions = useMemo(() => {
         return transactions.filter(t =>
@@ -35,6 +46,15 @@ const CustomerTransactionsView = () => {
             t.description.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [transactions, searchQuery]);
+
+    if (isLoading) {
+        return (
+            <div className="p-20 flex flex-col items-center justify-center space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching transaction history...</p>
+            </div>
+        );
+    }
 
     if (!customer) {
         return (

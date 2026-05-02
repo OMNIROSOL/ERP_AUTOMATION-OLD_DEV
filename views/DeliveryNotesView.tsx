@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getDeliveryNotes } from '../mockData';
+import apiService from '../services/apiService';
 import { DeliveryNote } from '../types';
 import Button from '../components/shared/Button';
 import Badge from '../components/shared/Badge';
@@ -26,10 +26,25 @@ const DeliveryNotesView = () => {
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [isManagementOpen, setIsManagementOpen] = useState(false);
+    const [deliveryNotes, setDeliveryNotes] = useState<DeliveryNote[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const managementRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
+        const fetchNotes = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getDeliveryNotes();
+                setDeliveryNotes(data);
+            } catch (err) {
+                console.error('Failed to fetch delivery notes:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchNotes();
+        
+        const handleRefresh = () => fetchNotes();
         window.addEventListener('delivery_notes_updated', handleRefresh);
         
         function handleClickOutside(event: MouseEvent) {
@@ -43,8 +58,6 @@ const DeliveryNotesView = () => {
             window.removeEventListener('delivery_notes_updated', handleRefresh);
         };
     }, []);
-
-    const deliveryNotes = useMemo(() => getDeliveryNotes(), [refreshTrigger]);
 
     const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
         const defaultVisible: Record<string, boolean> = {
@@ -184,14 +197,13 @@ const DeliveryNotesView = () => {
         });
     };
 
-    const handleStatusChange = (id: string, newStatus: string) => {
-        const saved = localStorage.getItem('delivery_notes_data');
-        let notes = saved ? JSON.parse(saved) : getDeliveryNotes();
-        const index = notes.findIndex((n: any) => n.id === id);
-        if (index !== -1) {
-            notes[index].status = newStatus;
-            localStorage.setItem('delivery_notes_data', JSON.stringify(notes));
-            setRefreshTrigger(prev => prev + 1);
+    const handleStatusChange = async (id: string, newStatus: string) => {
+        try {
+            // await apiService.updateDeliveryNote(id, { status: newStatus });
+            setDeliveryNotes(prev => prev.map(n => n.id === id ? { ...n, status: newStatus } : n));
+            alert('Status updated (DB sync placeholder)');
+        } catch (err) {
+            console.error('Failed to update status:', err);
         }
     };
 
@@ -684,11 +696,19 @@ const DeliveryNotesView = () => {
             {/* Main Content Card */}
             <div className="w-fit min-w-full overflow-x-auto mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50">
                 <DataTable
-                    data={paginatedData}
+                    data={isLoading ? [] : paginatedData}
                     columns={columns as any}
                     tableClassName="min-w-[2000px]"
                     className="border-none shadow-none bg-transparent"
                     hideDefaultPagination={true}
+                    emptyState={
+                        isLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching delivery notes...</p>
+                            </div>
+                        ) : undefined
+                    }
                     tableFooter={
                         <tr>
                             {columns.map((col: any) => {

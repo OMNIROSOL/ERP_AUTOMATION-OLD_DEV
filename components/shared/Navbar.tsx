@@ -12,7 +12,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { getCurrentUser, getUsers } from '../../mockData';
+import apiService from '../../services/apiService';
 import { AppUser } from '../../types';
 import { useState, useEffect } from 'react';
 
@@ -21,14 +21,24 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
-  const [currentUser, setCurrentUserLocal] = useState<AppUser>(getCurrentUser());
-  const [users, setUsers] = useState<AppUser[]>(getUsers());
+  const [currentUser, setCurrentUserLocal] = useState<AppUser>(apiService.getCurrentUser());
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await apiService.getUsers();
+        setUsers(data);
+      } catch (err) {
+        console.error('Failed to fetch users for switcher:', err);
+      }
+    };
+    fetchData();
+
     const handleUpdate = () => {
-      setCurrentUserLocal(getCurrentUser());
-      setUsers(getUsers());
+      setCurrentUserLocal(apiService.getCurrentUser());
+      fetchData();
     };
     window.addEventListener('user_sim_updated', handleUpdate);
     window.addEventListener('users_updated', handleUpdate);
@@ -39,10 +49,8 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
   }, []);
 
   const handleRoleSwitch = (user: AppUser) => {
-    import('../../mockData').then(m => {
-      m.setCurrentUser(user);
-      setShowUserMenu(false);
-    });
+    apiService.setCurrentUser(user);
+    setShowUserMenu(false);
   };
 
   return (

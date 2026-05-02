@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, ArrowLeft, Package, Calendar, DollarSign, ShieldAlert, Database } from 'lucide-react';
-import { getInventoryUnitCosts, saveInventoryUnitCosts, mockInventoryItems } from '../mockData';
-import { InventoryUnitCost } from '../types';
+import apiService from '../services/apiService';
+import { InventoryUnitCost, InventoryItem } from '../types';
 
 const NewInventoryUnitCostView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const unitCosts = getInventoryUnitCosts();
-  const existingCost = isEdit ? unitCosts.find(c => c.id === id) : null;
 
-  const [formData, setFormData] = useState<Partial<InventoryUnitCost>>(existingCost || {
+  const [isLoading, setIsLoading] = useState(true);
+  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [formData, setFormData] = useState<Partial<InventoryUnitCost>>({
     date: new Date().toISOString().split('T')[0],
     itemId: '',
     itemName: '',
@@ -19,6 +19,31 @@ const NewInventoryUnitCostView = () => {
     minSellingPrice: 0,
     division: ''
   });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [itemsList, costList] = await Promise.all([
+          apiService.getItems(),
+          apiService.getInventoryUnitCosts()
+        ]);
+        setItems(itemsList);
+        
+        if (isEdit && id) {
+          const existingCost = costList.find((c: any) => c.id === id);
+          if (existingCost) {
+            setFormData(existingCost);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch unit cost data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [id, isEdit]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -28,7 +53,7 @@ const NewInventoryUnitCostView = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.itemId || !formData.date || formData.unitCost === undefined || !formData.division) {
@@ -36,25 +61,37 @@ const NewInventoryUnitCostView = () => {
       return;
     }
 
-    let updatedCosts;
-    if (isEdit) {
-      updatedCosts = unitCosts.map(c => c.id === id ? { ...c, ...formData } as InventoryUnitCost : c);
-    } else {
-      const newCost: InventoryUnitCost = {
-        id: Date.now().toString(),
-        date: formData.date!,
-        itemId: formData.itemId!,
-        itemName: formData.itemName!,
-        unitCost: formData.unitCost!,
-        minSellingPrice: formData.minSellingPrice || 0,
-        division: formData.division!
-      };
-      updatedCosts = [newCost, ...unitCosts];
+    setIsLoading(true);
+    try {
+      if (isEdit && id) {
+        await apiService.updateInventoryUnitCost(id, formData);
+      } else {
+        await apiService.createInventoryUnitCost({
+          date: formData.date!,
+          itemId: formData.itemId!,
+          itemName: formData.itemName!,
+          unitCost: formData.unitCost!,
+          minSellingPrice: formData.minSellingPrice || 0,
+          division: formData.division!
+        });
+      }
+      navigate('/settings/inventory-unit-costs');
+    } catch (err) {
+      console.error('Failed to save unit cost record:', err);
+      alert('Failed to save unit cost record to database');
+    } finally {
+      setIsLoading(false);
     }
-
-    saveInventoryUnitCosts(updatedCosts);
-    navigate('/settings/inventory-unit-costs');
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">{isEdit ? 'Updating record...' : 'Creating record...'}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500">
@@ -104,7 +141,7 @@ const NewInventoryUnitCostView = () => {
                 name="itemId"
                 value={formData.itemId}
                 onChange={(e) => {
-                  const item = mockInventoryItems.find(i => i.id === e.target.value);
+                  const item = items.find(i => i.id === e.target.value);
                   setFormData(prev => ({ 
                     ...prev, 
                     itemId: e.target.value,
@@ -115,7 +152,7 @@ const NewInventoryUnitCostView = () => {
                 required
               >
                 <option value="">Select Item...</option>
-                {mockInventoryItems.map(item => (
+                {items.map(item => (
                   <option key={item.id} value={item.id}>
                     {item.itemCode} - {item.itemName}
                   </option>

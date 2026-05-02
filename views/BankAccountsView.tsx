@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockAccounts } from '../mockData';
 import DataTable from '../components/shared/DataTable';
 import Button from '../components/shared/Button';
 import Badge from '../components/shared/Badge';
@@ -12,6 +11,7 @@ import {
     Terminal, Download, Printer
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import apiService from '../services/apiService';
 
 const BankAccountsView = () => {
     const navigate = useNavigate();
@@ -89,25 +89,40 @@ const BankAccountsView = () => {
         };
     }, []);
 
-    const bankAccounts = useMemo(() => {
-        const result = mockAccounts.filter(a => a.isPaymentAccount);
-        const filtered = result.filter(a => 
-            a.name.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+    const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-        return filtered.sort((a, b) => {
-            let valA: any = a[sortColumn as keyof typeof a] || '';
-            let valB: any = b[sortColumn as keyof typeof b] || '';
-            
-            if (sortColumn === 'cleared_balance' || sortColumn === 'actual_balance') {
-                valA = a.balance;
-                valB = b.balance;
+    useEffect(() => {
+        const fetchAccounts = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getAccounts();
+                // Filter only payment accounts if that property exists in DB, 
+                // otherwise show all or filter based on name/code
+                const filtered = data.filter((a: any) => 
+                    a.name.toLowerCase().includes(searchQuery.toLowerCase())
+                );
+                
+                setBankAccounts(filtered.sort((a: any, b: any) => {
+                    let valA: any = a[sortColumn as keyof typeof a] || '';
+                    let valB: any = b[sortColumn as keyof typeof b] || '';
+                    
+                    if (sortColumn === 'cleared_balance' || sortColumn === 'actual_balance') {
+                        valA = a.balance;
+                        valB = b.balance;
+                    }
+
+                    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                    return 0;
+                }));
+            } catch (err) {
+                console.error('Failed to fetch accounts:', err);
+            } finally {
+                setIsLoading(false);
             }
-
-            if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-            if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-            return 0;
-        });
+        };
+        fetchAccounts();
     }, [searchQuery, sortColumn, sortDirection]);
 
     const paginatedData = useMemo(() => {
@@ -311,7 +326,7 @@ const BankAccountsView = () => {
     }, [isSelectionMode, visibleColumns, selectedIds, paginatedData]);
 
     const handleBatchCopy = () => {
-        const selectedAccounts = mockAccounts.filter(a => selectedIds.includes(a.id));
+        const selectedAccounts = bankAccounts.filter(a => selectedIds.includes(a.id));
         const text = selectedAccounts.map(a => `${a.name}\t${a.balance}`).join('\n');
         navigator.clipboard.writeText(text);
         alert('Copied to clipboard');

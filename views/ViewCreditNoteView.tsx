@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockCreditNotes, getCustomers, saveCreditNotes, getCreditNotes } from '../mockData';
+import apiService from '../services/apiService';
 import { CreditNote, Customer } from '../types';
 import {
     Printer,
@@ -30,33 +30,86 @@ const ViewCreditNoteView = () => {
     const [isCopyToOpen, setIsCopyToOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const allCustomers = useMemo(() => getCustomers(), []);
-    const creditNotes = useMemo(() => getCreditNotes(), []);
-    const cnIndex = creditNotes.findIndex(c => c.id === id || c.id === `cn-${id}` || c.id.toString() === id);
-    const creditNote = creditNotes[cnIndex];
+    const [creditNote, setCreditNote] = useState<any>(null);
+    const [customerData, setCustomerData] = useState<any>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [creditNotes, setCreditNotes] = useState<any[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
 
-    const customerData = useMemo(() => {
-        if (!creditNote) return null;
-        return allCustomers.find(c => c.name === creditNote.customer);
-    }, [creditNote, allCustomers]);
+    useEffect(() => {
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                const [cns, custs, codes] = await Promise.all([
+                    apiService.getCreditNotes(),
+                    apiService.getCustomers(),
+                    apiService.getTaxCodes().catch(() => [])
+                ]);
+                setCreditNotes(cns);
+                setTaxCodes(codes);
+                const cn = cns.find((c: any) => c.id === id || c.id === `cn-${id}` || c.id.toString() === id);
+                if (cn) {
+                    setCreditNote(cn);
+                    const cust = custs.find((c: any) => c.name === cn.customer);
+                    setCustomerData(cust);
+                }
+            } catch (err) {
+                console.error('Failed to load credit note:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, [id]);
+
+    const cnIndex = creditNotes.findIndex(c => c.id === id || c.id === `cn-${id}` || c.id.toString() === id);
 
     const customerEmail = customerData?.email || (creditNote ? `${creditNote.customer.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
 
     const totals = useMemo(() => {
         if (!creditNote) return { subtotal: 0, tax: 0, total: 0, costOfSales: 0 };
+        const options = creditNote.docOptions || {};
+        const isTaxInclusive = options.amountsAreTaxInclusive || false;
+        
         let subtotal = 0;
         let tax = 0;
-        (creditNote.items || []).forEach(item => {
+        (creditNote.items || []).forEach((item: any) => {
             const qty = parseFloat(item.qty as any) || 0;
             const price = parseFloat(item.unitPrice as any) || 0;
             const lineTotal = qty * price;
-            subtotal += lineTotal;
-            if (item.taxCode && item.taxCode.includes('16%')) {
-                tax += lineTotal * 0.16;
+            
+            let taxRate = 0;
+            const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
+            const selectedTax = taxCodes.find(tc => 
+                tc.id === item.taxCode || 
+                tc.name.toLowerCase() === itemTaxCode ||
+                (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
+                (itemTaxCode === 'exempt' && tc.name === 'Exempt')
+            );
+            
+            if (selectedTax) {
+                taxRate = parseFloat(selectedTax.rate) / 100;
+            } else {
+                // Fallback for historical data - check if it looks like it should be 16%
+                if (itemTaxCode.includes('16') || itemTaxCode.includes('vat') || !itemTaxCode) {
+                    const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
+                    taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+                } else {
+                    taxRate = 0; // Default to 0 for unknown non-empty tax codes
+                }
+            }
+
+            if (isTaxInclusive) {
+                const lineTax = lineTotal - (lineTotal / (1 + taxRate));
+                tax += lineTax;
+                subtotal += (lineTotal - lineTax);
+            } else {
+                subtotal += lineTotal;
+                tax += lineTotal * taxRate;
             }
         });
-        return { subtotal, tax, total: creditNote.amount, costOfSales: creditNote.costOfSales || 0 };
-    }, [creditNote]);
+        return { subtotal, tax, total: parseFloat(creditNote.amount) || 0, costOfSales: parseFloat(creditNote.costOfSales) || 0 };
+    }, [creditNote, taxCodes]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -65,6 +118,8 @@ const ViewCreditNoteView = () => {
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    if (isLoading) return <div className="p-20 text-center font-black uppercase tracking-[0.3em] text-slate-400 animate-pulse">Loading Document...</div>;
 
     if (!creditNote) return <div className="p-8 text-center text-slate-500 font-black uppercase tracking-widest">Credit Note not found.</div>;
 
@@ -93,34 +148,34 @@ const ViewCreditNoteView = () => {
                         <button onClick={() => window.print()} className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
                             <Printer size={14} /> Print
                         </button>
-                        <button 
+                        <button
                             onClick={async () => {
                                 if (!pdfRef.current) return;
                                 const html2canvas = (await import('html2canvas')).default;
                                 const jsPDF = (await import('jspdf')).jsPDF;
-                                
+
                                 const element = pdfRef.current;
                                 const originalStyle = element.getAttribute('style') || '';
                                 element.style.maxWidth = 'none';
                                 element.style.width = '850px';
-                                
+
                                 const canvas = await html2canvas(element, {
                                     scale: 2,
                                     useCORS: true,
                                     backgroundColor: '#ffffff'
                                 });
-                                
+
                                 element.setAttribute('style', originalStyle);
-                                
+
                                 const imgData = canvas.toDataURL('image/png');
                                 const pdf = new jsPDF('p', 'mm', 'a4');
                                 const imgProps = pdf.getImageProperties(imgData);
                                 const pdfWidth = pdf.internal.pageSize.getWidth();
                                 const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                                
+
                                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
                                 pdf.save(`${creditNote.reference || 'CreditNote'}.pdf`);
-                            }} 
+                            }}
                             className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
                         >
                             <Download size={14} /> PDF
@@ -261,7 +316,7 @@ const ViewCreditNoteView = () => {
                                 <span className="font-semibold">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center text-gray-500">
-                                <span className="text-[11px] font-bold uppercase tracking-widest">Tax (16%)</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">Tax Component</span>
                                 <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2">

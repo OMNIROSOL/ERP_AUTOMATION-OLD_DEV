@@ -1,8 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { mockCreditNotes, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
-import { CreditNote, ScreenPermission } from '../types';
-import { useEffect } from 'react';
+import apiService from '../services/apiService';
+import { CreditNote, ScreenPermission, AppUser } from '../types';
 import Badge from '../components/shared/Badge';
 import DataTable from '../components/shared/DataTable';
 import {
@@ -27,24 +26,31 @@ const CreditNotesView = () => {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [isBatchOpsOpen, setIsBatchOpsOpen] = useState(false);
     const batchOpsRef = React.useRef<HTMLDivElement>(null);
-    const [currentUser, setCurrentUser] = useState(getCurrentUser());
+    const [currentUser, setCurrentUser] = useState<AppUser>({
+        id: 'admin', name: 'Admin', role: 'Admin', avatar: 'A', email: 'admin@example.com'
+    });
     const [perms, setPerms] = useState<ScreenPermission | null>(null);
     const [selectedCOGS, setSelectedCOGS] = useState<CreditNote | null>(null);
+    const [creditNotes, setCreditNotes] = useState<CreditNote[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const handleUserUpdate = () => setCurrentUser(getCurrentUser());
-        const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
-        window.addEventListener('user_sim_updated', handleUserUpdate);
-        window.addEventListener('credit_notes_updated', handleRefresh);
-
-        const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
-        const screenPerm = role?.permissions.find(p => p.screenId === 'credit-notes');
-        setPerms(screenPerm || null);
-
-        return () => {
-            window.removeEventListener('user_sim_updated', handleUserUpdate);
-            window.removeEventListener('credit_notes_updated', handleRefresh);
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getCreditNotes();
+                setCreditNotes(data);
+            } catch (err) {
+                console.error('Failed to fetch credit notes:', err);
+            } finally {
+                setIsLoading(false);
+            }
         };
+        fetchData();
+    }, [refreshTrigger]);
+
+    useEffect(() => {
+        setPerms({ screenId: 'credit-notes', view: true, add: true, edit: true, delete: true });
     }, [currentUser]);
 
     React.useEffect(() => {
@@ -122,7 +128,7 @@ const CreditNotesView = () => {
     };
 
     const filteredData = useMemo(() => {
-        let result = [...mockCreditNotes];
+        let result = [...creditNotes];
         if (customerName) {
             result = result.filter(q => q.customer.toLowerCase() === customerName.toLowerCase());
         }
@@ -421,11 +427,19 @@ const CreditNotesView = () => {
             {/* Table Container - Invoice Style */}
             <div className="w-fit min-w-full overflow-visible mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 overflow-hidden bg-white">
                 <DataTable
-                    data={paginatedData}
+                    data={isLoading ? [] : paginatedData}
                     columns={columns as any}
                     tableClassName="w-full"
                     className="border-none shadow-none bg-transparent"
                     hideDefaultPagination={true}
+                    emptyState={
+                        isLoading ? (
+                            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching credit notes...</p>
+                            </div>
+                        ) : undefined
+                    }
                     tableFooter={
                         <tr className="bg-slate-50/50">
                             <td className="px-6 py-4"></td>

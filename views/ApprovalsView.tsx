@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { mockSalesQuotes, saveSalesQuotes } from '../mockData';
+import apiService from '../services/apiService';
 import { ApprovalRequest } from '../types';
 import {
     Check,
@@ -24,15 +24,18 @@ import {
     LayoutGrid
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { formatTimestamp } from '../utils/dateUtils';
 import DataTable from '../components/shared/DataTable';
 import Badge from '../components/shared/Badge';
 
-const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[], setRequests: React.Dispatch<React.SetStateAction<ApprovalRequest[]>> }) => {
+const ApprovalsView = () => {
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [sortColumn, setSortColumn] = useState<string>('Date');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+    const [requests, setRequests] = useState<ApprovalRequest[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     // Pagination & UI States
     const [pageSize, setPageSize] = useState(50);
@@ -53,17 +56,80 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [openMenuId, isBatchOpsOpen]);
 
-    const handleAction = (id: string, status: 'Approved' | 'Rejected') => {
-        const request = requests.find(r => r.id === id);
-        if (request) {
-            const quoteIndex = mockSalesQuotes.findIndex(q => q.id === request.quoteId);
-            if (quoteIndex !== -1) {
-                mockSalesQuotes[quoteIndex].status = status === 'Approved' ? 'Active' : 'Inactive';
-                saveSalesQuotes(mockSalesQuotes);
-            }
+    const fetchData = async () => {
+        setIsLoading(true);
+        try {
+            const [quotes, orders] = await Promise.all([
+                apiService.getQuotes(),
+                apiService.getOrders()
+            ]);
+
+            const pendingQuotes = quotes.filter((q: any) => q.status === 'Pending Approval');
+            const pendingOrders = orders.filter((o: any) => o.status === 'Pending Approval');
+
+            const mappedQuotes: ApprovalRequest[] = pendingQuotes.map((q: any) => {
+                const options = q.docOptions || {};
+                return {
+                    id: q.id,
+                    type: 'Quote',
+                    customer: q.customer?.name || 'Unknown',
+                    amount: parseFloat(q.amount || 0),
+                    currency: q.currency || q.customer?.currency?.split(' - ')[0] || 'ZMW',
+                    requestedBy: options.requestedBy || 'System',
+                    approver: 'Admin',
+                    reason: options.approvalReason || q.description || 'Margin Review Required',
+                    status: 'Pending',
+                    date: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    reference: q.reference,
+                    timestamp: formatTimestamp(q.createdAt)
+                };
+            });
+
+            const mappedOrders: ApprovalRequest[] = pendingOrders.map((o: any) => {
+                const options = o.docOptions || {};
+                return {
+                    id: o.id,
+                    type: 'Order',
+                    customer: o.customer?.name || o.customer || 'Unknown',
+                    amount: parseFloat(o.amount || 0),
+                    currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
+                    requestedBy: options.requestedBy || 'System',
+                    approver: 'Admin',
+                    reason: options.approvalReason || o.description || 'Stock/Margin Review Required',
+                    status: 'Pending',
+                    date: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    reference: o.reference,
+                    timestamp: formatTimestamp(o.createdAt)
+                };
+            });
+
+            setRequests([...mappedQuotes, ...mappedOrders]);
+        } catch (err) {
+            console.error('Failed to fetch approvals:', err);
+        } finally {
+            setIsLoading(false);
         }
-        setRequests(prev => prev.filter(r => r.id !== id));
-        alert(`Quote ${status === 'Approved' ? 'Approved' : 'Rejected'} successfully.`);
+    };
+
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const handleAction = async (id: string, status: 'Approved' | 'Rejected', type: 'Quote' | 'Order') => {
+        try {
+            if (type === 'Quote') {
+                const newStatus = status === 'Approved' ? 'Active' : 'Inactive';
+                await apiService.updateQuoteStatus(id, newStatus);
+            } else {
+                const newStatus = status === 'Approved' ? 'Ordered' : 'Inactive';
+                await apiService.updateOrderStatus(id, newStatus);
+            }
+            setRequests(prev => prev.filter(r => r.id !== id));
+            alert(`${type} ${status === 'Approved' ? 'Approved' : 'marked as Inactive'} successfully.`);
+        } catch (err) {
+            console.error('Failed to update status:', err);
+            alert('Failed to update status.');
+        }
     };
 
     const handleSort = (column: string) => {
@@ -81,20 +147,19 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
     };
 
     const handleCopyToClipboard = () => {
-        const header = "Date\tTimestamp\tCustomer\tQuote ID\tAmount\tRequested By\tReason\tStatus";
+        const header = "Date\tTimestamp\tCustomer\tType\tReference\tAmount\tRequested By\tReason\tStatus";
         const rows = filteredRequests.map(r =>
-            `${r.date}\t${r.timestamp || '—'}\t${r.customer}\t${r.quoteId}\t${r.amount}\t${r.requestedBy}\t${r.reason}\t${r.status}`
+            `${r.date}\t${r.timestamp || '—'}\t${r.customer}\t${r.type}\t${r.reference}\t${r.amount}\t${r.requestedBy}\t${r.reason}\t${r.status}`
         ).join('\n');
         navigator.clipboard.writeText(`${header}\n${rows}`).then(() => alert('Exported to clipboard'));
     };
 
     const filteredRequests = useMemo(() => {
+        const query = searchQuery.toLowerCase();
         const result = requests.filter(r => {
-            const query = searchQuery.toLowerCase();
             return (
                 r.customer.toLowerCase().includes(query) ||
                 (r.reference && r.reference.toLowerCase().includes(query)) ||
-                r.quoteId.toLowerCase().includes(query) ||
                 r.reason.toLowerCase().includes(query) ||
                 r.requestedBy.toLowerCase().includes(query)
             );
@@ -160,12 +225,12 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
                     </button>
 
                     {openMenuId === request.id && (
-                        <div 
+                        <div
                             onMouseDown={(e) => e.stopPropagation()}
                             className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-44 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 p-1.5 animate-in fade-in zoom-in-95 duration-200"
                         >
                             <button
-                                onClick={() => handleAction(request.id, 'Approved')}
+                                onClick={() => handleAction(request.id, 'Approved', request.type)}
                                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-emerald-600 hover:bg-emerald-50 text-[11px] font-black uppercase tracking-wider transition-colors"
                             >
                                 <div className="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center">
@@ -174,7 +239,7 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
                                 Approve
                             </button>
                             <button
-                                onClick={() => handleAction(request.id, 'Rejected')}
+                                onClick={() => handleAction(request.id, 'Rejected', request.type)}
                                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-rose-600 hover:bg-rose-50 text-[11px] font-black uppercase tracking-wider transition-colors mt-0.5"
                             >
                                 <div className="w-5 h-5 rounded-md bg-rose-100 flex items-center justify-center">
@@ -184,7 +249,7 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
                             </button>
                             <div className="h-px bg-slate-100 my-1 mx-2" />
                             <button
-                                onClick={() => navigate(`/sales-quotes/view/${request.quoteId}`)}
+                                onClick={() => navigate(request.type === 'Quote' ? `/sales-quotes/view/${request.id}` : `/sales-orders/view/${request.id}`)}
                                 className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:bg-slate-50 text-[11px] font-black uppercase tracking-wider transition-colors"
                             >
                                 <div className="w-5 h-5 rounded-md bg-slate-100 flex items-center justify-center">
@@ -220,7 +285,7 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
             className: 'text-right',
             accessor: (r: ApprovalRequest) => (
                 <div className="flex flex-col items-end">
-                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{r.currency}</span>
+                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">{r.currency || 'ZMW'}</span>
                     <span className="text-[14px] font-black text-slate-900 tracking-tighter">
                         {r.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
@@ -242,7 +307,7 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
         {
             id: 'Reason',
             header: 'Reason',
-            className: 'max-w-[200px]',
+            className: 'max-w-[300px]',
             accessor: (r: ApprovalRequest) => (
                 <div className="flex items-start gap-2">
                     <AlertCircle size={14} className="text-amber-400 mt-0.5 shrink-0" />
@@ -418,3 +483,4 @@ const ApprovalsView = ({ requests, setRequests }: { requests: ApprovalRequest[],
 };
 
 export default ApprovalsView;
+

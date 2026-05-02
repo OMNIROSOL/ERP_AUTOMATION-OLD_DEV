@@ -1,19 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, X, FileX, ArrowLeft, Trash2 } from 'lucide-react';
-import { mockInventoryWriteOffs, mockInventoryItems, getAccounts, getInventoryLocations } from '../mockData';
-import { InventoryWriteOff, Division } from '../types';
 import apiService from '../services/apiService';
+import { InventoryWriteOff, Division, InventoryItem, Account } from '../types';
 
 const NewInventoryWriteOffView = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = !!id;
-  const existingWriteOff = isEdit ? mockInventoryWriteOffs.find(wo => wo.id === id) : null;
-
-  const [formData, setFormData] = useState<Partial<InventoryWriteOff>>(existingWriteOff || {
+  const [isLoading, setIsLoading] = useState(true);
+  const [formData, setFormData] = useState<Partial<InventoryWriteOff>>({
     date: new Date().toISOString().split('T')[0],
-    reference: `WO-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
+    reference: '',
     inventoryItem: '',
     qty: 0,
     amount: 0,
@@ -23,10 +21,39 @@ const NewInventoryWriteOffView = () => {
   });
 
   const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+  const [availableItems, setAvailableItems] = useState<InventoryItem[]>([]);
+  const [expenseAccounts, setExpenseAccounts] = useState<Account[]>([]);
 
-  React.useEffect(() => {
-    apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
-  }, []);
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [divs, items, accounts, nextRef] = await Promise.all([
+          apiService.getDivisions(),
+          apiService.getItems(),
+          apiService.getAccounts(),
+          !id ? apiService.getNextReference('inventory-write-off').catch(() => `WO-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`) : Promise.resolve('')
+        ]);
+        setAvailableDivisions(divs);
+        setAvailableItems(items);
+        setExpenseAccounts(accounts.filter((a: any) => a.type === 'Expense'));
+
+        if (id) {
+          const writeOff = await apiService.getInventoryWriteOff(id);
+          if (writeOff) {
+            setFormData(writeOff);
+          }
+        } else if (nextRef) {
+          setFormData(prev => ({ ...prev, reference: nextRef }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch initial data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -35,7 +62,7 @@ const NewInventoryWriteOffView = () => {
 
   const handleItemSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedItemName = e.target.value;
-    const item = mockInventoryItems.find(mi => `${mi.itemCode} - ${mi.itemName}` === selectedItemName);
+    const item = availableItems.find(mi => `${mi.itemCode} - ${mi.itemName}` === selectedItemName);
     setFormData(prev => ({
       ...prev,
       inventoryItem: selectedItemName,
@@ -45,7 +72,7 @@ const NewInventoryWriteOffView = () => {
 
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const qty = Number(e.target.value);
-    const item = mockInventoryItems.find(mi => `${mi.itemCode} - ${mi.itemName}` === formData.inventoryItem);
+    const item = availableItems.find(mi => `${mi.itemCode} - ${mi.itemName}` === formData.inventoryItem);
     setFormData(prev => ({
       ...prev,
       qty,
@@ -53,17 +80,35 @@ const NewInventoryWriteOffView = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Saving inventory write-off:', formData);
-    navigate('/inventory-write-offs');
+    try {
+      if (id) {
+        await apiService.updateInventoryWriteOff(id, formData);
+      } else {
+        await apiService.createInventoryWriteOff(formData);
+      }
+      navigate('/inventory-write-offs');
+    } catch (err) {
+      console.error('Failed to save write-off:', err);
+      alert('Failed to save inventory write-off to database');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing write-off form...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center justify-between border-b border-gray-100 pb-6">
         <div className="flex items-center gap-4">
-          <button 
+          <button
             onClick={() => navigate('/inventory-write-offs')}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
           >
@@ -135,7 +180,7 @@ const NewInventoryWriteOffView = () => {
                   required
                 >
                   <option value="">Select Item to Write-off</option>
-                  {mockInventoryItems.map(mi => (
+                  {availableItems.map(mi => (
                     <option key={mi.id} value={`${mi.itemCode} - ${mi.itemName}`}>
                       {mi.itemCode} - {mi.itemName} (Available: {mi.qtyOnHand})
                     </option>
@@ -197,7 +242,7 @@ const NewInventoryWriteOffView = () => {
                   required
                 >
                   <option value="">Select Expense Account</option>
-                  {getAccounts().filter(a => a.type === 'Expense').map(acc => (
+                  {expenseAccounts.map(acc => (
                     <option key={acc.id} value={acc.name}>{acc.name}</option>
                   ))}
                 </select>

@@ -41,6 +41,7 @@ interface DataTableProps<T> {
   stickyHeader?: boolean; // Add stickyHeader prop
   disableInternalScroll?: boolean; // Add prop to disable internal overflow wrapper
   renderFilterRow?: () => React.ReactNode; // New prop for per-column filter row
+  emptyMessage?: React.ReactNode; // New prop for custom empty message
 }
 
 const DataTable = <T extends { id?: string | number }>({
@@ -62,6 +63,7 @@ const DataTable = <T extends { id?: string | number }>({
   stickyHeader,
   disableInternalScroll,
   renderFilterRow,
+  emptyMessage,
 }: DataTableProps<T>) => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -157,7 +159,7 @@ const DataTable = <T extends { id?: string | number }>({
                 <td colSpan={columns.length + 1} className="px-8 py-20 text-center">
                   <div className="flex flex-col items-center justify-center space-y-3 opacity-40">
                     <Search size={48} className="text-slate-300" />
-                    <p className="text-lg font-bold text-slate-400">No matching records found</p>
+                    <p className="text-lg font-bold text-slate-400">{emptyMessage || "No matching records found"}</p>
                   </div>
                 </td>
               </tr>

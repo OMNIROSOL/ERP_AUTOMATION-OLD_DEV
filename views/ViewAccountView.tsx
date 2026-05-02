@@ -1,13 +1,39 @@
 import React from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { mockAccounts } from '../mockData';
+import apiService from '../services/apiService';
+import { Account } from '../types';
 
 const ViewAccountView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const account = mockAccounts.find(a => a.id === id);
+    const [account, setAccount] = React.useState<Account | null>(null);
+    const [isLoading, setIsLoading] = React.useState(true);
 
-    if (!account) return <div className="p-8 text-center text-gray-500">Account not found.</div>;
+    React.useEffect(() => {
+        const fetchAccount = async () => {
+            setIsLoading(true);
+            try {
+                const data = await apiService.getAccount(id!);
+                setAccount(data);
+            } catch (err) {
+                console.error('Failed to fetch account:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        if (id) fetchAccount();
+    }, [id]);
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing account view...</p>
+            </div>
+        );
+    }
+
+    if (!account) return <div className="p-8 text-center text-gray-500 font-black uppercase tracking-widest">Account not found.</div>;
 
     return (
         <div className="bg-[#f3f4f6] min-h-full flex flex-col">

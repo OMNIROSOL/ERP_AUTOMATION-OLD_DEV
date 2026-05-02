@@ -8,19 +8,29 @@ import {
   ChevronLeft,
   AlertCircle
 } from 'lucide-react';
-import { getFooters, saveFooters } from '../mockData';
+import apiService from '../services/apiService';
 import { DocumentFooter } from '../types';
 import Card from '../components/shared/Card';
 
 const SettingsFootersView = () => {
   const navigate = useNavigate();
-  const [footers, setFooters] = useState<DocumentFooter[]>(getFooters());
+  const [footers, setFooters] = useState<DocumentFooter[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
-    const handleUpdate = () => setFooters(getFooters());
-    window.addEventListener('footers_updated', handleUpdate);
-    return () => window.removeEventListener('footers_updated', handleUpdate);
+    const fetchFooters = async () => {
+      setIsLoading(true);
+      try {
+        const data = await apiService.getFooters();
+        setFooters(data);
+      } catch (err) {
+        console.error('Failed to fetch footers:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchFooters();
   }, []);
 
   const handleAddFooter = () => {
@@ -38,17 +48,55 @@ const SettingsFootersView = () => {
     setHasChanges(true);
   };
 
-  const handleDeleteFooter = (id: string) => {
+  const handleDeleteFooter = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this footer option?')) {
+      if (!id.startsWith('f-')) {
+        // Real database ID
+        try {
+          await apiService.deleteFooter(id);
+        } catch (err) {
+          console.error('Failed to delete footer:', err);
+          alert('Failed to delete footer from database');
+          return;
+        }
+      }
       setFooters(footers.filter(f => f.id !== id));
-      setHasChanges(true);
+      setHasChanges(false); // Deleted immediately
     }
   };
 
-  const handleSave = () => {
-    saveFooters(footers);
-    setHasChanges(false);
+  const handleSave = async () => {
+    setIsLoading(true);
+    try {
+      // Logic for saving multiple footers (upsert)
+      await Promise.all(footers.map(footer => {
+        if (footer.id.startsWith('f-')) {
+          const { id, ...data } = footer;
+          return apiService.createFooter(data);
+        } else {
+          return apiService.updateFooter(footer.id, footer);
+        }
+      }));
+      setHasChanges(false);
+      // Refresh to get real IDs
+      const data = await apiService.getFooters();
+      setFooters(data);
+    } catch (err) {
+      console.error('Failed to save footers:', err);
+      alert('Failed to save footers to database');
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+        <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading footer settings...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500 max-w-5xl mx-auto">

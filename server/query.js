@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function run() { const quotes = await prisma.salesQuote.findMany({ include: { items: true }, take: 1, orderBy: { createdAt: 'desc' } }); console.log(JSON.stringify(quotes, null, 2)); } run();

@@ -1,129 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { getDeliveryNotes, getCustomers, getCustomerDeliveryDetails, mockInventory, mockInvoices, saveInvoices, getInvoices, getFooters } from '../mockData';
-import Card from '../components/shared/Card';
-import Button from '../components/shared/Button';
-import {
-    Save,
-    X,
-    Calendar,
-    Hash,
-    MapPin,
-    User,
-    FileText,
-    Plus,
-    Trash2,
-    Copy,
-    ChevronLeft,
-    Briefcase,
-    Layers,
-    ChevronRight,
-    Package,
-    Clock,
-    ChevronDown,
-    ChevronUp,
-    AlertTriangle,
-    CheckCircle2,
-    Settings,
-    Image
-} from 'lucide-react';
-import { cn } from '../utils/cn';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../components/shared/Tooltip";
-
-const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, readOnly, name }: any) => (
-    <div className="space-y-2">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
-        <div className="relative group">
-            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
-            <input
-                type={type}
-                value={value}
-                onChange={onChange}
-                placeholder={placeholder}
-                readOnly={readOnly}
-                name={name}
-                className={`w-full bg-slate-50 border ${error ? 'border-rose-500 ring-4 ring-rose-500/10' : 'border-slate-200'} rounded-2xl ${Icon ? 'pl-11' : 'px-5'} py-3 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 ${error ? 'focus:ring-rose-500/10 focus:border-rose-500' : 'focus:ring-indigo-500/10 focus:border-indigo-500'} transition-all ${readOnly ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
-            />
-        </div>
-        {error && <p className="text-[10px] font-bold text-rose-500 ml-1 mt-1 uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-300">{error}</p>}
-    </div>
-);
-
-const SelectField = ({ label, value, onChange, Icon, name, children }: any) => (
-    <div className="space-y-2">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
-        <div className="relative group">
-            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
-            <select
-                value={value}
-                onChange={onChange}
-                name={name}
-                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
-            >
-                {children}
-            </select>
-            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-        </div>
-    </div>
-);
-
-const NumericInputField = ({ label, value, onChange, Icon, min = 0 }: any) => (
-    <div className="space-y-2">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
-        <div className="relative group">
-            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
-            <input
-                type="number"
-                min={min}
-                value={value}
-                onChange={onChange}
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-12 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-            />
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col -space-y-px">
-                <button
-                    onClick={() => onChange({ target: { value: (parseInt(value || 0) + 1).toString() } })}
-                    className="p-1 hover:text-indigo-600 text-slate-300 transition-colors"
-                >
-                    <ChevronUp size={12} />
-                </button>
-                <button
-                    onClick={() => onChange({ target: { value: Math.max(min, parseInt(value || 0) - 1).toString() } })}
-                    className="p-1 hover:text-indigo-600 text-slate-300 transition-colors"
-                >
-                    <ChevronDown size={12} />
-                </button>
-            </div>
-        </div>
-    </div>
-);
-
-const TextareaField = ({ label, value, onChange, placeholder, rows = 3 }: any) => (
-    <div className="space-y-2">
-        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
-        <textarea
-            value={value}
-            onChange={onChange}
-            rows={rows}
-            placeholder={placeholder}
-            className="w-full bg-slate-50 border border-slate-200 rounded-[24px] px-5 py-4 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none"
-        ></textarea>
-    </div>
-);
-
-// Helper to convert DD.MM.YYYY to YYYY-MM-DD for input
-const convertToInputDate = (dateStr: string) => {
-    if (!dateStr || !dateStr.includes('.')) return dateStr;
-    const [d, m, y] = dateStr.split('.');
-    return `${y}-${m}-${d}`;
-};
-
-// Helper to convert YYYY-MM-DD back to DD.MM.YYYY for data
-const convertToDisplayDate = (dateStr: string) => {
-    if (!dateStr || !dateStr.includes('-')) return dateStr;
-    const [y, m, d] = dateStr.split('-');
-    return `${d}.${m}.${y}`;
-};
+import apiService from '../services/apiService';
+import { Customer, InventoryItem, FooterTemplate } from '../types';
 
 const NewDeliveryNoteView = () => {
     const navigate = useNavigate();
@@ -152,139 +30,111 @@ const NewDeliveryNoteView = () => {
         footerValue: 'Goods received in good condition. Signature required.'
     });
     const [showOptionsArea, setShowOptionsArea] = useState(false);
-
-    const getNextReference = () => {
-        const notes = getDeliveryNotes();
-        const refs = notes
-            .map((n: any) => n.reference)
-            .filter((ref: string) => ref && ref.startsWith('DN-'))
-            .map((ref: string) => parseInt(ref.split('-')[1]) || 0);
-
-        const nextNum = refs.length > 0 ? Math.max(...refs) + 1 : 1000;
-        return `DN-${nextNum.toString().padStart(4, '0')}`;
-    };
+    const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+    const [footers, setFooters] = useState<FooterTemplate[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
 
     useEffect(() => {
-        if (!isEditing && !formData.reference) {
-            setFormData(prev => ({ ...prev, reference: getNextReference() }));
-        }
-    }, [isEditing]);
+        const fetchData = async () => {
+            setIsLoading(true);
+            try {
+                const [customers, itemsData, footersData] = await Promise.all([
+                    apiService.getCustomers(),
+                    apiService.getItems(),
+                    apiService.getFooters()
+                ]);
+                setAllCustomers(customers);
+                setInventoryItems(itemsData);
+                setFooters(footersData);
 
-    const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '0' }]);
+                if (isEditing && id) {
+                    const note = await apiService.getDeliveryNote(id);
+                    if (note) {
+                        setFormData({
+                            deliveryDate: note.deliveryDate ? convertToInputDate(note.deliveryDate) : new Date().toISOString().split('T')[0],
+                            customer: note.customer || '',
+                            deliveryAddress: note.deliveryAddress || '',
+                            description: note.description || '',
+                            reference: note.reference || '',
+                            inventoryLocation: note.inventoryLocation || 'Default Inventory Location',
+                            orderNumber: note.orderNumber || '',
+                            invoiceNumber: note.invoiceNumber || '',
+                            status: note.status || 'Pending',
+                        });
+                        setUseManualRef(true);
+                        if (note.customTitle) setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: note.customTitle }));
+                        if (note.footer) setOptions(prev => ({ ...prev, footers: true, footerValue: note.footer }));
+                        if (note.columnLineNumber !== undefined) setOptions(prev => ({ ...prev, columnLineNumber: note.columnLineNumber }));
+                        if (note.items) {
+                            setItems(note.items.map((it: any) => ({
+                                id: it.id || Math.random(),
+                                item: it.item || '',
+                                description: it.description || '',
+                                qty: (it.qty || 0).toString(),
+                                unit: it.unit || ''
+                            })));
+                        }
+                    }
+                } else {
+                    const nextRef = await apiService.getNextReference('delivery');
+                    setFormData(prev => ({ ...prev, reference: nextRef }));
+                }
+            } catch (err) {
+                console.error('Failed to fetch data:', err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, [id, isEditing]);
 
-    // Context fetching from URL
+    // Context fetching from URL for New Delivery Note
     useEffect(() => {
         const query = new URLSearchParams(location.search);
-        const customerId = query.get('customerId');
-        const itemIds = query.get('itemIds')?.split(',');
         const invoiceId = query.get('invoiceId') || query.get('copyFrom');
 
         if (invoiceId && !isEditing) {
-            const invoice = mockInvoices.find(i => i.id === invoiceId || i.reference === invoiceId);
-            if (invoice) {
-                const customerData = getCustomers().find(c => c.name === invoice.customer);
-                setFormData(prev => ({
-                    ...prev,
-                    customer: invoice.customer,
-                    deliveryAddress: (invoice as any).billingAddress || customerData?.billingAddress || '',
-                    invoiceNumber: invoice.reference,
-                    orderNumber: invoice.salesOrder || '',
-                    reference: invoice.reference, // Auto-filling reference from invoice
-                    description: `Shipment for Invoice ${invoice.reference}`
-                }));
-                setUseManualRef(true); // Ensure manual ref is enabled so the pre-filled reference is displayed
-                if (invoice.items) {
-                    setItems(invoice.items.map((it: any, idx: number) => ({
-                        id: Date.now() + idx,
-                        item: it.item,
-                        description: it.description || '',
-                        qty: (it.qty || 0).toString()
-                    })));
-                }
-                return;
-            }
-        }
-
-        if (customerId && !isEditing) {
-            const customers = getCustomers();
-            const customer = customers.find(c => c.id === customerId);
-            if (customer) {
-                setFormData(prev => ({
-                    ...prev,
-                    customer: customer.name,
-                    deliveryAddress: `Plot ${Math.floor(Math.random() * 1000)}, Industrial Area, Ndola` // Mock address
-                }));
-
-                if (itemIds && itemIds.length > 0) {
-                    const deliveryItems = getCustomerDeliveryDetails(customer.name);
-                    const selectedItems = deliveryItems
-                        .filter(it => itemIds.includes(it.item))
-                        .map((it, idx) => ({
-                            id: Date.now() + idx,
-                            item: it.item,
-                            description: `Fulfillment: ${it.item}`,
-                            qty: Math.abs(it.qty).toString()
+            const fetchInvoiceContext = async () => {
+                try {
+                    const invoice = await apiService.getInvoice(invoiceId);
+                    if (invoice) {
+                        setFormData(prev => ({
+                            ...prev,
+                            customer: invoice.customer?.name || invoice.customerName || '',
+                            deliveryAddress: invoice.billingAddress || invoice.customer?.billingAddress || '',
+                            invoiceNumber: invoice.reference,
+                            orderNumber: invoice.salesOrder || '',
+                            description: `Shipment for Invoice ${invoice.reference}`
                         }));
-                    if (selectedItems.length > 0) {
-                        setItems(selectedItems);
+                        if (invoice.items) {
+                            setItems(invoice.items.map((it: any, idx: number) => ({
+                                id: Date.now() + idx,
+                                item: it.itemName || it.item,
+                                description: it.description || '',
+                                qty: (it.qty || 0).toString(),
+                                unit: it.unitName || it.unit || ''
+                            })));
+                        }
                     }
+                } catch (err) {
+                    console.error('Failed to fetch invoice for context:', err);
                 }
-            }
+            };
+            fetchInvoiceContext();
         }
     }, [location.search, isEditing]);
-
-    useEffect(() => {
-        if (id) {
-            const notes = getDeliveryNotes();
-            const note = notes.find((n: any) => n.id === id || n.noteId === id);
-            if (note) {
-                setFormData({
-                    deliveryDate: convertToInputDate(note.deliveryDate) || new Date().toISOString().split('T')[0],
-                    customer: note.customer || '',
-                    deliveryAddress: (note as any).deliveryAddress || '',
-                    description: note.description || '',
-                    reference: note.reference || '',
-                    inventoryLocation: (note as any).inventoryLocation || 'Default Inventory Location',
-                    orderNumber: (note as any).orderNumber || note.salesOrder || '',
-                    invoiceNumber: note.invoiceNumber || '',
-                    status: note.status || 'Pending',
-                });
-                setUseManualRef(true); // Default to manual when editing to show original ref
-                if (note.customTitle) {
-                    setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: note.customTitle }));
-                }
-                if (note.footer) {
-                    setOptions(prev => ({ ...prev, footers: true, footerValue: note.footer }));
-                }
-                if (note.columnLineNumber !== undefined) {
-                    setOptions(prev => ({ ...prev, columnLineNumber: note.columnLineNumber }));
-                }
-                if (note.items) {
-                    setItems(note.items.map((it: any) => ({
-                        id: it.id || Math.random(),
-                        item: it.item || '',
-                        description: it.description || '',
-                        qty: Math.abs(parseFloat(it.qty) || 0).toString()
-                    })));
-                }
-            }
-        }
-    }, [id]);
-
-    const handleInputChange = (e: any) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
 
     const updateItem = (itemId: number, field: string, value: string) => {
         setItems(items.map(item => {
             if (item.id === itemId) {
                 const updated = { ...item, [field]: value };
                 if (field === 'item') {
-                    const invItem = (mockInventory as any)[value];
+                    const invItem = inventoryItems.find(i => i.itemName === value || i.itemCode === value);
                     if (invItem) {
-                        updated.description = value;
-                        updated.unit = invItem.unit;
+                        updated.description = invItem.description || value;
+                        updated.unit = invItem.unitName || '';
                     }
                 }
                 return updated;
@@ -293,19 +143,18 @@ const NewDeliveryNoteView = () => {
         }));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!formData.customer) {
             alert('Please select a customer');
             return;
         }
 
-        const newNote = {
-            id: id || Date.now().toString(),
+        const noteData = {
             deliveryDate: convertToDisplayDate(formData.deliveryDate),
             customer: formData.customer,
             deliveryAddress: formData.deliveryAddress,
             description: formData.description,
-            reference: formData.reference || getNextReference(),
+            reference: formData.reference,
             inventoryLocation: formData.inventoryLocation,
             orderNumber: formData.orderNumber,
             invoiceNumber: formData.invoiceNumber,
@@ -313,37 +162,44 @@ const NewDeliveryNoteView = () => {
                 id: it.id,
                 item: it.item,
                 description: it.description,
-                qty: it.qty
+                qty: parseFloat(it.qty) || 0,
+                unit: it.unit
             })),
             status: formData.status,
             customTitle: options.customTitle ? options.customTitleValue : undefined,
             footer: options.footers ? options.footerValue : undefined,
-            columnLineNumber: options.columnLineNumber,
-            timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase()
+            columnLineNumber: options.columnLineNumber
         };
 
-        const existingNotes = JSON.parse(localStorage.getItem('delivery_notes_data') || '[]');
-
-        let updatedNotes;
-        if (isEditing) {
-            updatedNotes = existingNotes.map((n: any) => n.id === id ? newNote : n);
-            // If not found in localStorage (it's from mockData), add to localStorage
-            if (!existingNotes.some((n: any) => n.id === id)) {
-                updatedNotes = [newNote, ...existingNotes];
+        try {
+            if (isEditing && id) {
+                await apiService.updateDeliveryNote(id, noteData);
+            } else {
+                await apiService.createDeliveryNote(noteData);
             }
-        } else {
-            updatedNotes = [newNote, ...existingNotes];
+            navigate('/delivery-notes');
+        } catch (err) {
+            console.error('Failed to save delivery note:', err);
+            alert('Failed to save delivery note');
         }
-
-        localStorage.setItem('delivery_notes_data', JSON.stringify(updatedNotes));
-        window.dispatchEvent(new Event('storage'));
-        navigate('/delivery-notes');
     };
 
-    const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0' }]);
+    const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
     const deleteLine = (itemId: number) => items.length > 1 && setItems(items.filter(item => item.id !== itemId));
 
-    const allCustomers = useMemo(() => getCustomers(), []);
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing shipment details...</p>
+            </div>
+        );
+    }
+
+    const handleInputChange = (e: any) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
 
     const totalQty = useMemo(() => {
         return items.reduce((sum, item) => {
@@ -549,8 +405,8 @@ const NewDeliveryNoteView = () => {
                                                     className="w-full bg-transparent border-none p-0 text-sm font-bold text-indigo-600 outline-none appearance-none cursor-pointer"
                                                 >
                                                     <option value="">Select Item...</option>
-                                                    {Object.keys(mockInventory).map(name => (
-                                                        <option key={name} value={name}>{name}</option>
+                                                    {inventoryItems.map(i => (
+                                                        <option key={i.id} value={i.itemName}>{i.itemName}</option>
                                                     ))}
                                                 </select>
                                             </td>
@@ -575,11 +431,14 @@ const NewDeliveryNoteView = () => {
                                                         />
                                                         <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tight">{item.unit || 'PCS'}</span>
                                                     </div>
-                                                    {item.item && (mockInventory as any)[item.item] && (
-                                                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] border-t border-slate-100 pt-1 w-full text-right">
-                                                            Available: <span className="text-emerald-500 font-black">{((mockInventory as any)[item.item]?.stock || 0).toLocaleString()}</span> {item.unit || 'PCS'}
-                                                        </div>
-                                                    )}
+                                                    {(() => {
+                                                        const invItem = inventoryItems.find(i => i.itemName === item.item || i.itemCode === item.item);
+                                                        return invItem && (
+                                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] border-t border-slate-100 pt-1 w-full text-right">
+                                                                Available: <span className="text-emerald-500 font-black">{(invItem.qtyOnHand || 0).toLocaleString()}</span> {item.unit || 'PCS'}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-6">
@@ -689,9 +548,9 @@ const NewDeliveryNoteView = () => {
                                                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
                                             >
                                                 <option value="">-- Choose template --</option>
-                                                {getFooters().map(f => (
-                                                    <option key={f.id} value={f.id}>{f.name}</option>
-                                                ))}
+                                                    {footers.map(f => (
+                                                        <option key={f.id} value={f.id}>{f.name}</option>
+                                                    ))}
                                             </select>
                                             <textarea
                                                 value={options.footerValue}

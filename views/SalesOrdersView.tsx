@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, Link, useParams } from 'react-router-dom';
-import { mockSalesOrders, mockInvoices, saveSalesOrders, saveInvoices, getCurrentUser, getRoleById, initialRoleDefinitions } from '../mockData';
 import { SalesOrder, Invoice, ScreenPermission } from '../types';
 import apiService from '../services/apiService';
 import DataTable from '../components/shared/DataTable';
@@ -10,9 +9,10 @@ import {
     ChevronRight, ChevronLeft, Search, Plus,
     ShoppingCart, FileText, Check, X, MoreHorizontal,
     Copy, Trash2, Printer, ChevronDown, ChevronUp,
-    ChevronsLeft, ChevronsRight, Eye, Edit, ArrowUpDown, Calendar
+    ChevronsLeft, ChevronsRight, Eye, Edit, ArrowUpDown, Calendar, RefreshCw
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import { formatTimestamp } from '../utils/dateUtils';
 
 const SalesOrdersView = () => {
     const navigate = useNavigate();
@@ -27,20 +27,14 @@ const SalesOrdersView = () => {
     const [sortColumn, setSortColumn] = useState<string>('Order Date');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [statusFilter, setStatusFilter] = useState<'Active' | 'Invoiced' | 'Rejected' | 'Inactive' | 'All'>('Active');
     const batchOpsRef = useRef<HTMLDivElement>(null);
-    const [currentUser, setCurrentUser] = useState(getCurrentUser());
+    const [currentUser, setCurrentUser] = useState<any>({ role: 'Admin' });
     const [perms, setPerms] = useState<ScreenPermission | null>(null);
 
     useEffect(() => {
-        const handleUserUpdate = () => setCurrentUser(getCurrentUser());
-        window.addEventListener('user_sim_updated', handleUserUpdate);
-
-        const role = getRoleById(currentUser.roleId || '') || initialRoleDefinitions.find(r => r.name === currentUser.role);
-        const screenPerm = role?.permissions.find(p => p.screenId === 'sales-orders');
-        setPerms(screenPerm || null);
-
-        return () => window.removeEventListener('user_sim_updated', handleUserUpdate);
-    }, [currentUser]);
+        setPerms({ screenId: 'sales-orders', canView: true, canAdd: true, canEdit: true, canDelete: true } as ScreenPermission);
+    }, []);
 
     const [orders, setOrders] = useState<SalesOrder[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +48,9 @@ const SalesOrdersView = () => {
                 const mappedOrders = data.map((o: any) => ({
                     ...o,
                     customer: o.customer?.name || o.customer || 'Unknown',
-                    orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : ''
+                    currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
+                    orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    timestamp: formatTimestamp(o.createdAt)
                 }));
                 setOrders(mappedOrders);
             } catch (err) {
@@ -66,40 +62,37 @@ const SalesOrdersView = () => {
         fetchOrders();
     }, [refreshTrigger]);
 
-    const handleStatusChange = (id: string, newStatus: string, shouldNavigate: boolean = false) => {
-        const index = mockSalesOrders.findIndex(o => o.id === id);
-        if (index !== -1) {
-            const order = mockSalesOrders[index];
+    const handleStatusChange = async (order: any, newStatus: string, shouldNavigate: boolean = false) => {
+        try {
             const finalStatus = shouldNavigate ? 'Invoiced' : newStatus;
-            (mockSalesOrders[index] as any).status = finalStatus;
-            
-            // If moved to invoice, create a record in mockInvoices
+
+            // 1. Update order status in DB
+            await apiService.updateOrderStatus(order.id, finalStatus);
+
+            // 2. If moved to invoice, create invoice record in DB
             if (shouldNavigate) {
-                const newInvoice: Invoice = {
-                    id: `INV-${Date.now()}`,
-                    issueDate: new Date().toLocaleDateString('en-GB').replace(/\//g, '.'),
-                    dueDate: '30 Days',
+                const invoiceData = {
+                    customerId: order.customerId,
                     reference: order.reference,
-                    salesOrder: order.reference,
-                    customer: order.customer,
+                    grandTotal: order.amount,
+                    balanceDue: order.amount,
                     description: order.description,
-                    currency: order.currency,
-                    invoiceAmount: order.amount as number,
-                    balanceDue: order.amount as number,
-                    status: 'Coming due',
-                    items: order.items || [],
-                    timestamp: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase()
+                    items: (order.items || []).map((it: any) => ({
+                        itemId: it.itemId || it.item?.id,
+                        qty: parseFloat(it.qty),
+                        unitPrice: parseFloat(it.unitPrice),
+                        totalAmount: parseFloat(it.totalAmount)
+                    }))
                 };
-                mockInvoices.unshift(newInvoice);
-                saveInvoices(mockInvoices);
-                saveSalesOrders(mockSalesOrders);
-                setRefreshTrigger(prev => prev + 1);
+                await apiService.createInvoice(invoiceData);
                 navigate('/sales-invoices');
             } else {
-                saveSalesOrders(mockSalesOrders);
                 setRefreshTrigger(prev => prev + 1);
                 alert(`Order ${newStatus} successfully.`);
             }
+        } catch (err) {
+            console.error('Failed to update order status:', err);
+            alert('Failed to update status in database.');
         }
     };
 
@@ -141,7 +134,18 @@ const SalesOrdersView = () => {
     }, []);
 
     const filteredData = useMemo(() => {
-        let result = [...orders].filter(o => (o as any).status !== 'Invoiced' && (o as any).status !== 'Rejected');
+        let result = [...orders];
+
+        if (statusFilter === 'Active') {
+            result = result.filter(o => (o as any).status !== 'Invoiced' && (o as any).status !== 'Rejected' && (o as any).status !== 'Inactive');
+        } else if (statusFilter === 'Invoiced') {
+            result = result.filter(o => (o as any).status === 'Invoiced');
+        } else if (statusFilter === 'Rejected') {
+            result = result.filter(o => (o as any).status === 'Rejected');
+        } else if (statusFilter === 'Inactive') {
+            result = result.filter(o => (o as any).status === 'Inactive');
+        }
+        // If statusFilter is 'All', we don't filter by status
 
         // 1. Exact Customer Filter from URL Path
         if (customerName) {
@@ -181,7 +185,7 @@ const SalesOrdersView = () => {
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [searchQuery, customerName, refreshTrigger, sortColumn, sortDirection]);
+    }, [orders, searchQuery, customerName, refreshTrigger, sortColumn, sortDirection, statusFilter]);
 
     const totalPages = Math.ceil(filteredData.length / pageSize);
     const displayData = useMemo(() => {
@@ -239,7 +243,7 @@ const SalesOrdersView = () => {
     const handleCopyToClipboard = () => copyToClipboard(filteredData);
 
     const handleBatchCopy = () => {
-        const selectedOrders = mockSalesOrders.filter(o => selectedIds.includes(o.id));
+        const selectedOrders = orders.filter(o => selectedIds.includes(o.id));
         copyToClipboard(selectedOrders);
     };
 
@@ -294,7 +298,7 @@ const SalesOrdersView = () => {
                         onClick={() => navigate(`/sales-orders/view/${o.id}`)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
                         title="View Details"
-                      >
+                    >
                         <Eye size={14} />
                     </button>
                     {perms?.edit !== false && (
@@ -357,7 +361,7 @@ const SalesOrdersView = () => {
             className: 'whitespace-nowrap text-right',
             accessor: (o: any) => (
                 <div className="text-right">
-                    <span className="text-[10px] text-slate-400 font-bold mr-1">{o.currency || 'ZMW'}</span>
+                    <span className="text-[10px] text-slate-400 font-bold mr-1">{o.currency}</span>
                     <span className="font-black text-slate-900">
                         {parseFloat(o.amount as any || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
@@ -379,34 +383,34 @@ const SalesOrdersView = () => {
             header: 'Approval',
             className: 'whitespace-nowrap',
             accessor: (o: any) => (
-                        <div className="flex items-center gap-1.5 justify-center">
-                            {(o.status === 'Draft' || o.status === 'Pending' || o.status === 'Ordered') ? (
+                <div className="flex items-center gap-1.5 justify-center">
+                    {(o.status === 'Draft' || o.status === 'Pending' || o.status === 'Ordered') ? (
+                        <>
+                            {perms?.edit !== false && (
                                 <>
-                                    {perms?.edit !== false && (
-                                        <>
-                                            <button
-                                                onClick={() => handleStatusChange(o.id, 'Confirmed', true)}
-                                                className="w-7 h-7 flex items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50 hover:border-emerald-500 transition-all shadow-sm"
-                                                title="Confirm & Invoice"
-                                            >
-                                                <Check size={14} strokeWidth={3} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleStatusChange(o.id, 'Rejected')}
-                                                className="w-7 h-7 flex items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:border-rose-500 transition-all shadow-sm"
-                                                title="Reject Order"
-                                            >
-                                                <X size={14} strokeWidth={3} />
-                                            </button>
-                                        </>
-                                    )}
+                                    <button
+                                        onClick={() => handleStatusChange(o, 'Confirmed', true)}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50 hover:border-emerald-500 transition-all shadow-sm"
+                                        title="Confirm & Invoice"
+                                    >
+                                        <Check size={14} strokeWidth={3} />
+                                    </button>
+                                    <button
+                                        onClick={() => handleStatusChange(o, 'Inactive')}
+                                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:border-rose-500 transition-all shadow-sm"
+                                        title="Reject Order"
+                                    >
+                                        <X size={14} strokeWidth={3} />
+                                    </button>
                                 </>
-                            ) : (
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">
-                                    {o.status}
-                                </span>
                             )}
-                        </div>
+                        </>
+                    ) : (
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                            {o.status}
+                        </span>
+                    )}
+                </div>
             )
         }
     ];
@@ -454,6 +458,20 @@ const SalesOrdersView = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={async () => {
+                            try {
+                                const data = await apiService.getOrders();
+                                alert(`Fetched ${data.length} orders from database.`);
+                                setRefreshTrigger(prev => prev + 1);
+                            } catch (err: any) {
+                                alert(`Fetch failed: ${err.message}`);
+                            }
+                        }}
+                        className="px-4 py-2 bg-slate-100 text-[11px] font-black text-slate-500 rounded-xl hover:bg-slate-200 transition-all uppercase tracking-widest flex items-center gap-2 shadow-sm"
+                    >
+                        <RefreshCw size={14} /> Refresh
+                    </button>
                     {perms?.add !== false && (
                         <button
                             onClick={() => navigate('/sales-orders/new')}
@@ -479,6 +497,25 @@ const SalesOrdersView = () => {
                             }}
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm transition-all"
                         />
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                        {(['Active', 'Invoiced', 'Rejected', 'Inactive', 'All'] as const).map((status) => (
+                            <button
+                                key={status}
+                                onClick={() => { setStatusFilter(status); setCurrentPage(1); }}
+                                className={cn(
+                                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all",
+                                    statusFilter === status
+                                        ? "bg-white text-blue-600 shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                                )}
+                            >
+                                {status}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
@@ -551,16 +588,25 @@ const SalesOrdersView = () => {
                                 }
 
                                 if (col.id === 'Amount') {
-                                    const total = filteredData.reduce((sum, o) => sum + (o.amount || 0), 0);
+                                    // Group totals by currency
+                                    const totalsByCurrency: Record<string, number> = {};
+                                    filteredData.forEach(o => {
+                                        const cur = o.currency || 'ZMW';
+                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (o.amount || 0);
+                                    });
+                                    const activeCurs = Object.keys(totalsByCurrency);
+
                                     return (
                                         <td key={`total-${col.id}`} className="px-6 py-3 whitespace-nowrap text-right bg-slate-50/50">
                                             <div className="flex flex-col items-end gap-1">
-                                                <div className="flex items-center gap-1.5 justify-end">
-                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">ZMW</span>
-                                                    <span className="text-[12px] font-black tracking-tight text-slate-900 underline decoration-slate-200 decoration-2 underline-offset-4 pointer-events-none">
-                                                        {total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                    </span>
-                                                </div>
+                                                {activeCurs.map(cur => (
+                                                    <div key={cur} className="flex items-center gap-1.5 justify-end">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight">{cur}</span>
+                                                        <span className="text-[12px] font-black tracking-tight text-slate-900 underline decoration-slate-200 decoration-2 underline-offset-4 pointer-events-none">
+                                                            {totalsByCurrency[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                        </span>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </td>
                                     );

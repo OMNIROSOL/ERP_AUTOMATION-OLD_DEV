@@ -70,7 +70,7 @@ const NewCustomerUnpaidInvoicesView: React.FC = () => {
       division: formData.division,
       description: formData.description,
       sortBy: formData.sortBy,
-      unpaidCount: Math.floor(Math.random() * 50) + 10 // Mock count
+      unpaidCount: 0
     };
 
     const saved = localStorage.getItem('unpaid_invoice_reports');

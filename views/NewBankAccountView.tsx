@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { mockAccounts } from '../mockData';
+import apiService from '../services/apiService';
+import { Account } from '../types';
 import { 
     ChevronRight, X, Calendar, Briefcase, Landmark, 
     CreditCard, Info, Save, Undo2, CheckCircle2, ChevronDown
@@ -76,13 +77,11 @@ const NewBankAccountView = () => {
     const [hasCreditLimit, setHasCreditLimit] = useState(false);
     const [creditLimitValue, setCreditLimitValue] = useState('0');
 
-    const handleCreate = () => {
-        const newAccount = {
-            id: `acc-${Date.now()}`,
+    const handleCreate = async () => {
+        const newAccount: Partial<Account> = {
             name: name.toUpperCase() || 'NEW ACCOUNT',
             code,
             type: 'Asset' as any,
-            balance: 0,
             isPaymentAccount: true,
             division,
             currency,
@@ -90,8 +89,14 @@ const NewBankAccountView = () => {
             canHavePending,
             creditLimit: hasCreditLimit ? parseFloat(creditLimitValue) : undefined
         };
-        mockAccounts.push(newAccount);
-        navigate('/account');
+
+        try {
+            await apiService.createBankAccount(newAccount);
+            navigate('/account');
+        } catch (err) {
+            console.error('Failed to create bank account:', err);
+            alert('Failed to create bank account in database');
+        }
     };
 
     return (
