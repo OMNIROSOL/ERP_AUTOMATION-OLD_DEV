@@ -415,7 +415,7 @@ const SalesHistoryView = () => {
                                             const color =
                                                 ds === 'Paid in full' || ds === 'Delivered' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                                     ds === 'Overpaid' || ds === 'Shipped' || ds === 'Packed' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                                                        ds === 'Overdue' || ds === 'Yesterday due' || ds === 'Rejected' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                                                        ds === 'Overdue' || ds === 'Yesterday due' || ds === 'Rejected' || ds === 'Inactive' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                                                             ds === 'Unpaid' || ds === 'Active' || ds === 'Ordered' || ds === 'Pending' || ds === 'To Deliver' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                                                 'bg-slate-100 text-slate-600 border-slate-200';
                                             return (

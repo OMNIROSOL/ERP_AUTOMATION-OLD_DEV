@@ -20,9 +20,16 @@ const EditSalesOrderColumnsView = () => {
 
         const currentVisibility = saved ? JSON.parse(saved) : defaultVisibility;
         
-        // Convert Record to Array for the checklist UI, filtering out system columns
+        // Convert Record to Array for the checklist UI, filtering out system columns and deprecated fields
         return Object.entries(currentVisibility)
-            .filter(([id]) => id !== 'Selection' && id !== 'Actions')
+            .filter(([id]) => 
+                id !== 'Selection' && 
+                id !== 'Actions' && 
+                id !== 'Invoicing status' && 
+                id !== 'Invoiced amount' &&
+                id !== 'Invoicing Status' && 
+                id !== 'Invoiced Amount'
+            )
             .map(([id, visible]) => ({
                 id,
                 label: id,
@@ -37,12 +44,8 @@ const EditSalesOrderColumnsView = () => {
     };
 
     const handleUpdate = () => {
-        // Maintain system columns if they were already set
-        const saved = localStorage.getItem('sales_order_column_visibility_settings');
-        const currentVisibility = saved ? JSON.parse(saved) : { 'Actions': true };
-        
-        // Merge with existing record but overwrite from the list
-        const visibilityRecord = { ...currentVisibility };
+        // Build the visibility record from the current columns list plus mandatory system columns
+        const visibilityRecord: Record<string, boolean> = { 'Actions': true };
         columns.forEach((col: any) => {
             visibilityRecord[col.id] = col.visible;
         });

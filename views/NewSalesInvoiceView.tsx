@@ -316,6 +316,30 @@ const NewSalesInvoiceView = () => {
         loadData();
     }, [id, location.search]);
 
+    // Ensure descriptions are populated from master data if missing
+    useEffect(() => {
+        if (inventoryItems.length === 0 || items.length === 0) return;
+        
+        const invMap: Record<string, any> = {};
+        inventoryItems.forEach(i => { invMap[i.itemName] = i; });
+
+        let changed = false;
+        const newItems = items.map(item => {
+            if (item.item && item.item !== 'Select Item' && !item.description) {
+                const invItem = invMap[item.item];
+                if (invItem && (invItem.description || invItem.itemName)) {
+                    changed = true;
+                    return { ...item, description: invItem.description || invItem.itemName };
+                }
+            }
+            return item;
+        });
+
+        if (changed) {
+            setItems(newItems);
+        }
+    }, [inventoryItems, items]);
+
     // Automatically sync currency when customer changes
     useEffect(() => {
         if (!customers || customers.length === 0 || !customer) return;
@@ -440,6 +464,7 @@ const NewSalesInvoiceView = () => {
             docOptions: options,
             items: validItems.map(i => ({
                 itemId: i.itemId,
+                description: i.description,
                 qty: parseFloat(i.qty),
                 unitPrice: parseFloat(i.unitPrice),
                 discount: parseFloat(i.discount) || 0,

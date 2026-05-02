@@ -100,13 +100,13 @@ const ViewSalesQuoteView = () => {
 
             let taxRate = 0;
             const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
-            const selectedTax = taxCodes.find(tc => 
-                tc.id === item.taxCode || 
+            const selectedTax = taxCodes.find(tc =>
+                tc.id === item.taxCode ||
                 tc.name.toLowerCase() === itemTaxCode ||
                 (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
                 (itemTaxCode === 'exempt' && tc.name === 'Exempt')
             );
-            
+
             if (selectedTax) {
                 taxRate = parseFloat(selectedTax.rate) / 100;
             } else {

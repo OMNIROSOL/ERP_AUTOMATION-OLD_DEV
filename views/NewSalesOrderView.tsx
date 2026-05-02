@@ -257,7 +257,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                             id: i.id || Date.now() + Math.random(),
                             itemId: i.itemId,
                             item: i.item?.itemName || i.item || 'Select Item',
-                            description: i.description || '',
+                            description: i.description || i.item?.description || '',
                             qty: i.qty ? i.qty.toString() : '1',
                             unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
                             discount: i.discount ? i.discount.toString() : '',
@@ -288,6 +288,27 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: '' }]);
         }
     }, [id, location.search, dbInventory]);
+
+    // Ensure descriptions are populated from master data if missing
+    useEffect(() => {
+        if (Object.keys(inventoryMap).length === 0 || items.length === 0) return;
+        
+        let changed = false;
+        const newItems = items.map(item => {
+            if (item.item && item.item !== 'Select Item' && !item.description) {
+                const invItem = inventoryMap[item.item];
+                if (invItem && (invItem.description || invItem.itemName)) {
+                    changed = true;
+                    return { ...item, description: invItem.description || invItem.itemName };
+                }
+            }
+            return item;
+        });
+
+        if (changed) {
+            setItems(newItems);
+        }
+    }, [inventoryMap, items]);
 
     // Automatically sync currency when customer changes
     useEffect(() => {
@@ -449,6 +470,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             docOptions: options,
             items: validItems.map(i => ({
                 itemId: i.itemId,
+                description: i.description,
                 qty: parseFloat(i.qty),
                 unitPrice: parseFloat(i.unitPrice),
                 discount: parseFloat(i.discount) || 0,

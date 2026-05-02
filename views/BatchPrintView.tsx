@@ -42,16 +42,16 @@ const BatchPrintView = () => {
             setIsLoading(true);
             try {
                 const [custs, supps, quotes, orders, invoices, dns, receipts, pQuotes, pOrders, footers, codes] = await Promise.all([
-                    apiService.getCustomers(),
-                    apiService.getSuppliers(),
-                    apiService.getQuotes(),
-                    apiService.getOrders(),
-                    apiService.getInvoices(),
-                    apiService.getDeliveryNotes(),
-                    apiService.getReceipts(),
-                    apiService.getPurchaseQuotes(),
-                    apiService.getPurchaseOrders(),
-                    apiService.getFooters(),
+                    apiService.getCustomers().catch(() => []),
+                    apiService.getSuppliers().catch(() => []),
+                    apiService.getQuotes().catch(() => []),
+                    apiService.getOrders().catch(() => []),
+                    apiService.getInvoices().catch(() => []),
+                    apiService.getDeliveryNotes().catch(() => []),
+                    apiService.getReceipts().catch(() => []),
+                    apiService.getPurchaseQuotes().catch(() => []),
+                    apiService.getPurchaseOrders().catch(() => []),
+                    apiService.getFooters().catch(() => []),
                     apiService.getTaxCodes().catch(() => [])
                 ]);
                 setAllCustomers(custs);
@@ -612,13 +612,13 @@ const BatchPrintView = () => {
 
                                                     let taxRate = 0;
                                                     const lineTaxCode = (line.taxCode || '').toString().toLowerCase().trim();
-                                                    const selectedTax = taxCodes.find(tc => 
-                                                        tc.id === line.taxCode || 
+                                                    const selectedTax = taxCodes.find(tc =>
+                                                        tc.id === line.taxCode ||
                                                         tc.name.toLowerCase() === lineTaxCode ||
                                                         (lineTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
                                                         (lineTaxCode === 'exempt' && tc.name === 'Exempt')
                                                     );
-                                                    
+
                                                     if (selectedTax) {
                                                         taxRate = parseFloat(selectedTax.rate) / 100;
                                                     } else {

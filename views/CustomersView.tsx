@@ -389,7 +389,7 @@ const CustomersView = () => {
                                     />
                                 </th>
                             )}
-                             <th className="sticky top-[-32px] z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
+                            <th className="sticky top-[-32px] z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
                             {columns.filter((c: any) => c.visible || c.id === 'name').map((col: any) => (
                                 <th
                                     key={col.id}
@@ -415,7 +415,7 @@ const CustomersView = () => {
                                 </td>
                             </tr>
                         ) : currentSlice.length === 0 ? (
-                             <tr>
+                            <tr>
                                 <td colSpan={columns.filter((c: any) => c.visible).length + (isBatchViewMode ? 2 : 1)} className="px-8 py-20 text-center text-slate-400 font-bold">
                                     No customers found matching your criteria.
                                 </td>

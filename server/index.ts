@@ -7,7 +7,7 @@ import cors from 'cors';
 
 const app = express();
 console.log('Connecting to DB:', process.env.DATABASE_URL ? 'URL found' : 'URL MISSING');
-const pool = new Pool({ 
+const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   connectionTimeoutMillis: 5000,
   idleTimeoutMillis: 10000
@@ -253,6 +253,7 @@ app.post('/api/invoices', async (req, res) => {
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
+            description: item.description,
             qty: item.qty,
             unitPrice: item.unitPrice,
             discount: item.discount,
@@ -285,6 +286,7 @@ app.put('/api/invoices/:id', async (req, res) => {
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
+            description: item.description,
             qty: item.qty,
             unitPrice: item.unitPrice,
             discount: item.discount,
@@ -361,6 +363,7 @@ app.post('/api/quotes', async (req, res) => {
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
+            description: item.description,
             qty: item.qty,
             unitPrice: item.unitPrice,
             discount: item.discount,
@@ -413,6 +416,7 @@ app.put('/api/quotes/:id', async (req, res) => {
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
+            description: item.description,
             qty: item.qty,
             unitPrice: item.unitPrice,
             discount: item.discount,
@@ -454,6 +458,7 @@ app.post('/api/quotes/:id/convert', async (req, res) => {
           items: {
             create: quote.items.map((item: any) => ({
               itemId: item.itemId,
+              description: item.description,
               qty: item.qty,
               unitPrice: item.unitPrice,
               discount: item.discount,
@@ -537,6 +542,7 @@ app.post('/api/orders', async (req, res) => {
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
+            description: item.description,
             qty: item.qty,
             unitPrice: item.unitPrice,
             discount: item.discount,
@@ -572,6 +578,7 @@ app.put('/api/orders/:id', async (req, res) => {
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
+            description: item.description,
             qty: item.qty,
             unitPrice: item.unitPrice,
             discount: item.discount,

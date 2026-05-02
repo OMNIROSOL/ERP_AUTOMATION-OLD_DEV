@@ -209,8 +209,8 @@ const SalesQuotesView = () => {
 
     const filteredData = useMemo(() => {
         let result = [...quotes].filter(q => {
-            // Filter out only Accepted quotes from the list
-            if (q.status === 'Accepted') {
+            // Filter out Accepted and Rejected quotes from the list
+            if (q.status === 'Accepted' || q.status === 'Rejected') {
                 return false;
             }
 
@@ -462,7 +462,7 @@ const SalesQuotesView = () => {
                                     <Check size={13} strokeWidth={3} />
                                 </button>
                                 <button
-                                    onClick={() => handleStatusChange(o.id, 'Inactive')}
+                                    onClick={() => handleStatusChange(o.id, 'Rejected')}
                                     className="w-7 h-7 flex items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:border-rose-500 transition-all shadow-sm"
                                     title="Reject Quote"
                                 >

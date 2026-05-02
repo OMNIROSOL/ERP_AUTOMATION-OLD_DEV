@@ -834,7 +834,7 @@ const InvoicesView = () => {
                                     const totalsByCurrency: Record<string, number> = {};
                                     filteredData.forEach(o => {
                                         const cur = o.currency || 'ZMW';
-                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (o[field] || 0);
+                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + parseFloat(o[field] as any || 0);
                                     });
                                     const activeCurs = Object.keys(totalsByCurrency);
 

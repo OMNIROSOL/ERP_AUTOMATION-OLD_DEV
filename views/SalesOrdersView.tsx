@@ -396,7 +396,7 @@ const SalesOrdersView = () => {
                                         <Check size={14} strokeWidth={3} />
                                     </button>
                                     <button
-                                        onClick={() => handleStatusChange(o, 'Inactive')}
+                                        onClick={() => handleStatusChange(o, 'Rejected')}
                                         className="w-7 h-7 flex items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:border-rose-500 transition-all shadow-sm"
                                         title="Reject Order"
                                     >
@@ -498,25 +498,21 @@ const SalesOrdersView = () => {
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm transition-all"
                         />
                     </div>
-                </div>
 
-                <div className="flex items-center gap-4">
-                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-                        {(['Active', 'Invoiced', 'Rejected', 'Inactive', 'All'] as const).map((status) => (
-                            <button
-                                key={status}
-                                onClick={() => { setStatusFilter(status); setCurrentPage(1); }}
-                                className={cn(
-                                    "px-4 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all",
-                                    statusFilter === status
-                                        ? "bg-white text-blue-600 shadow-sm"
-                                        : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                                )}
-                            >
-                                {status}
-                            </button>
-                        ))}
-                    </div>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => {
+                            setStatusFilter(e.target.value as any);
+                            setCurrentPage(1);
+                        }}
+                        className="bg-white border border-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-widest rounded-xl px-5 py-2.5 focus:outline-none transition-all cursor-pointer shadow-sm hover:border-slate-300"
+                    >
+                        <option value="All">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Invoiced">Invoiced</option>
+                        <option value="Rejected">Rejected</option>
+                        <option value="Inactive">Inactive</option>
+                    </select>
                 </div>
 
                 <div className="flex items-center space-x-8">
@@ -592,7 +588,7 @@ const SalesOrdersView = () => {
                                     const totalsByCurrency: Record<string, number> = {};
                                     filteredData.forEach(o => {
                                         const cur = o.currency || 'ZMW';
-                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (o.amount || 0);
+                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + parseFloat(o.amount as any || 0);
                                     });
                                     const activeCurs = Object.keys(totalsByCurrency);
 

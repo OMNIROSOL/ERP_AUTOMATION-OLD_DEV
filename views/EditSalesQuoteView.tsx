@@ -250,7 +250,7 @@ const EditSalesQuoteView = () => {
                             id: i.id,
                             itemId: i.itemId,
                             item: i.item?.itemName || 'Unknown Item',
-                            description: i.item?.description || '',
+                            description: i.description || i.item?.description || '',
                             qty: i.qty.toString(),
                             unitPrice: i.unitPrice.toString(),
                             discount: i.discount ? i.discount.toString() : '',
@@ -279,6 +279,27 @@ const EditSalesQuoteView = () => {
         };
         loadQuote();
     }, [id, location.search]);
+
+    // Ensure descriptions are populated from master data if missing (e.g. legacy data or first load)
+    useEffect(() => {
+        if (Object.keys(inventoryMap).length === 0 || items.length === 0) return;
+        
+        let changed = false;
+        const newItems = items.map(item => {
+            if (item.item && item.item !== 'Select Item' && !item.description) {
+                const invItem = inventoryMap[item.item];
+                if (invItem && (invItem.description || invItem.itemName)) {
+                    changed = true;
+                    return { ...item, description: invItem.description || invItem.itemName };
+                }
+            }
+            return item;
+        });
+
+        if (changed) {
+            setItems(newItems);
+        }
+    }, [inventoryMap, items]);
 
     // Automatically sync currency when customer changes
     useEffect(() => {
@@ -414,12 +435,12 @@ const EditSalesQuoteView = () => {
         setItems(newItems);
     };
 
-    const handleAction = async (newStatus: 'Active' | 'Inactive') => {
+    const handleAction = async (newStatus: 'Active' | 'Rejected') => {
         if (!id) return;
         try {
             await apiService.updateQuoteStatus(id, newStatus);
             // Also update approval request if it exists (Optional for now)
-            alert(`Quote ${newStatus === 'Active' ? 'Approved' : 'marked as Inactive'} successfully.`);
+            alert(`Quote ${newStatus === 'Active' ? 'Approved' : 'Rejected'} successfully.`);
             navigate('/sales-quotes');
         } catch (err) {
             console.error('Failed to update status:', err);
@@ -466,6 +487,7 @@ const EditSalesQuoteView = () => {
             docOptions: updatedOptions,
             items: validItems.map(i => ({
                 itemId: i.itemId,
+                description: i.description,
                 qty: parseFloat(i.qty),
                 unitPrice: parseFloat(i.unitPrice),
                 discount: parseFloat(i.discount) || 0,
@@ -639,18 +661,15 @@ const EditSalesQuoteView = () => {
                                                                 value={item.item}
                                                                 onChange={(e) => {
                                                                     const val = e.target.value;
-                                                                    const invItem = inventoryItems.find(i => i.itemName === val);
-                                                                    setItems(prev => {
-                                                                        const newItems = prev.map(i => i.id === item.id ? {
-                                                                            ...i,
-                                                                            item: val,
-                                                                            itemId: invItem ? invItem.id : '',
-                                                                            unitPrice: invItem ? (invItem.sellingPrice || 0).toString() : i.unitPrice,
-                                                                            description: invItem ? (invItem.description || val) : i.description,
-                                                                            unit: invItem ? invItem.unitName : i.unit
-                                                                        } : i);
-                                                                        return newItems;
-                                                                    });
+                                                                    const invItem = inventoryMap[val];
+                                                                    setItems(prev => prev.map(i => i.id === item.id ? {
+                                                                        ...i,
+                                                                        item: val,
+                                                                        itemId: invItem ? invItem.id : '',
+                                                                        unitPrice: invItem ? (invItem.sellingPrice || 0).toString() : i.unitPrice,
+                                                                        description: invItem ? (invItem.description || val) : i.description,
+                                                                        unit: invItem ? (invItem.unitName || 'Pcs') : i.unit
+                                                                    } : i));
                                                                 }}
                                                                 className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
                                                             >
@@ -1135,16 +1154,22 @@ const EditSalesQuoteView = () => {
                                     {status === 'Pending Approval' ? (
                                         <div className="flex space-x-3">
                                             <button
-                                                onClick={() => handleAction('Inactive')}
-                                                className="bg-white border border-rose-200 text-rose-500 px-8 py-4 rounded-2xl text-[12px] font-black hover:bg-rose-50 transition-all uppercase tracking-[0.2em]"
+                                                onClick={() => handleSave(true)}
+                                                className="bg-amber-500 text-white px-8 py-4 rounded-2xl text-[12px] font-black hover:bg-amber-600 transition-all shadow-xl shadow-amber-500/20 uppercase tracking-[0.2em]"
                                             >
-                                                Reject
+                                                Request Approval
                                             </button>
                                             <button
-                                                onClick={() => handleAction('Active')}
-                                                className="bg-emerald-600 text-white px-10 py-4 rounded-2xl text-[12px] font-black hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-600/20 uppercase tracking-[0.2em]"
+                                                onClick={() => handleSave(false)}
+                                                disabled={requiresApproval}
+                                                className={cn(
+                                                    "px-10 py-4 rounded-2xl text-[12px] font-black transition-all shadow-xl uppercase tracking-[0.2em]",
+                                                    requiresApproval
+                                                        ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                                        : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20 shadow-xl"
+                                                )}
                                             >
-                                                Approve
+                                                Update Quote
                                             </button>
                                         </div>
                                     ) : (

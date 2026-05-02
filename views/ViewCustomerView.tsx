@@ -20,7 +20,7 @@ const ViewCustomerView = () => {
             try {
                 const data = await apiService.getCustomer(id!);
                 setCustomer(data);
-                
+
                 // Also get all for navigation
                 const all = await apiService.getCustomers();
                 setAllCustomers(all);
@@ -32,7 +32,7 @@ const ViewCustomerView = () => {
                     setAllCustomers(customers);
                     const cust = customers.find(c => c.id === id || c.code === id);
                     if (cust) setCustomer(cust);
-                } catch (e) {}
+                } catch (e) { }
             } finally {
                 setIsLoading(false);
             }
@@ -312,7 +312,7 @@ const ViewCustomerView = () => {
                     </div>
 
                     {/* Account Summary Footer */}
-                    <div 
+                    <div
                         onClick={() => navigate(`/customers/transactions/${customer.id}`)}
                         className="summary-box-print mt-20 bg-slate-50 p-10 rounded-none border border-transparent hover:border-slate-200 hover:bg-slate-100/50 cursor-pointer transition-all group"
                     >

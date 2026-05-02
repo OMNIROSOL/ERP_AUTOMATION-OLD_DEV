@@ -226,6 +226,7 @@ const App = () => {
           <Route path="/customers/transactions/:id" element={<CustomerTransactionsView />} />
           <Route path="/customers/cost-of-sales/:id" element={<CustomerCostOfSalesView />} />
           <Route path="/customers/edit-columns" element={<EditCustomerColumnsView />} />
+          <Route path="/customers/print-batch" element={<BatchPrintView />} />
 
 
 
