@@ -14,15 +14,15 @@ const BatchPrintView = () => {
     const reportType = searchParams.get('reportType'); // 'cogs' or 'transactions'
     const singleInvoiceId = searchParams.get('invoiceId');
 
-    const isCustomers = type === 'customers' || location.pathname.includes('/customers/');
-    const isSuppliers = type === 'suppliers' || location.pathname.includes('/suppliers/');
-    const isSalesQuotes = type === 'sales-quotes' || location.pathname.includes('/sales-quotes/');
-    const isSalesOrders = type === 'sales-orders' || location.pathname.includes('/sales-orders/');
-    const isSalesInvoices = type === 'sales-invoices' || location.pathname.includes('/sales-invoices/');
-    const isDeliveryNotes = type === 'delivery-notes' || location.pathname.includes('/delivery-notes/');
-    const isReceipts = type === 'receipts' || location.pathname.includes('/receipts/');
-    const isPurchaseQuotes = type === 'purchase-quotes' || location.pathname.includes('/purchase-quotes/');
-    const isPurchaseOrders = type === 'purchase-orders' || location.pathname.includes('/purchase-orders/');
+    const isCustomers = type === 'customers';
+    const isSuppliers = type === 'suppliers';
+    const isSalesQuotes = type === 'sales-quotes';
+    const isSalesOrders = type === 'sales-orders';
+    const isSalesInvoices = type === 'sales-invoices';
+    const isDeliveryNotes = type === 'delivery-notes';
+    const isReceipts = type === 'receipts';
+    const isPurchaseQuotes = type === 'purchase-quotes';
+    const isPurchaseOrders = type === 'purchase-orders';
 
     const [allCustomers, setAllCustomers] = React.useState<Customer[]>([]);
     const [allSuppliers, setAllSuppliers] = React.useState<any[]>([]);
@@ -161,39 +161,64 @@ const BatchPrintView = () => {
 
         // Default Batch Prints (Documents/Customers)
         if (isSuppliers) {
-            return allSuppliers.filter(s => selectedIds.includes(s.id));
+            return allSuppliers.filter(s => selectedIds.includes(s.id?.toString()));
         }
 
         if (isCustomers) {
-            return allCustomers.filter(c => selectedIds.includes(c.id));
+            return allCustomers.filter(c => selectedIds.includes(c.id?.toString()));
         }
 
         if (isSalesQuotes) {
-            return allQuotes.filter(q => selectedIds.includes(q.id));
+            return allQuotes.filter(q => selectedIds.includes(q.id?.toString())).map(q => ({
+                ...q,
+                customer: q.customer?.name || q.customer || 'Unknown',
+                currency: q.currency || q.customer?.currency?.split(' - ')[0] || 'ZMW'
+            }));
         }
 
         if (isSalesOrders) {
-            return allOrders.filter(o => selectedIds.includes(o.id));
+            return allOrders.filter(o => selectedIds.includes(o.id?.toString())).map(o => ({
+                ...o,
+                customer: o.customer?.name || o.customer || 'Unknown',
+                currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
+                orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : ''
+            }));
         }
 
         if (isSalesInvoices) {
-            return allInvoices.filter(i => selectedIds.includes(i.id));
+            return allInvoices.filter(i => selectedIds.includes(i.id?.toString())).map(i => ({
+                ...i,
+                customer: i.customer?.name || i.customer || 'Unknown',
+                currency: i.currency || i.customer?.currency?.split(' - ')[0] || 'ZMW'
+            }));
         }
 
         if (isDeliveryNotes) {
-            return allDeliveryNotes.filter((dn: any) => selectedIds.includes(dn.id));
+            return allDeliveryNotes.filter((dn: any) => selectedIds.includes(dn.id?.toString())).map(dn => ({
+                ...dn,
+                customer: dn.customer?.name || dn.customer || 'Unknown'
+            }));
         }
 
         if (isReceipts) {
-            return allReceipts.filter(r => selectedIds.includes(r.id));
+            return allReceipts.filter(r => selectedIds.includes(r.id?.toString())).map(r => ({
+                ...r,
+                customer: r.customer?.name || r.customer || 'Unknown'
+            }));
         }
 
         if (isPurchaseQuotes) {
-            return allPurchaseQuotes.filter(q => selectedIds.includes(q.id));
+            return allPurchaseQuotes.filter(q => selectedIds.includes(q.id?.toString())).map(q => ({
+                ...q,
+                supplier: q.supplier?.name || q.supplier || 'Unknown'
+            }));
         }
 
         if (isPurchaseOrders) {
-            return allPurchaseOrders.filter(o => selectedIds.includes(o.id));
+            return allPurchaseOrders.filter(o => selectedIds.includes(o.id?.toString())).map(o => ({
+                ...o,
+                supplier: o.supplier?.name || o.supplier || 'Unknown'
+            }));
         }
 
         return [];
@@ -538,12 +563,12 @@ const BatchPrintView = () => {
                                                     <tr key={line.id || idx}>
                                                         <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>
                                                         <td className="px-4 py-4">
-                                                            <p className="font-semibold text-slate-900">{line.item || line.itemName || '-'}</p>
+                                                            <p className="font-semibold text-slate-900">{line.item?.itemName || line.item || line.itemName || '-'}</p>
                                                         </td>
                                                         <td className="px-4 py-4">
                                                             <p className="text-gray-500">{line.description || '-'}</p>
                                                         </td>
-                                                        <td className="px-4 py-4 text-right font-medium">{line.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{line.unit || ''}</span></td>
+                                                        <td className="px-4 py-4 text-right font-medium">{Number(line.qty).toLocaleString()} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{line.unit || ''}</span></td>
                                                         <td className="px-4 py-4 text-right font-medium">{price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                                         {item.options?.columnDiscount && (
                                                             <td className="px-4 py-4 text-right">

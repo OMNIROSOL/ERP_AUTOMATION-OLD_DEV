@@ -226,9 +226,6 @@ const App = () => {
           <Route path="/customers/transactions/:id" element={<CustomerTransactionsView />} />
           <Route path="/customers/cost-of-sales/:id" element={<CustomerCostOfSalesView />} />
           <Route path="/customers/edit-columns" element={<EditCustomerColumnsView />} />
-          <Route path="/customers/print-batch" element={<BatchPrintView />} />
-
-
 
           {/* Sales Quotes Routes */}
           <Route path="/sales-quotes" element={<SalesQuotesView />} />
@@ -238,7 +235,6 @@ const App = () => {
           <Route path="/sales-quotes/view/:id" element={<ViewSalesQuoteView />} />
 
           <Route path="/sales-quotes/edit-columns" element={<EditColumnsView />} />
-          <Route path="/sales-quotes/print-batch" element={<BatchPrintView />} />
 
           {/* Sales Orders Routes */}
           <Route path="/sales-orders" element={<SalesOrdersView />} />
@@ -247,7 +243,6 @@ const App = () => {
           <Route path="/sales-orders/edit/:id" element={<NewSalesOrderView />} />
           <Route path="/sales-orders/view/:id" element={<ViewSalesOrderView />} />
           <Route path="/sales-orders/edit-columns" element={<EditSalesOrderColumnsView />} />
-          <Route path="/sales-orders/print-batch" element={<BatchPrintView />} />
 
           {/* Sales Invoices Routes */}
           <Route path="/sales-invoices" element={<InvoicesView />} />
@@ -284,7 +279,6 @@ const App = () => {
           <Route path="/suppliers/edit/:id" element={<EditSupplierView />} />
           <Route path="/suppliers/view/:id" element={<ViewSupplierView />} />
           <Route path="/suppliers/edit-columns" element={<EditSupplierColumnsView />} />
-          <Route path="/suppliers/print-batch" element={<BatchPrintView />} />
 
           {/* Purchase History Routes */}
           <Route path="/purchase-history" element={<PurchaseHistoryView />} />

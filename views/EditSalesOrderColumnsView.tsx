@@ -6,6 +6,17 @@ import { cn } from '../utils/cn';
 const EditSalesOrderColumnsView = () => {
     const navigate = useNavigate();
     
+    const AVAILABLE_COLUMNS = [
+        { id: 'Order Date', label: 'Order Date' },
+        { id: 'Reference', label: 'Reference' },
+        { id: 'Customer', label: 'Customer' },
+        { id: 'QTY RESERVED', label: 'Qty Reserved' },
+        { id: 'Description', label: 'Description' },
+        { id: 'Amount', label: 'Amount' },
+        { id: 'Timestamp', label: 'Timestamp' },
+        { id: 'Approval', label: 'Approval Status' }
+    ];
+
     const [columns, setColumns] = useState(() => {
         const saved = localStorage.getItem('sales_order_column_visibility_settings');
         const defaultVisibility: Record<string, boolean> = {
@@ -21,21 +32,10 @@ const EditSalesOrderColumnsView = () => {
 
         const currentVisibility = saved ? { ...defaultVisibility, ...JSON.parse(saved) } : defaultVisibility;
         
-        // Convert Record to Array for the checklist UI, filtering out system columns and deprecated fields
-        return Object.entries(currentVisibility)
-            .filter(([id]) => 
-                id !== 'Selection' && 
-                id !== 'Actions' && 
-                id !== 'Invoicing status' && 
-                id !== 'Invoiced amount' &&
-                id !== 'Invoicing Status' && 
-                id !== 'Invoiced Amount'
-            )
-            .map(([id, visible]) => ({
-                id,
-                label: id,
-                visible
-            }));
+        return AVAILABLE_COLUMNS.map(col => ({
+            ...col,
+            visible: currentVisibility[col.id] ?? defaultVisibility[col.id] ?? false
+        }));
     });
 
     const toggleColumn = (id: string) => {

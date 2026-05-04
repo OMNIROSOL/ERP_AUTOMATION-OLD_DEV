@@ -181,11 +181,16 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             if (item.item === 'Select Item') return false;
             const inv = dbInventory.find(i => i.itemName === item.item);
             if (!inv) return false;
+            
+            const qty = parseFloat(item.qty) || 0;
             const price = parseFloat(item.unitPrice) || 0;
-            const sellingPrice = parseFloat(inv.sellingPrice) || 0;
+            const stock = parseFloat(inv.qtyOnHand) || 0;
             const purchasePrice = parseFloat(inv.purchasePrice) || 0;
+            const sellingPrice = parseFloat(inv.sellingPrice) || 0;
             const minMarginPrice = sellingPrice * (1 - marginThreshold / 100);
-            return price < purchasePrice || price < minMarginPrice;
+
+            // Disable if insufficient stock or low margin
+            return qty > stock || price < purchasePrice || price < minMarginPrice;
         });
     }, [items, marginThreshold, dbInventory]);
 
@@ -372,7 +377,6 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
 
     const approvalReason = useMemo(() => {
         let reason = '';
-        const marginThreshold = 20;
         const itemsToValidate = items.filter(i => i.item !== 'Select Item');
         for (const item of itemsToValidate) {
             const inventoryItem = dbInventory.find(i => i.itemName === item.item);
@@ -680,14 +684,14 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                             </div>
                                                         </div>
                                                         {(parseFloat(item.qty) || 0) > (dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0) && (
-                                                            <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                             <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                 <TooltipProvider>
                                                                     <Tooltip>
                                                                         <TooltipTrigger>
-                                                                            <AlertTriangle size={12} className="text-amber-500" />
+                                                                            <AlertTriangle size={12} className="text-rose-500" />
                                                                         </TooltipTrigger>
-                                                                        <TooltipContent className="bg-amber-50 border-amber-200 text-amber-800 text-[10px] p-2">
-                                                                            Insufficient stock: {(dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0)} available. Approval required.
+                                                                        <TooltipContent className="bg-rose-50 border-rose-200 text-rose-800 text-[10px] p-2">
+                                                                            Insufficient stock: {(dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0)} available. Creation disabled.
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 </TooltipProvider>
@@ -706,8 +710,8 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                                 className={cn(
                                                                     "w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none",
                                                                     (parseFloat(item.unitPrice) || 0) < (dbInventory.find((i: any) => i.itemName === item.item)?.purchasePrice || 0) ||
-                                                                        (parseFloat(item.unitPrice) || 0) < (dbInventory.find((i: any) => i.itemName === item.item)?.sellingPrice * (1 - 20 / 100))
-                                                                        ? "text-amber-600" : "text-slate-700"
+                                                                        (parseFloat(item.unitPrice) || 0) < (dbInventory.find((i: any) => i.itemName === item.item)?.sellingPrice * (1 - marginThreshold / 100))
+                                                                        ? "text-rose-600" : "text-slate-700"
                                                                 )}
                                                                 placeholder="0.00"
                                                             />
@@ -717,14 +721,14 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                         </div>
                                                         {((parseFloat(item.unitPrice) || 0) < (dbInventory.find(i => i.itemName === item.item)?.purchasePrice || 0) ||
                                                             (parseFloat(item.unitPrice) || 0) < (dbInventory.find(i => i.itemName === item.item)?.sellingPrice * (1 - marginThreshold / 100))) && (
-                                                                <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                                 <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                     <TooltipProvider>
                                                                         <Tooltip>
                                                                             <TooltipTrigger>
-                                                                                <AlertTriangle size={12} className="text-amber-500" />
+                                                                                <AlertTriangle size={12} className="text-rose-500" />
                                                                             </TooltipTrigger>
-                                                                            <TooltipContent className="bg-amber-50 border-amber-200 text-amber-800 text-[10px] p-2">
-                                                                                Price below threshold. Approval required.
+                                                                            <TooltipContent className="bg-rose-50 border-rose-200 text-rose-800 text-[10px] p-2">
+                                                                                Price below threshold. Creation disabled.
                                                                             </TooltipContent>
                                                                         </Tooltip>
                                                                     </TooltipProvider>
@@ -1101,7 +1105,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                         requiresApproval ? "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed shadow-none" : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20"
                                     )}
                                 >
-                                    <Save size={18} /> {isEditing ? 'Update Order' : 'Create Order'}
+                                    <Save size={18} /> {requiresApproval ? 'Action Required' : (isEditing ? 'Update Order' : 'Create Order')}
                                 </button>
                             </div>
                         </div>
