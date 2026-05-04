@@ -102,6 +102,7 @@ const SalesOrdersView = () => {
         'Order Date': true,
         'Reference': true,
         'Customer': true,
+        'QTY RESERVED': true,
         'Description': false,
         'Amount': true,
         'Timestamp': true,
@@ -111,7 +112,7 @@ const SalesOrdersView = () => {
     // Column Visibility State - Loaded from localStorage
     const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
         const saved = localStorage.getItem('sales_order_column_visibility_settings');
-        return saved ? JSON.parse(saved) : defaultVisibility;
+        return saved ? { ...defaultVisibility, ...JSON.parse(saved) } : defaultVisibility;
     });
 
     // Strategy for updating and saving visibility
@@ -343,6 +344,15 @@ const SalesOrdersView = () => {
             className: 'min-w-[200px]',
             accessor: (o: any) => (
                 <span className="font-medium text-slate-600">{o.customer || 'Unknown'}</span>
+            ),
+            sortable: false
+        },
+        {
+            id: 'QTY RESERVED',
+            header: 'QTY RESERVED',
+            className: 'text-right',
+            accessor: (o: any) => (
+                <span className="font-bold text-slate-700">{o.qtyReserved || 0}</span>
             ),
             sortable: false
         },

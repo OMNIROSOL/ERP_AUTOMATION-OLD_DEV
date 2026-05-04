@@ -23,6 +23,72 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+app.use((req, res, next) => {
+  console.log(`>>> ${req.method} ${req.url}`);
+  if (req.method === 'POST' || req.method === 'PUT') {
+    console.log('Body keys:', Object.keys(req.body || {}));
+  }
+  next();
+});
+
+app.get('/api/users', (req, res) => res.json([]));
+
+const generateNextReference = async (type: string, tx: any = prisma) => {
+  let count = 0;
+  let prefix = '';
+  
+  console.log(`[REF GEN] Generating next reference for type: ${type}`);
+
+  const getNextNum = async (model: any, pref: string) => {
+    const records = await model.findMany({
+      where: { reference: { startsWith: pref, mode: 'insensitive' } },
+      select: { reference: true }
+    });
+    console.log(`[REF GEN] Found ${records.length} records starting with ${pref}`);
+    let max = 0;
+    records.forEach((r: any) => {
+      const parts = r.reference.split('-');
+      const num = parseInt(parts[parts.length - 1]);
+      if (!isNaN(num) && num > max) max = num;
+    });
+    return max;
+  };
+
+  const getNextCodeNum = async (model: any, pref: string) => {
+    const records = await model.findMany({
+      where: { code: { startsWith: pref, mode: 'insensitive' } },
+      select: { code: true }
+    });
+    let max = 0;
+    records.forEach((r: any) => {
+      const parts = r.code.split('-');
+      const num = parseInt(parts[parts.length - 1]);
+      if (!isNaN(num) && num > max) max = num;
+    });
+    return max;
+  };
+
+  switch (type) {
+    case 'invoice': count = await getNextNum(tx.invoice, 'INV-'); prefix = 'INV'; break;
+    case 'quote': count = await getNextNum(tx.salesQuote, 'SQ-'); prefix = 'SQ'; break;
+    case 'order': count = await getNextNum(tx.salesOrder, 'SO-'); prefix = 'SO'; break;
+    case 'delivery': count = await getNextNum(tx.deliveryNote, 'DN-'); prefix = 'DN'; break;
+    case 'receipt': count = await getNextNum(tx.receipt, 'RCP-'); prefix = 'RCP'; break;
+    case 'purchase-quote': count = await getNextNum(tx.purchaseQuote, 'PQ-'); prefix = 'PQ'; break;
+    case 'purchase-order': count = await getNextNum(tx.purchaseOrder, 'PO-'); prefix = 'PO'; break;
+    case 'purchase-invoice': count = await getNextNum(tx.invoices, 'PINV-'); prefix = 'PINV'; break;
+    case 'customer': count = await getNextCodeNum(tx.customer, 'CUST-'); prefix = 'CUST'; break;
+    case 'supplier': count = await getNextCodeNum(tx.suppliers, 'SUP-'); prefix = 'SUP'; break;
+    case 'debit-note': prefix = 'DN'; count = Math.floor(Math.random() * 1000); break;
+    case 'credit-note': prefix = 'CN'; count = Math.floor(Math.random() * 1000); break;
+    default: throw new Error('Invalid document type');
+  }
+  
+  const nextRef = `${prefix}-${(count + 1).toString().padStart(4, '0')}`;
+  console.log(`[REF GEN] Result: ${nextRef}`);
+  return nextRef;
+};
+
 app.get('/', (req, res) => {
   res.send('🚀 ERP Backend is running');
 });
@@ -448,7 +514,7 @@ app.post('/api/quotes/:id/convert', async (req, res) => {
         data: {
           customerId: quote.customerId,
           reference: quote.reference,
-          amount: quote.amount,
+          amount: Number(quote.amount),
           currency: quote.currency,
           description: quote.description,
           billingAddress: quote.billingAddress,
@@ -459,12 +525,12 @@ app.post('/api/quotes/:id/convert', async (req, res) => {
             create: quote.items.map((item: any) => ({
               itemId: item.itemId,
               description: item.description,
-              qty: item.qty,
-              unitPrice: item.unitPrice,
-              discount: item.discount,
+              qty: Number(item.qty),
+              unitPrice: Number(item.unitPrice),
+              discount: Number(item.discount || 0),
               division: item.division,
               taxCode: item.taxCode,
-              totalAmount: item.totalAmount
+              totalAmount: Number(item.totalAmount)
             }))
           }
         }
@@ -506,7 +572,11 @@ app.get('/api/orders', async (req, res) => {
       include: { customer: true, items: { include: { item: true } } },
       orderBy: { createdAt: 'desc' }
     });
-    res.json(orders);
+    const ordersWithQty = orders.map(o => ({
+      ...o,
+      qtyReserved: o.items.reduce((sum, item) => sum + Number(item.qty), 0)
+    }));
+    res.json(ordersWithQty);
   } catch (err: any) {
     console.error('Fetch orders error:', err);
     res.status(500).json({ error: err.message });
@@ -521,47 +591,73 @@ app.get('/api/orders/:id', async (req, res) => {
       include: { customer: true, items: { include: { item: true } } }
     });
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    res.json(order);
+    const orderWithQty = {
+      ...order,
+      qtyReserved: order.items.reduce((sum, item) => sum + Number(item.qty), 0)
+    };
+    res.json(orderWithQty);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
 app.post('/api/orders', async (req, res) => {
-  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions } = req.body;
+  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions, orderDate } = req.body;
+  console.log('--- CREATE ORDER REQUEST ---');
+  console.log('Body:', JSON.stringify(req.body, null, 2));
   try {
-    const result = await prisma.salesOrder.create({
-      data: {
-        customerId,
-        reference,
-        amount,
-        currency,
-        description,
-        billingAddress,
-        docOptions: docOptions || {},
-        items: {
-          create: items.map((item: any) => ({
+    console.log('Validating items...');
+    if (!items || !Array.isArray(items)) throw new Error('Items must be an array');
+    
+    const prismaData: any = {
+      customerId,
+      reference,
+      amount: Number(amount || 0),
+      currency: currency || 'ZMW',
+      description,
+      billingAddress,
+      orderDate: (orderDate && !isNaN(new Date(orderDate).getTime())) ? new Date(orderDate) : new Date(),
+      docOptions: docOptions || {},
+      items: {
+        create: items.map((item: any, idx: number) => {
+          if (!item.itemId) {
+            console.error(`Item at index ${idx} is missing itemId`, item);
+            throw new Error(`Item at index ${idx} is missing itemId`);
+          }
+          return {
             itemId: item.itemId,
             description: item.description,
-            qty: item.qty,
-            unitPrice: item.unitPrice,
-            discount: item.discount,
-            division: item.division,
-            taxCode: item.taxCode,
-            totalAmount: item.totalAmount
-          }))
-        }
+            qty: Number(item.qty || 0),
+            unitPrice: Number(item.unitPrice || 0),
+            discount: Number(item.discount || 0),
+            division: item.division || 'General',
+            taxCode: item.taxCode || 'No tax',
+            totalAmount: Number(item.totalAmount || 0)
+          };
+        })
       }
+    };
+    
+    console.log('Sending to Prisma:', JSON.stringify(prismaData, (key, value) => 
+      key === 'items' ? undefined : value, 2)); // Hide items to keep log clean
+    console.log('Items count:', prismaData.items.create.length);
+
+    const result = await prisma.salesOrder.create({
+      data: prismaData
     });
     res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+  } catch (err: any) {
+    console.error('CREATE ORDER ERROR:', err);
+    res.status(500).json({ error: err.message, detailed: err });
   }
 });
 
 app.put('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
-  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions, status } = req.body;
+  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions, status, orderDate } = req.body;
+  console.log('--- UPDATE ORDER REQUEST ---');
+  console.log('ID:', id);
+  console.log('Body:', JSON.stringify(req.body, null, 2));
   try {
     await prisma.quoteItem.deleteMany({ where: { orderId: id } });
     const result = await prisma.salesOrder.update({
@@ -569,29 +665,31 @@ app.put('/api/orders/:id', async (req, res) => {
       data: {
         customerId,
         reference,
-        amount,
+        amount: Number(amount),
         currency,
         description,
         billingAddress,
         status: status || 'Ordered',
+        orderDate: orderDate ? new Date(orderDate) : undefined,
         docOptions: docOptions || {},
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
             description: item.description,
-            qty: item.qty,
-            unitPrice: item.unitPrice,
-            discount: item.discount,
+            qty: Number(item.qty),
+            unitPrice: Number(item.unitPrice),
+            discount: Number(item.discount || 0),
             division: item.division,
             taxCode: item.taxCode,
-            totalAmount: item.totalAmount
+            totalAmount: Number(item.totalAmount)
           }))
         }
       }
     });
     res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+  } catch (err: any) {
+    console.error('UPDATE ORDER ERROR:', err);
+    res.status(500).json({ error: err.message, detailed: err });
   }
 });
 
@@ -731,88 +829,8 @@ app.get('/api/tax-codes', async (req, res) => {
 // --- REFERENCE GENERATION ---
 app.get('/api/reference/next/:type', async (req, res) => {
   const { type } = req.params;
-  let count = 0;
-  let prefix = '';
-
   try {
-    switch (type) {
-      case 'invoice':
-        count = await prisma.invoice.count();
-        prefix = 'INV';
-        break;
-      case 'quote':
-        count = await prisma.salesQuote.count();
-        prefix = 'SQ';
-        break;
-      case 'order':
-        count = await prisma.salesOrder.count();
-        prefix = 'SO';
-        break;
-      case 'delivery':
-        count = await prisma.deliveryNote.count();
-        prefix = 'DN';
-        break;
-      case 'receipt':
-        count = await prisma.receipt.count();
-        prefix = 'RCP';
-        break;
-      case 'purchase-quote':
-        count = await prisma.purchaseQuote.count();
-        prefix = 'PQ';
-        break;
-      case 'purchase-order':
-        count = await prisma.purchaseOrder.count();
-        prefix = 'PO';
-        break;
-      case 'purchase-invoice':
-        count = await prisma.invoices.count();
-        prefix = 'PINV';
-        break;
-      case 'customer':
-        const lastCustomer = await prisma.customer.findFirst({
-          where: { code: { startsWith: 'CUST-' } },
-          orderBy: { code: 'desc' }
-        });
-        if (lastCustomer) {
-          const lastRef = lastCustomer.code;
-          const parts = lastRef.split('-');
-          const lastNumStr = parts[parts.length - 1];
-          const lastNum = parseInt(lastNumStr);
-          count = isNaN(lastNum) ? await prisma.customer.count() : lastNum;
-        } else {
-          count = 0;
-        }
-        prefix = 'CUST';
-        break;
-      case 'supplier':
-        const lastSupplier = await prisma.suppliers.findFirst({
-          where: { code: { startsWith: 'SUP-' } },
-          orderBy: { code: 'desc' }
-        });
-        if (lastSupplier) {
-          const lastRef = lastSupplier.code;
-          const parts = lastRef.split('-');
-          const lastNumStr = parts[parts.length - 1];
-          const lastNum = parseInt(lastNumStr);
-          count = isNaN(lastNum) ? await prisma.suppliers.count() : lastNum;
-        } else {
-          count = 0;
-        }
-        prefix = 'SUP';
-        break;
-      case 'debit-note':
-        prefix = 'DN';
-        count = Math.floor(Math.random() * 1000);
-        break;
-      case 'credit-note':
-        prefix = 'CN';
-        count = Math.floor(Math.random() * 1000);
-        break;
-      default:
-        return res.status(400).json({ error: 'Invalid document type' });
-    }
-
-    const nextRef = `${prefix}-${(count + 1).toString().padStart(4, '0')}`;
+    const nextRef = await generateNextReference(type);
     res.json({ nextRef });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

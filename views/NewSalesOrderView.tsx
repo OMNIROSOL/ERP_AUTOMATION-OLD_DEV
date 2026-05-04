@@ -490,7 +490,8 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
         } catch (err: any) {
             console.error('Failed to save order:', err);
             const errMsg = err.response?.data?.error || err.message || 'Unknown error';
-            alert(`Failed to save order to database: ${errMsg}`);
+            const detailed = err.response?.data?.detailed ? JSON.stringify(err.response.data.detailed, null, 2) : '';
+            alert(`Failed to save order to database: ${errMsg}\n\nDetails: ${detailed}`);
         }
     };
 
@@ -655,7 +656,9 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                         >
                                                             <option value="General">General</option>
-                                                            {/* API logic for divisions if needed */}
+                                                            {availableDivisions.map((div: Division) => (
+                                                                <option key={div.id} value={div.name}>{div.name}</option>
+                                                            ))}
                                                         </select>
                                                     </td>
                                                     <td className="px-4 py-4 relative group/qty">

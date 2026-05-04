@@ -12,13 +12,14 @@ const EditSalesOrderColumnsView = () => {
             'Order Date': true,
             'Reference': true,
             'Customer': true,
+            'QTY RESERVED': true,
             'Description': false,
             'Amount': true,
             'Timestamp': true,
             'Approval': true
         };
 
-        const currentVisibility = saved ? JSON.parse(saved) : defaultVisibility;
+        const currentVisibility = saved ? { ...defaultVisibility, ...JSON.parse(saved) } : defaultVisibility;
         
         // Convert Record to Array for the checklist UI, filtering out system columns and deprecated fields
         return Object.entries(currentVisibility)
