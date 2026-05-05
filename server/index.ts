@@ -9,25 +9,60 @@ const app = express();
 console.log('Connecting to DB:', process.env.DATABASE_URL ? 'URL found' : 'URL MISSING');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 10000
+  connectionTimeoutMillis: 10000, // Increased timeout
+  idleTimeoutMillis: 30000,
+  max: 20 // Increased pool size
 });
 
-pool.on('connect', () => console.log('Database pool connected'));
-pool.on('error', (err) => console.error('Database pool error:', err));
+pool.on('connect', (client) => {
+  // Optional: log which request this client belongs to if possible, 
+  // but for now just general log
+  console.log('Database pool: New client connected');
+});
+
+pool.on('error', (err) => {
+  console.error('CRITICAL: Database pool error:', err);
+});
 
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 const PORT = process.env.PORT || 3001;
 
+const formatDate = (date: Date | null | undefined) => {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}.${month}.${year}`;
+};
+
+const parseDate = (d: any) => {
+  if (!d) return undefined;
+  if (typeof d === 'string' && d.includes('.')) {
+    const [day, month, year] = d.split('.').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  const date = new Date(d);
+  return isNaN(date.getTime()) ? undefined : date;
+};
+
 app.use(cors());
 app.use(express.json());
 
+// Add a simple request tracker
+let requestId = 0;
 app.use((req, res, next) => {
-  console.log(`>>> ${req.method} ${req.url}`);
-  if (req.method === 'POST' || req.method === 'PUT') {
-    console.log('Body keys:', Object.keys(req.body || {}));
-  }
+  const id = ++requestId;
+  (req as any).requestId = id;
+  const start = Date.now();
+  console.log(`[REQ ${id}] ${req.method} ${req.url}`);
+  
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`[REQ ${id}] Finished in ${duration}ms with status ${res.statusCode}`);
+  });
   next();
 });
 
@@ -89,14 +124,9 @@ const generateNextReference = async (type: string, tx: any = prisma) => {
   return nextRef;
 };
 
+// Root endpoint
 app.get('/', (req, res) => {
   res.send('🚀 ERP Backend is running');
-});
-
-// Log all requests
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  next();
 });
 
 app.get('/api/test-db', async (req, res) => {
@@ -115,7 +145,27 @@ app.get('/api/customers', async (req, res) => {
     const customers = await prisma.customer.findMany({
       orderBy: { createdAt: 'desc' }
     });
-    res.json(customers);
+
+    const [invoices, receipts] = await Promise.all([
+      prisma.invoice.findMany({ select: { customerId: true, grandTotal: true } }),
+      prisma.receipt.findMany({ select: { paidByContact: true, amount: true } })
+    ]);
+    const customersWithBalance = customers.map(customer => {
+      const customerInvoices = invoices.filter(i => i.customerId === customer.id);
+      const customerReceipts = receipts.filter(r => r.paidByContact === customer.name);
+
+      const totalInvoiced = customerInvoices.reduce((sum, i) => sum + Number(i.grandTotal || 0), 0);
+      const totalPaid = customerReceipts.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+      const balance = totalInvoiced - totalPaid;
+
+      return {
+        ...customer,
+        balance,
+        status: balance <= 0 ? 'Paid' : 'Unpaid'
+      };
+    });
+
+    res.json(customersWithBalance);
   } catch (err: any) {
     console.error('Error fetching customers:', err);
     res.status(500).json({ error: err.message });
@@ -129,7 +179,21 @@ app.get('/api/customers/:id', async (req, res) => {
       where: { id }
     });
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
-    res.json(customer);
+
+    const [invoices, receipts] = await Promise.all([
+      prisma.invoice.findMany({ where: { customerId: id }, select: { grandTotal: true } }),
+      prisma.receipt.findMany({ where: { paidByContact: customer.name }, select: { amount: true } })
+    ]);
+
+    const totalInvoiced = invoices.reduce((sum, i) => sum + Number(i.grandTotal || 0), 0);
+    const totalPaid = receipts.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+    const balance = totalInvoiced - totalPaid;
+
+    res.json({
+      ...customer,
+      balance,
+      status: balance <= 0 ? 'Paid' : 'Unpaid'
+    });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -282,7 +346,14 @@ app.delete('/api/divisions/:id', async (req, res) => {
 app.get('/api/invoices', async (req, res) => {
   try {
     const invoices = await prisma.invoice.findMany({
-      include: { customer: true, items: { include: { item: true, tax_codes: true } } },
+      include: { 
+        customer: true, 
+        items: { 
+          include: { 
+            item: true 
+          } 
+        } 
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.json(invoices);
@@ -307,7 +378,7 @@ app.get('/api/invoices/:id', async (req, res) => {
 });
 
 app.post('/api/invoices', async (req, res) => {
-  const { customerId, reference, items, grandTotal, balanceDue, docOptions } = req.body;
+  const { customerId, reference, items, grandTotal, balanceDue, docOptions, dueDate, issueDate, description } = req.body;
   try {
     const result = await prisma.invoice.create({
       data: {
@@ -315,7 +386,9 @@ app.post('/api/invoices', async (req, res) => {
         reference,
         grandTotal,
         balanceDue,
-        docOptions: docOptions || {},
+        issueDate: parseDate(issueDate),
+        dueDate: parseDate(dueDate),
+        docOptions: { ...(docOptions || {}), description },
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
@@ -338,7 +411,7 @@ app.post('/api/invoices', async (req, res) => {
 
 app.put('/api/invoices/:id', async (req, res) => {
   const { id } = req.params;
-  const { customerId, reference, items, grandTotal, balanceDue, docOptions } = req.body;
+  const { customerId, reference, items, grandTotal, balanceDue, docOptions, dueDate, issueDate, description } = req.body;
   try {
     await prisma.invoiceItem.deleteMany({ where: { invoiceId: id } });
     const result = await prisma.invoice.update({
@@ -348,7 +421,9 @@ app.put('/api/invoices/:id', async (req, res) => {
         reference,
         grandTotal,
         balanceDue,
-        docOptions: docOptions || {},
+        issueDate: parseDate(issueDate),
+        dueDate: parseDate(dueDate),
+        docOptions: { ...(docOptions || {}), description },
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
@@ -519,6 +594,9 @@ app.post('/api/quotes/:id/convert', async (req, res) => {
           description: quote.description,
           billingAddress: quote.billingAddress,
           orderDate: new Date(),
+          expiryDate: (quote.issueDate && quote.expiryDays) 
+            ? new Date(new Date(quote.issueDate).getTime() + quote.expiryDays * 24 * 60 * 60 * 1000) 
+            : new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000),
           status: 'Ordered',
           docOptions: quote.docOptions || {},
           items: {
@@ -602,7 +680,7 @@ app.get('/api/orders/:id', async (req, res) => {
 });
 
 app.post('/api/orders', async (req, res) => {
-  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions, orderDate } = req.body;
+  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions, orderDate, expiryDate } = req.body;
   console.log('--- CREATE ORDER REQUEST ---');
   console.log('Body:', JSON.stringify(req.body, null, 2));
   try {
@@ -614,6 +692,7 @@ app.post('/api/orders', async (req, res) => {
       reference,
       amount: Number(amount || 0),
       currency: currency || 'ZMW',
+      expiryDate: expiryDate ? new Date(expiryDate) : undefined,
       description,
       billingAddress,
       orderDate: (orderDate && !isNaN(new Date(orderDate).getTime())) ? new Date(orderDate) : new Date(),
@@ -654,7 +733,7 @@ app.post('/api/orders', async (req, res) => {
 
 app.put('/api/orders/:id', async (req, res) => {
   const { id } = req.params;
-  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions, status, orderDate } = req.body;
+  const { customerId, reference, items, amount, currency, description, billingAddress, docOptions, status, orderDate, expiryDate } = req.body;
   console.log('--- UPDATE ORDER REQUEST ---');
   console.log('ID:', id);
   console.log('Body:', JSON.stringify(req.body, null, 2));
@@ -671,6 +750,7 @@ app.put('/api/orders/:id', async (req, res) => {
         billingAddress,
         status: status || 'Ordered',
         orderDate: orderDate ? new Date(orderDate) : undefined,
+        expiryDate: expiryDate ? new Date(expiryDate) : undefined,
         docOptions: docOptions || {},
         items: {
           create: items.map((item: any) => ({
@@ -711,7 +791,10 @@ app.patch('/api/orders/:id', async (req, res) => {
 app.get('/api/delivery-notes', async (req, res) => {
   try {
     const notes = await prisma.deliveryNote.findMany({
-      include: { customer: true, items: { include: { item: true } } },
+      include: { 
+        customer: true,
+        items: { include: { item: true } }
+      },
       orderBy: { timestamp: 'desc' }
     });
     res.json(notes);
@@ -721,25 +804,119 @@ app.get('/api/delivery-notes', async (req, res) => {
   }
 });
 
+app.get('/api/delivery-notes/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    let note = await prisma.deliveryNote.findUnique({
+      where: { id },
+      include: { 
+        customer: true,
+        items: { include: { item: true } }
+      }
+    });
+
+    if (!note) {
+      note = await prisma.deliveryNote.findUnique({
+        where: { reference: id },
+        include: { 
+          customer: true,
+          items: { include: { item: true } }
+        }
+      });
+    }
+
+    if (!note) return res.status(404).json({ error: 'Delivery note not found' });
+    res.json(note);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/delivery-notes', async (req, res) => {
-  const { customerId, reference, items, description, inventoryLocation } = req.body;
+  const { customerId, reference, items, description, inventoryLocation, deliveryDate, orderNumber, invoiceNumber, status, docOptions, customTitle, footer, columnLineNumber, deliveryAddress } = req.body;
   try {
     const result = await prisma.deliveryNote.create({
       data: {
         customerId,
         reference,
         description,
+        deliveryAddress,
         inventoryLocation,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
+        orderNumber,
+        invoiceNumber,
+        status: status || 'Pending',
+        docOptions: docOptions || {},
+        customTitle,
+        footer,
+        columnLineNumber,
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId,
-            qty: item.qty
+            description: item.description,
+            qty: Number(item.qty)
           }))
         }
       }
     });
     res.json(result);
   } catch (err) {
+    console.error('CREATE DELIVERY NOTE ERROR:', err);
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.put('/api/delivery-notes/:id', async (req, res) => {
+  const { id } = req.params;
+  const { customerId, reference, items, description, inventoryLocation, deliveryDate, orderNumber, invoiceNumber, status, docOptions, customTitle, footer, columnLineNumber, deliveryAddress } = req.body;
+  try {
+    // Resolve UUID if 'id' is a reference
+    let targetId = id;
+    const existing = await prisma.deliveryNote.findFirst({
+      where: {
+        OR: [
+          { id: id.length === 36 ? id : undefined }, // Try as UUID
+          { reference: id }
+        ]
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Delivery note not found' });
+    }
+    targetId = existing.id;
+
+    // Delete existing items first
+    await prisma.deliveryNoteItem.deleteMany({ where: { deliveryNoteId: targetId } });
+
+    const result = await prisma.deliveryNote.update({
+      where: { id: targetId },
+      data: {
+        customerId,
+        reference,
+        description,
+        deliveryAddress,
+        inventoryLocation,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
+        orderNumber,
+        invoiceNumber,
+        status,
+        docOptions: docOptions || {},
+        customTitle,
+        footer,
+        columnLineNumber,
+        items: {
+          create: items.map((item: any) => ({
+            itemId: item.itemId,
+            description: item.description,
+            qty: Number(item.qty)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('UPDATE DELIVERY NOTE ERROR:', err);
     res.status(500).json({ error: (err as Error).message });
   }
 });

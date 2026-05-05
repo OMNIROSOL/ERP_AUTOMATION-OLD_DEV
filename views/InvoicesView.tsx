@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { Plus, Eye, Edit, FileText, Check, X, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, Printer, Search, ArrowUpDown, ChevronUp, ChevronDown, Copy, Calendar, Clock, Package } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { ScreenPermission } from '../types';
+import { formatTimestamp } from '../utils/dateUtils';
 import apiService from '../services/apiService';
 import DataTable from '../components/shared/DataTable';
 import Button from '../components/shared/Button';
@@ -13,6 +14,7 @@ const InvoicesView = () => {
     const navigate = useNavigate();
     const { customerName } = useParams();
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('All');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -56,14 +58,31 @@ const InvoicesView = () => {
                     apiService.getItems()
                 ]);
 
+                if (!Array.isArray(invData)) {
+                    setInvoices([]);
+                    return;
+                }
+
                 const mappedInvoices = invData.map((inv: any) => ({
                     ...inv,
-                    customer: inv.customer?.name || inv.customer || 'Unknown',
-                    invoiceAmount: parseFloat(inv.grandTotal) || 0,
-                    balanceDue: parseFloat(inv.balanceDue || inv.grandTotal) || 0,
+                    customer: inv.customer?.name || (typeof inv.customer === 'string' ? inv.customer : 'Unknown'),
+                    invoiceAmount: parseFloat(String(inv.grandTotal || 0)) || 0,
+                    balanceDue: parseFloat(String(inv.balanceDue || inv.grandTotal || 0)) || 0,
                     currency: inv.currency || inv.customer?.currency?.split(' - ')[0] || 'ZMW',
                     issueDate: inv.issueDate ? new Date(inv.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : (inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-GB').replace(/\//g, '.') : ''),
-                    dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : (inv.dueDate || '')
+                    dueDate: (() => {
+                        if (inv.dueDate) return new Date(inv.dueDate).toLocaleDateString('en-GB').replace(/\//g, '.');
+                        if (inv.issueDate) {
+                            const d = new Date(inv.issueDate);
+                            d.setDate(d.getDate() + 30);
+                            return d.toLocaleDateString('en-GB').replace(/\//g, '.');
+                        }
+                        return '';
+                    })(),
+                    timestamp: formatTimestamp(inv.createdAt),
+                    tpin: inv.tpin || inv.customer?.tpin || '',
+                    description: inv.description || inv.docOptions?.description || inv.items?.[0]?.description || '',
+                    Division: inv.items?.[0]?.division || inv.docOptions?.division || inv.division || inv.customer?.division || 'General'
                 }));
                 setInvoices(mappedInvoices);
                 setDbDeliveryNotes(dnData);
@@ -93,11 +112,9 @@ const InvoicesView = () => {
         'Issue date': true,
         'Due date': true,
         'Reference': true,
-        'Sales Order': false,
         'Customer': true,
         'Description': false,
-        'Project': false,
-        'Division': false,
+        'Division': true,
         'Invoice Amount': true,
         'Balance due': true,
         'Days to Due Date': false,
@@ -105,7 +122,6 @@ const InvoicesView = () => {
         'Status': true,
         'Withholding tax': false,
         'TPIN': false,
-        'Sales Quote': false,
         'Closed invoice': false,
         'Discount': false,
         'Timestamp': true,
@@ -118,6 +134,17 @@ const InvoicesView = () => {
         const current = saved ? JSON.parse(saved) : defaultVisibility;
         return { ...defaultVisibility, ...current };
     });
+
+    useEffect(() => {
+        const handleStorageChange = () => {
+            const saved = localStorage.getItem('invoice_column_visibility_settings');
+            if (saved) {
+                setVisibleColumns({ ...defaultVisibility, ...JSON.parse(saved) });
+            }
+        };
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
 
     const toggleColumnVisibility = (id: string) => {
         setVisibleColumns(prev => {
@@ -180,20 +207,34 @@ const InvoicesView = () => {
             result = result.filter(inv => inv.customer.toLowerCase() === customerName.toLowerCase());
         }
 
+        if (statusFilter !== 'All') {
+            result = result.filter(inv => {
+                if (statusFilter === 'Unpaid') return inv.status === 'Unpaid' || inv.status === 'Overdue';
+                return inv.status === statusFilter;
+            });
+        }
+
         const query = searchQuery.toLowerCase();
         result = result.filter(inv => {
             return (
                 inv.customer.toLowerCase().includes(query) ||
                 inv.reference.toLowerCase().includes(query) ||
-                inv.status.toLowerCase().includes(query) ||
+                (inv.status && inv.status.toLowerCase().includes(query)) ||
                 (inv.description && inv.description.toLowerCase().includes(query)) ||
                 (inv.salesOrder && inv.salesOrder.toLowerCase().includes(query)) ||
                 (inv.tpin && inv.tpin.toLowerCase().includes(query)) ||
+                (inv.Division && inv.Division.toLowerCase().includes(query)) ||
                 (inv.timestamp && inv.timestamp.toLowerCase().includes(query)) ||
-                (inv.items && inv.items.some((item: any) =>
-                    item.item.toLowerCase().includes(query) ||
-                    item.description.toLowerCase().includes(query)
-                ))
+                (inv.items && inv.items.some((item: any) => {
+                    const itemName = item.item?.itemName || (typeof item.item === 'string' ? item.item : '');
+                    const itemCode = item.item?.itemCode || '';
+                    const itemDesc = item.description || '';
+                    return (
+                        itemName.toLowerCase().includes(query) ||
+                        itemCode.toLowerCase().includes(query) ||
+                        itemDesc.toLowerCase().includes(query)
+                    );
+                }))
             );
         });
 
@@ -289,7 +330,7 @@ const InvoicesView = () => {
             if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
             return sortDirection === 'asc' ? 1 : -1;
         });
-    }, [searchQuery, refreshTrigger, customerName, sortColumn, sortDirection]);
+    }, [invoices, searchQuery, refreshTrigger, customerName, sortColumn, sortDirection]);
 
 
 
@@ -411,14 +452,6 @@ const InvoicesView = () => {
             sortable: false
         },
         {
-            id: 'Sales Order',
-            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Sales Order')}>Sales Order <SortIcon column="Sales Order" /></div>,
-            accessor: (inv: any) => (
-                <span className="text-slate-600 font-medium">{inv.salesOrder || ''}</span>
-            ),
-            sortable: false
-        },
-        {
             id: 'Customer',
             header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Customer')}>Customer <SortIcon column="Customer" /></div>,
             className: 'min-w-[200px]',
@@ -437,15 +470,9 @@ const InvoicesView = () => {
             sortable: false
         },
         {
-            id: 'Project',
-            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Project')}>Project <SortIcon column="Project" /></div>,
-            accessor: () => <span className="text-slate-400 italic text-xs">-</span>,
-            sortable: false
-        },
-        {
             id: 'Division',
             header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Division')}>Division <SortIcon column="Division" /></div>,
-            accessor: () => <span className="text-slate-400 italic text-xs">-</span>,
+            accessor: (inv: any) => <span className="text-slate-600 font-medium text-[13px]">{inv.Division || 'General'}</span>,
             sortable: false
         },
         {
@@ -472,10 +499,11 @@ const InvoicesView = () => {
                         <Link
                             to={`/sales-invoices/transactions/${inv.id}`}
                             className={cn(
-                                "font-medium hover:underline transition-all text-slate-900"
+                                "font-medium hover:underline transition-all text-slate-900 flex items-center justify-end"
                             )}
                         >
-                            {parseFloat(String(inv.balanceDue || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            <span className="text-[10px] text-slate-400 font-bold mr-1">{inv.currency || 'ZMW'}</span>
+                            <span>{parseFloat(String(inv.balanceDue || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </Link>
                     </div>
                 );
@@ -506,7 +534,7 @@ const InvoicesView = () => {
             className: 'whitespace-nowrap',
             accessor: (inv: any) => (
                 <Badge variant={inv.status === 'Paid' || inv.status === 'Paid in full' ? 'success' : 'warning'} className="text-[10px]">
-                    {inv.status}
+                    {inv.status?.toUpperCase()}
                 </Badge>
             ),
             sortable: false
@@ -521,12 +549,6 @@ const InvoicesView = () => {
             id: 'TPIN',
             header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('TPIN')}>TPIN <SortIcon column="TPIN" /></div>,
             accessor: (inv: any) => <span className="text-slate-400 text-xs tabular-nums">{inv.tpin || ''}</span>,
-            sortable: false
-        },
-        {
-            id: 'Sales Quote',
-            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Sales Quote')}>Sales Quote <SortIcon column="Sales Quote" /></div>,
-            accessor: () => <span className="text-slate-400 italic text-xs">-</span>,
             sortable: false
         },
         {
@@ -548,6 +570,7 @@ const InvoicesView = () => {
         {
             id: 'Timestamp',
             header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Timestamp')}>Timestamp <SortIcon column="Timestamp" /></div>,
+            className: 'whitespace-nowrap min-w-[120px]',
             accessor: (inv: any) => (
                 <span className="text-[10px] text-slate-400 font-medium">{inv.timestamp || ''}</span>
             ),
@@ -687,7 +710,7 @@ const InvoicesView = () => {
             cols = cols.filter(c => c.id !== 'Selection');
         }
         return cols;
-    }, [visibleColumns, visibleLineColumns, isSelectionMode, selectedIds, displayData]);
+    }, [visibleColumns, visibleLineColumns, isSelectionMode, selectedIds, displayData, filteredData]);
 
     return (
         <div className="p-8 space-y-6 animate-in fade-in duration-500 font-sans">
@@ -729,7 +752,7 @@ const InvoicesView = () => {
 
             <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 pb-2">
                 <div className="flex items-center gap-4 flex-1">
-                    <div className="relative flex-1 group max-w-xl">
+                    <div className="relative flex-1 group max-w-md">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-blue-500" size={14} />
                         <input
                             type="text"
@@ -742,6 +765,20 @@ const InvoicesView = () => {
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm transition-all"
                         />
                     </div>
+
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => {
+                            setStatusFilter(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="bg-white border border-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-widest rounded-xl px-5 py-2.5 focus:outline-none transition-all cursor-pointer shadow-sm hover:border-slate-300"
+                    >
+                        <option value="All">All Statuses</option>
+                        <option value="Unpaid">Unpaid</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Overdue">Overdue</option>
+                    </select>
                 </div>
 
                 <div className="flex items-center space-x-4">

@@ -50,7 +50,12 @@ const SalesOrdersView = () => {
                     customer: o.customer?.name || o.customer || 'Unknown',
                     currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
                     orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
-                    timestamp: formatTimestamp(o.createdAt)
+                    expiryDate: o.expiryDate 
+                        ? new Date(o.expiryDate).toLocaleDateString('en-GB').replace(/\//g, '.') 
+                        : (o.orderDate ? new Date(new Date(o.orderDate).getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB').replace(/\//g, '.') : ''),
+                    timestamp: formatTimestamp(o.createdAt),
+                    status: (o.status?.toLowerCase() === 'pending' || !o.status) ? 'Ordered' : o.status,
+                    Division: o.items?.[0]?.division || o.docOptions?.division || o.customer?.division || 'General'
                 }));
                 setOrders(mappedOrders);
             } catch (err) {
@@ -81,8 +86,12 @@ const SalesOrdersView = () => {
                         itemId: it.itemId || it.item?.id,
                         qty: parseFloat(it.qty),
                         unitPrice: parseFloat(it.unitPrice),
+                        division: it.division || 'General',
                         totalAmount: parseFloat(it.totalAmount)
-                    }))
+                    })),
+                    docOptions: {
+                        division: order.items?.[0]?.division || 'General'
+                    }
                 };
                 await apiService.createInvoice(invoiceData);
                 navigate('/sales-invoices');
@@ -103,6 +112,7 @@ const SalesOrdersView = () => {
         'Reference': true,
         'Customer': true,
         'QTY RESERVED': true,
+        'Division': true,
         'Description': false,
         'Amount': true,
         'Timestamp': true,
@@ -354,6 +364,12 @@ const SalesOrdersView = () => {
             accessor: (o: any) => (
                 <span className="font-bold text-slate-700">{o.qtyReserved || 0}</span>
             ),
+            sortable: false
+        },
+        {
+            id: 'Division',
+            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Division')}>Division <SortIcon column="Division" /></div>,
+            accessor: (o: any) => <span className="text-slate-600 font-medium text-[13px]">{o.Division}</span>,
             sortable: false
         },
         {

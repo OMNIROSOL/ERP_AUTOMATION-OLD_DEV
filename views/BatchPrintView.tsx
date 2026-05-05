@@ -177,11 +177,19 @@ const BatchPrintView = () => {
         }
 
         if (isSalesOrders) {
-            return allOrders.filter(o => selectedIds.includes(o.id?.toString())).map(o => ({
+            const filtered = allOrders.filter(o => selectedIds.includes(o.id?.toString()));
+            console.log(`Found ${filtered.length} matching sales orders for batch print.`);
+            return filtered.map(o => ({
                 ...o,
                 customer: o.customer?.name || o.customer || 'Unknown',
                 currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
-                orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : ''
+                orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                items: (o.items || []).map((it: any) => ({
+                    ...it,
+                    item: it.item?.itemName || it.itemName || it.item || 'Select Item',
+                    description: it.description || it.item?.description || '',
+                    total: (parseFloat(it.qty) * parseFloat(it.unitPrice)).toFixed(2)
+                }))
             }));
         }
 
@@ -225,13 +233,15 @@ const BatchPrintView = () => {
     }, [allCustomers, allSuppliers, allQuotes, allOrders, allInvoices, allDeliveryNotes, allReceipts, allPurchaseQuotes, allPurchaseOrders, selectedIds, isCustomers, isSuppliers, isSalesQuotes, isPurchaseQuotes, isPurchaseOrders, isSalesOrders, isSalesInvoices, reportType, singleInvoiceId]);
 
     useEffect(() => {
-        if (items.length > 0) {
+        console.log('BatchPrintView Print Check:', { isLoading, itemsCount: items.length });
+        if (!isLoading && items.length > 0) {
             const timer = setTimeout(() => {
+                console.log('Executing window.print()');
                 window.print();
-            }, 1000);
+            }, 1200);
             return () => clearTimeout(timer);
         }
-    }, [items]);
+    }, [isLoading, items]);
 
     if (isLoading) {
         return (

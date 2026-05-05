@@ -130,6 +130,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const isEditing = Boolean(id);
 
     const [issueDate, setIssueDate] = useState('');
+    const [expiryDate, setExpiryDate] = useState('');
     const [customer, setCustomer] = useState('');
     const [currency, setCurrency] = useState('ZMW');
     const [billingAddress, setBillingAddress] = useState('');
@@ -139,6 +140,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const [fileName, setFileName] = useState('No file chosen');
     const [marginThreshold] = useState(10);
     const [status, setStatus] = useState('Ordered');
+    const [division, setDivision] = useState('General');
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
     const [customers, setCustomers] = useState<any[]>([]);
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
@@ -181,7 +183,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             if (item.item === 'Select Item') return false;
             const inv = dbInventory.find(i => i.itemName === item.item);
             if (!inv) return false;
-            
+
             const qty = parseFloat(item.qty) || 0;
             const price = parseFloat(item.unitPrice) || 0;
             const stock = parseFloat(inv.qtyOnHand) || 0;
@@ -235,24 +237,99 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
         loadAll();
     }, []);
 
+    const [isLoading, setIsLoading] = useState(false);
+
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
         const copyFromId = searchParams.get('copyFrom');
         if (id || copyFromId) {
             const orderId = id || copyFromId;
             const loadOrder = async () => {
+                setIsLoading(true);
                 try {
-                    const orders = await apiService.getOrders();
-                    const order = orders.find((o: any) => o.id === orderId);
+                    let order: any = null;
+
+                    // Try direct lookup first
+                    try {
+                        order = await apiService.getOrder(orderId);
+                    } catch (e) {
+                        try {
+                            order = await apiService.getInvoice(orderId);
+                        } catch (e2) {
+                            try {
+                                order = await apiService.getQuote(orderId);
+                            } catch (e3) {
+                                // Fallback to list search
+                                const [orders, invoices, quotes] = await Promise.all([
+                                    apiService.getOrders().catch(() => []),
+                                    apiService.getInvoices().catch(() => []),
+                                    apiService.getQuotes().catch(() => [])
+                                ]);
+                                order =
+                                    orders.find((o: any) => o.id === orderId) ||
+                                    invoices.find((i: any) => i.id === orderId) ||
+                                    quotes.find((q: any) => q.id === orderId);
+                            }
+                        }
+                    }
+
                     if (order) {
-                        setIssueDate(new Date(order.orderDate).toISOString().split('T')[0]);
-                        setCustomer(order.customer?.name || order.customer);
+                        const orderDate = order.orderDate || order.issueDate || '';
+                        let initialIssueDate = new Date().toISOString().split('T')[0];
+                        if (orderDate) {
+                            let d: Date;
+                            // Precise check for DD.MM.YYYY (exactly two dots)
+                            const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                            if (dottedPattern.test(orderDate)) {
+                                const [day, month, year] = orderDate.split('.');
+                                d = new Date(`${year}-${month}-${day}`);
+                            } else {
+                                d = new Date(orderDate);
+                            }
+                            if (!isNaN(d.getTime())) {
+                                initialIssueDate = d.toISOString().split('T')[0];
+                            }
+                        }
+                        setIssueDate(initialIssueDate);
+
+                        if (order.expiryDate) {
+                            setExpiryDate(new Date(order.expiryDate).toISOString().split('T')[0]);
+                        } else if (orderDate) {
+                            const effectiveExpiryDays = order.expiryDays || 30;
+                            // Handle both ISO and DD.MM.YYYY formats
+                            let parsedDate: Date;
+                            const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                            if (dottedPattern.test(orderDate)) {
+                                const [d, m, y] = orderDate.split('.');
+                                parsedDate = new Date(`${y}-${m}-${d}`);
+                            } else {
+                                parsedDate = new Date(orderDate);
+                            }
+
+                            if (!isNaN(parsedDate.getTime())) {
+                                parsedDate.setDate(parsedDate.getDate() + effectiveExpiryDays);
+                                setExpiryDate(parsedDate.toISOString().split('T')[0]);
+                            } else {
+                                setExpiryDate('');
+                            }
+                        } else {
+                            setExpiryDate('');
+                        }
+                        setCustomer(order.customer?.name || order.customer || '');
                         setCurrency(order.currency || order.customer?.currency?.split(' - ')[0] || 'ZMW');
                         setBillingAddress(order.billingAddress || order.customer?.billingAddress || '');
-                        setReference(order.reference);
-                        setUseManualRef(true);
-                        setDescription(order.description || '');
-                        setStatus(order.status);
+
+                        if (copyFromId) {
+                            fetchReference();
+                            setUseManualRef(false);
+                        } else {
+                            setReference(order.reference);
+                            setUseManualRef(true);
+                        }
+
+                        setDescription(order.description || order.docOptions?.description || '');
+                        setDivision(order.division || order.docOptions?.division || order.items?.[0]?.division || order.customer?.division || 'General');
+                        setStatus(order.status || 'Ordered');
 
                         const itemsToSet = order.items && order.items.length > 0
                             ? order.items
@@ -260,8 +337,8 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
 
                         setItems(itemsToSet.map((i: any) => ({
                             id: i.id || Date.now() + Math.random(),
-                            itemId: i.itemId,
-                            item: i.item?.itemName || i.item || 'Select Item',
+                            itemId: i.itemId || i.item?.id,
+                            item: i.item?.itemName || i.itemName || i.item || 'Select Item',
                             description: i.description || i.item?.description || '',
                             qty: i.qty ? i.qty.toString() : '1',
                             unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
@@ -269,15 +346,21 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                             division: i.division || 'General',
                             taxCode: i.taxCode || ''
                         })));
-                    }
-                    if (order.customTitle) {
-                        setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: order.customTitle || 'Sales Order' }));
-                    }
-                    if (order.footer) {
-                        setOptions(prev => ({ ...prev, footers: true, footerValue: order.footer || 'Terms & Conditions apply.' }));
+
+                        if (order.customTitle || order.docOptions?.customTitleValue) {
+                            setOptions(prev => ({ ...prev, customTitle: true, customTitleValue: order.customTitle || order.docOptions?.customTitleValue || 'Sales Order' }));
+                        }
+                        if (order.footer || order.docOptions?.footerValue) {
+                            setOptions(prev => ({ ...prev, footers: true, footerValue: order.footer || order.docOptions?.footerValue || 'Terms & Conditions apply.' }));
+                        }
+                        if (order.docOptions) {
+                            setOptions(prev => ({ ...prev, ...order.docOptions }));
+                        }
                     }
                 } catch (err) {
                     console.error('Failed to load order:', err);
+                } finally {
+                    setIsLoading(false);
                 }
             };
             loadOrder();
@@ -292,12 +375,12 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             setStatus('Ordered');
             setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: '' }]);
         }
-    }, [id, location.search, dbInventory]);
+    }, [id, location.search]);
 
     // Ensure descriptions are populated from master data if missing
     useEffect(() => {
         if (Object.keys(inventoryMap).length === 0 || items.length === 0) return;
-        
+
         let changed = false;
         const newItems = items.map(item => {
             if (item.item && item.item !== 'Select Item' && !item.description) {
@@ -470,8 +553,9 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
             description: description,
             billingAddress: billingAddress,
             orderDate: issueDate,
+            expiryDate: expiryDate,
             status: isEditing ? status : 'Ordered',
-            docOptions: options,
+            docOptions: { ...options, division },
             items: validItems.map(i => ({
                 itemId: i.itemId,
                 description: i.description,
@@ -684,7 +768,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                             </div>
                                                         </div>
                                                         {(parseFloat(item.qty) || 0) > (dbInventory.find((i: any) => i.itemName === item.item)?.qtyOnHand || 0) && (
-                                                             <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                            <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                 <TooltipProvider>
                                                                     <Tooltip>
                                                                         <TooltipTrigger>
@@ -721,7 +805,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                                         </div>
                                                         {((parseFloat(item.unitPrice) || 0) < (dbInventory.find(i => i.itemName === item.item)?.purchasePrice || 0) ||
                                                             (parseFloat(item.unitPrice) || 0) < (dbInventory.find(i => i.itemName === item.item)?.sellingPrice * (1 - marginThreshold / 100))) && (
-                                                                 <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                                <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                                     <TooltipProvider>
                                                                         <Tooltip>
                                                                             <TooltipTrigger>

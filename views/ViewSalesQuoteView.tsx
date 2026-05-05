@@ -382,6 +382,10 @@ const ViewSalesQuoteView = () => {
                                             <span className="w-32 text-gray-500">Currency:</span>
                                             <span className="font-semibold">{quote.currency || quote.customer?.currency?.split(' - ')[0] || 'ZMW'}</span>
                                         </div>
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Division:</span>
+                                            <span className="font-semibold">{(quote.items && quote.items[0]?.division) || quote.docOptions?.division || quote.division || (quote.customer && quote.customer.division) || 'General'}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

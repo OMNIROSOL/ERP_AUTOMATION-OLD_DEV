@@ -18,3 +18,17 @@ export const formatTimestamp = (dateInput: string | Date | null | undefined): st
 
     return `${day}.${month}.${year} ${strHours}:${minutes}:${seconds} ${ampm}`;
 };
+
+export const convertToInputDate = (displayDate: string | null | undefined): string => {
+    if (!displayDate) return '';
+    const parts = displayDate.split('.');
+    if (parts.length !== 3) return '';
+    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+};
+
+export const convertToDisplayDate = (inputDate: string | null | undefined): string => {
+    if (!inputDate) return '';
+    const parts = inputDate.split('-');
+    if (parts.length !== 3) return '';
+    return `${parts[2]}.${parts[1]}.${parts[0]}`;
+};

@@ -15,7 +15,7 @@ const DeliveryNotesView = () => {
     const navigate = useNavigate();
     const { customerName } = useParams();
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState('Pending');
+    const [statusFilter, setStatusFilter] = useState('All');
     const [invoiceFilter, setInvoiceFilter] = useState('All'); // 'All', 'Invoiced', 'Uninvoiced'
     const [pageSize, setPageSize] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
@@ -35,7 +35,14 @@ const DeliveryNotesView = () => {
             setIsLoading(true);
             try {
                 const data = await apiService.getDeliveryNotes();
-                setDeliveryNotes(data);
+                const mappedData = data.map((dn: any) => ({
+                    ...dn,
+                    customer: dn.customer?.name || dn.customerName || 'Unknown',
+                    deliveryDate: dn.deliveryDate ? new Date(dn.deliveryDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    orderNumber: dn.reference || '-',
+                    status: dn.status || 'Pending'
+                }));
+                setDeliveryNotes(mappedData);
             } catch (err) {
                 console.error('Failed to fetch delivery notes:', err);
             } finally {
@@ -385,7 +392,7 @@ const DeliveryNotesView = () => {
             className: 'whitespace-nowrap',
             accessor: (note: any) => (
                 <div className="flex flex-col">
-                    <span className="font-medium text-[13px] text-slate-800 tracking-normal">{note.deliveryDate}</span>
+                    <span className="font-medium text-[13px] text-slate-800 tracking-normal">{note.deliveryDate ? new Date(note.deliveryDate).toLocaleDateString('en-GB').replace(/\//g, '.') : (note.timestamp ? new Date(note.timestamp).toLocaleDateString('en-GB').replace(/\//g, '.') : '-')}</span>
                 </div>
             ),
             sortable: false
@@ -508,7 +515,7 @@ const DeliveryNotesView = () => {
             id: 'Item',
             header: 'Item',
             accessor: (note: any) => (
-                <span className="font-bold text-slate-900">{note._itemData?.item || '—'}</span>
+                <span className="font-bold text-slate-900">{note._itemData?.item?.itemName || note._itemData?.item || '—'}</span>
             ),
             sortable: false
         },
@@ -611,41 +618,32 @@ const DeliveryNotesView = () => {
                         />
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => {
-                                setStatusFilter(e.target.value);
-                                setCurrentPage(1);
-                            }}
-                            className="bg-white border border-gray-300 text-slate-600 text-[11px] font-black uppercase tracking-wider rounded-md px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all shadow-sm"
-                        >
-                            <option value="All">All Statuses</option>
-                            <option value="Delivered">Delivered</option>
-                            <option value="Pending">Pending</option>
-                            <option value="Cancelled">Cancelled</option>
-                        </select>
-                    </div>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => {
+                            setStatusFilter(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="bg-white border border-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-widest rounded-xl px-5 py-2.5 focus:outline-none transition-all cursor-pointer shadow-sm hover:border-slate-300"
+                    >
+                        <option value="All">All Statuses</option>
+                        <option value="Delivered">Delivered</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
 
-                    <div className="flex items-center bg-slate-50 p-1 rounded-xl border border-slate-200 ml-4 shadow-sm">
-                        {['All', 'Invoiced', 'Uninvoiced'].map((type) => (
-                            <button
-                                key={type}
-                                onClick={() => {
-                                    setInvoiceFilter(type);
-                                    setCurrentPage(1);
-                                }}
-                                className={cn(
-                                    "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
-                                    invoiceFilter === type
-                                        ? "bg-white text-indigo-600 shadow-sm border border-slate-200/50 active:scale-95"
-                                        : "text-slate-400 hover:text-slate-600"
-                                )}
-                            >
-                                {type}
-                            </button>
-                        ))}
-                    </div>
+                    <select
+                        value={invoiceFilter}
+                        onChange={(e) => {
+                            setInvoiceFilter(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        className="bg-white border border-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-widest rounded-xl px-5 py-2.5 focus:outline-none transition-all cursor-pointer shadow-sm hover:border-slate-300"
+                    >
+                        <option value="All">All Invoices</option>
+                        <option value="Invoiced">Invoiced</option>
+                        <option value="Uninvoiced">Uninvoiced</option>
+                    </select>
                 </div>
 
                 <div className="flex items-center space-x-8">

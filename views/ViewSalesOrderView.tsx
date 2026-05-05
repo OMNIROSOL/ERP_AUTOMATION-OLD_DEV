@@ -314,7 +314,7 @@ const ViewSalesOrderView = () => {
                                 {/* Billed To */}
                                 <div>
                                     <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Billed To</h3>
-                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{order.customer?.name || order.customer}</p>
+                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{order.customer?.name || (typeof order.customer === 'string' ? order.customer : 'Unknown Customer')}</p>
                                     <div className="text-gray-500 space-y-1">
                                         <p className="whitespace-pre-wrap">{order.billingAddress || order.customer?.billingAddress || '-'}</p>
                                         {customerEmail && <p className="text-blue-600 lowercase">{customerEmail}</p>}
@@ -332,6 +332,10 @@ const ViewSalesOrderView = () => {
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Currency:</span>
                                             <span className="font-semibold">{order.currency || order.customer?.currency?.split(' - ')[0] || 'ZMW'}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Division:</span>
+                                            <span className="font-semibold">{(order.items?.[0]?.division) || order.docOptions?.division || order.division || (order.customer && order.customer.division) || 'General'}</span>
                                         </div>
                                     </div>
                                 </div>

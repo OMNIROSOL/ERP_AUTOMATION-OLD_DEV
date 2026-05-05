@@ -51,6 +51,8 @@ const SalesQuotesView = () => {
                     currency: q.currency || q.customer?.currency?.split(' - ')[0] || 'ZMW',
                     issueDate: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
                     timestamp: formatTimestamp(q.createdAt),
+                    Division: q.items?.[0]?.division || q.docOptions?.division || q.division || q.customer?.division || 'General',
+                    tpin: q.tpin || q.customer?.tpin || '',
                     // Ensure numeric fields are correctly handled
                     amount: parseFloat(q.amount || 0)
                 }));
@@ -83,7 +85,10 @@ const SalesQuotesView = () => {
             'Customer': true,
             'Description': false,
             'Amount': true,
+            'Division': true,
             'Status': true,
+            'TPIN': false,
+            'Days until Expiry': false,
             'Timestamp': false
         };
 
@@ -100,7 +105,10 @@ const SalesQuotesView = () => {
                     'customer': 'Customer',
                     'description': 'Description',
                     'amount': 'Amount',
+                    'division': 'Division',
                     'status': 'Status',
+                    'tpin': 'TPIN',
+                    'days until expiry': 'Days until Expiry',
                     'timestamp': 'Timestamp'
                 };
 
@@ -123,6 +131,7 @@ const SalesQuotesView = () => {
             { id: 'Customer', label: 'Customer', visible: newVisible['Customer'] ?? true },
             { id: 'Description', label: 'Description', visible: newVisible['Description'] ?? false },
             { id: 'Amount', label: 'Amount', visible: newVisible['Amount'] ?? true },
+            { id: 'Division', label: 'Division', visible: newVisible['Division'] ?? true },
             { id: 'Status', label: 'Status', visible: newVisible['Status'] ?? true },
             { id: 'Timestamp', label: 'Timestamp', visible: newVisible['Timestamp'] ?? false },
         ];
@@ -209,11 +218,6 @@ const SalesQuotesView = () => {
 
     const filteredData = useMemo(() => {
         let result = [...quotes].filter(q => {
-            // Filter out Accepted and Rejected quotes from the list
-            if (q.status === 'Accepted' || q.status === 'Rejected') {
-                return false;
-            }
-
             // Filter out Expired quotes if status is Active
             if (q.status === 'Active' && q.issueDate && q.expiryDays) {
                 try {
@@ -235,6 +239,9 @@ const SalesQuotesView = () => {
         }
         if (statusFilter !== 'All') {
             result = result.filter(q => q.status === statusFilter);
+        } else {
+            // Exclude Accepted and Rejected from the default "All" view
+            result = result.filter(q => q.status !== 'Accepted' && q.status !== 'Rejected');
         }
         const query = searchQuery.toLowerCase();
         if (query) {
@@ -242,6 +249,7 @@ const SalesQuotesView = () => {
                 q.customer.toLowerCase().includes(query) ||
                 q.reference.toLowerCase().includes(query) ||
                 q.status.toLowerCase().includes(query) ||
+                (q as any).Division?.toLowerCase().includes(query) ||
                 q.issueDate.toLowerCase().includes(query)
             );
         }
@@ -408,6 +416,12 @@ const SalesQuotesView = () => {
             sortable: false
         },
         {
+            id: 'Division',
+            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Division')}>Division <SortIcon column="Division" /></div>,
+            accessor: (o: any) => <span className="text-slate-600 font-medium text-[13px]">{o.Division}</span>,
+            sortable: false
+        },
+        {
             id: 'Amount',
             header: <div className="flex items-center justify-end cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Amount')}>Amount <SortIcon column="Amount" /></div>,
             className: 'whitespace-nowrap text-right',
@@ -482,6 +496,29 @@ const SalesQuotesView = () => {
             accessor: (o: any) => (
                 <span className="text-[10px] text-slate-400 font-medium">{o.timestamp || ''}</span>
             ),
+            sortable: false
+        },
+        {
+            id: 'TPIN',
+            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('TPIN')}>TPIN <SortIcon column="TPIN" /></div>,
+            accessor: (o: any) => <span className="text-slate-400 text-[11px] tabular-nums font-medium uppercase tracking-tight">{o.tpin || ''}</span>,
+            sortable: false
+        },
+        {
+            id: 'Days until Expiry',
+            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Days until Expiry')}>Days to Expiry <SortIcon column="Days until Expiry" /></div>,
+            accessor: (o: any) => {
+                if (!o.issueDate || !o.expiryDays) return <span className="text-slate-400">—</span>;
+                const [d, m, y] = o.issueDate.split('.');
+                const expDate = new Date(`${y}-${m}-${d}`);
+                expDate.setDate(expDate.getDate() + parseInt(o.expiryDays));
+                const diffTime = expDate.getTime() - new Date().getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays < 0) return <span className="text-rose-500 font-bold uppercase text-[10px]">Expired</span>;
+                if (diffDays === 0) return <span className="text-orange-500 font-bold uppercase text-[10px]">Today</span>;
+                return <span className={`font-bold text-[11px] ${diffDays <= 3 ? 'text-amber-500' : 'text-slate-600'}`}>{diffDays} Days</span>;
+            },
             sortable: false
         }
     ];
@@ -560,7 +597,6 @@ const SalesQuotesView = () => {
                         <option value="Active">Active</option>
                         <option value="Pending Approval">Pending</option>
                         <option value="Inactive">Inactive</option>
-                        <option value="Rejected">Rejected</option>
                     </select>
                 </div>
 
@@ -627,6 +663,13 @@ const SalesQuotesView = () => {
                         tableFooter={
                             <tr className="bg-slate-50/50">
                                 {columns.map((col: any) => {
+                                    if (col.id === 'Customer') {
+                                        return (
+                                            <td key={`total-label-${col.id}`} className="px-6 py-4 text-left">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Totals:</span>
+                                            </td>
+                                        );
+                                    }
                                     if (col.id === 'Amount') {
                                         const activeCurs = Object.keys(currencyTotals).filter(cur => currencyTotals[cur] !== 0);
                                         return (

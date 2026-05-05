@@ -1,7 +1,65 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import apiService from '../services/apiService';
 import { Customer, InventoryItem, FooterTemplate } from '../types';
+import { 
+    Calendar, Clock, MapPin, User, Package, Plus, X, 
+    ChevronRight, ChevronDown, Copy, Trash2, Settings, 
+    Image as ImageIcon, CheckCircle2, Save, FileText 
+} from 'lucide-react';
+import { cn } from '../utils/cn';
+import { convertToInputDate, convertToDisplayDate } from '../utils/dateUtils';
+
+const InputField = ({ label, value, onChange, placeholder, type = "text", name, Icon, error, readOnly }: any) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <div className="relative group">
+            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
+            <input
+                type={type}
+                name={name}
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                readOnly={readOnly}
+                className={`w-full bg-slate-50 border ${error ? 'border-rose-500 ring-4 ring-rose-500/10' : 'border-slate-200'} rounded-2xl ${Icon ? 'pl-11' : 'px-5'} py-3 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 ${error ? 'focus:ring-rose-500/10 focus:border-rose-500' : 'focus:ring-indigo-500/10 focus:border-indigo-500'} transition-all ${readOnly ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+            />
+        </div>
+        {error && <p className="text-[10px] font-bold text-rose-500 ml-1 mt-1 uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-300">{error}</p>}
+    </div>
+);
+
+const SelectField = ({ label, value, onChange, name, Icon, children }: any) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <div className="relative group">
+            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
+            <select
+                name={name}
+                value={value}
+                onChange={onChange}
+                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
+            >
+                {children}
+            </select>
+            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
+    </div>
+);
+
+const TextareaField = ({ label, value, onChange, name, placeholder, rows = 3 }: any) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <textarea
+            name={name}
+            value={value}
+            onChange={onChange}
+            rows={rows}
+            placeholder={placeholder}
+            className="w-full bg-slate-50 border border-slate-200 rounded-[24px] px-5 py-4 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all resize-none"
+        ></textarea>
+    </div>
+);
 
 const NewDeliveryNoteView = () => {
     const navigate = useNavigate();
@@ -23,12 +81,14 @@ const NewDeliveryNoteView = () => {
 
     const [useManualRef, setUseManualRef] = useState(false);
     const [options, setOptions] = useState({
-        columnLineNumber: true,
+        columnLineNumber: false,
         customTitle: false,
         customTitleValue: 'Delivery Note',
         footers: false,
-        footerValue: 'Goods received in good condition. Signature required.'
+        footerValue: ''
     });
+    const [fileName, setFileName] = useState('No file chosen');
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [showOptionsArea, setShowOptionsArea] = useState(false);
     const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
     const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -50,11 +110,19 @@ const NewDeliveryNoteView = () => {
                 setFooters(footersData);
 
                 if (isEditing && id) {
-                    const note = await apiService.getDeliveryNote(id);
+                    let note = null;
+                    try {
+                        note = await apiService.getDeliveryNote(id);
+                    } catch (err) {
+                        console.error('Direct fetch failed in edit mode, trying fallback:', err);
+                        const allNotes = await apiService.getDeliveryNotes().catch(() => []);
+                        note = allNotes.find((n: any) => n.id === id || n.reference === id);
+                    }
+
                     if (note) {
                         setFormData({
-                            deliveryDate: note.deliveryDate ? convertToInputDate(note.deliveryDate) : new Date().toISOString().split('T')[0],
-                            customer: note.customer || '',
+                            deliveryDate: note.deliveryDate ? new Date(note.deliveryDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                            customer: note.customer?.name || note.customerName || note.customer || '',
                             deliveryAddress: note.deliveryAddress || '',
                             description: note.description || '',
                             reference: note.reference || '',
@@ -68,16 +136,26 @@ const NewDeliveryNoteView = () => {
                         if (note.footer) setOptions(prev => ({ ...prev, footers: true, footerValue: note.footer }));
                         if (note.columnLineNumber !== undefined) setOptions(prev => ({ ...prev, columnLineNumber: note.columnLineNumber }));
                         if (note.items) {
-                            setItems(note.items.map((it: any) => ({
-                                id: it.id || Math.random(),
-                                item: it.item || '',
-                                description: it.description || '',
-                                qty: (it.qty || 0).toString(),
-                                unit: it.unit || ''
-                            })));
+                            setItems(note.items.map((it: any) => {
+                                const masterItem = itemsData.find((mi: any) => 
+                                    mi.id === it.itemId || 
+                                    mi.itemName === it.item?.itemName || 
+                                    mi.itemName === it.item
+                                );
+
+                                return {
+                                    id: it.id || Math.random(),
+                                    itemId: it.itemId || it.item?.id,
+                                    item: it.item?.itemName || it.item?.name || it.item || '',
+                                    description: it.description || masterItem?.description || masterItem?.itemName || '',
+                                    qty: (it.qty || 0).toString(),
+                                    unit: it.item?.unitName || it.unit || masterItem?.unitName || ''
+                                };
+                            }));
                         }
                     }
-                } else {
+                }
+ else {
                     const nextRef = await apiService.getNextReference('delivery');
                     setFormData(prev => ({ ...prev, reference: nextRef }));
                 }
@@ -90,7 +168,6 @@ const NewDeliveryNoteView = () => {
         fetchData();
     }, [id, isEditing]);
 
-    // Context fetching from URL for New Delivery Note
     useEffect(() => {
         const query = new URLSearchParams(location.search);
         const invoiceId = query.get('invoiceId') || query.get('copyFrom');
@@ -131,9 +208,11 @@ const NewDeliveryNoteView = () => {
             if (item.id === itemId) {
                 const updated = { ...item, [field]: value };
                 if (field === 'item') {
-                    const invItem = inventoryItems.find(i => i.itemName === value || i.itemCode === value);
+                    const invItem = inventoryItems.find(i => i.itemName === value || i.itemCode === value || i.id === value);
                     if (invItem) {
-                        updated.description = invItem.description || value;
+                        updated.itemId = invItem.id;
+                        updated.item = invItem.itemName;
+                        updated.description = invItem.description || invItem.itemName;
                         updated.unit = invItem.unitName || '';
                     }
                 }
@@ -144,26 +223,36 @@ const NewDeliveryNoteView = () => {
     };
 
     const handleSave = async () => {
-        if (!formData.customer) {
+        if (!formData.customer || formData.customer === '') {
             alert('Please select a customer');
             return;
         }
 
+        const selectedCustomer = allCustomers.find(c => c.name === formData.customer || c.id === formData.customer);
+        if (!selectedCustomer) {
+            alert('Selected customer not found');
+            return;
+        }
+
+        const validItems = items.filter(it => it.item.trim() !== '' && it.itemId);
+        if (validItems.length === 0) {
+            alert('Please add at least one valid item');
+            return;
+        }
+
         const noteData = {
-            deliveryDate: convertToDisplayDate(formData.deliveryDate),
-            customer: formData.customer,
+            deliveryDate: formData.deliveryDate,
+            customerId: selectedCustomer.id,
             deliveryAddress: formData.deliveryAddress,
             description: formData.description,
             reference: formData.reference,
             inventoryLocation: formData.inventoryLocation,
             orderNumber: formData.orderNumber,
             invoiceNumber: formData.invoiceNumber,
-            items: items.map(it => ({
-                id: it.id,
-                item: it.item,
+            items: validItems.map(it => ({
+                itemId: it.itemId,
                 description: it.description,
-                qty: parseFloat(it.qty) || 0,
-                unit: it.unit
+                qty: parseFloat(it.qty) || 0
             })),
             status: formData.status,
             customTitle: options.customTitle ? options.customTitleValue : undefined,
@@ -178,23 +267,18 @@ const NewDeliveryNoteView = () => {
                 await apiService.createDeliveryNote(noteData);
             }
             navigate('/delivery-notes');
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to save delivery note:', err);
-            alert('Failed to save delivery note');
+            const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+            const url = err.config?.url || 'unknown url';
+            const method = err.config?.method?.toUpperCase() || 'unknown method';
+            alert(`Failed to save delivery note: ${errMsg}\nURL: ${url}\nMethod: ${method}`);
         }
     };
 
     const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '0', unit: '' }]);
     const deleteLine = (itemId: number) => items.length > 1 && setItems(items.filter(item => item.id !== itemId));
 
-    if (isLoading) {
-        return (
-            <div className="flex flex-col items-center justify-center py-40 space-y-4">
-                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing shipment details...</p>
-            </div>
-        );
-    }
 
     const handleInputChange = (e: any) => {
         const { name, value } = e.target;
@@ -212,6 +296,15 @@ const NewDeliveryNoteView = () => {
         return items.filter(i => i.item.trim() !== '').length;
     }, [items]);
 
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center py-40 space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Preparing shipment details...</p>
+            </div>
+        );
+    }
+
     const handleDuplicateItem = (item: any) => {
         const newItem = {
             ...item,
@@ -225,7 +318,6 @@ const NewDeliveryNoteView = () => {
 
     return (
         <div className="p-10 max-w-[1400px] mx-auto space-y-6 selection:bg-indigo-100 selection:text-indigo-900 font-sans animate-in fade-in duration-700">
-            {/* Header Area */}
             <div className="flex justify-between items-center">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
@@ -250,7 +342,6 @@ const NewDeliveryNoteView = () => {
 
             <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
                 <div className="p-10 space-y-12">
-                    {/* Basic Info Segment */}
                     <div className="space-y-8">
                         <div className="flex items-center space-x-4">
                             <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-500">
@@ -320,7 +411,6 @@ const NewDeliveryNoteView = () => {
                         </div>
                     </div>
 
-                    {/* Logistics & Memo Segment */}
                     <div className="space-y-8 pt-8 border-t border-slate-100">
                         <div className="flex items-center space-x-4">
                             <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500">
@@ -343,8 +433,7 @@ const NewDeliveryNoteView = () => {
                                     ))}
                                 </SelectField>
                             </div>
-                            <div className="hidden md:block"></div> {/* Spacer for alignment */}
-
+                            <div className="hidden md:block"></div>
                             <TextareaField
                                 label="Delivery Address"
                                 value={formData.deliveryAddress}
@@ -362,11 +451,6 @@ const NewDeliveryNoteView = () => {
                         </div>
                     </div>
 
-
-
-
-
-                    {/* Items Section */}
                     <div className="space-y-8 pt-8 border-t border-slate-100">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-4">
@@ -431,14 +515,6 @@ const NewDeliveryNoteView = () => {
                                                         />
                                                         <span className="text-[10px] font-black text-indigo-500 uppercase tracking-tight">{item.unit || 'PCS'}</span>
                                                     </div>
-                                                    {(() => {
-                                                        const invItem = inventoryItems.find(i => i.itemName === item.item || i.itemCode === item.item);
-                                                        return invItem && (
-                                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-[0.1em] border-t border-slate-100 pt-1 w-full text-right">
-                                                                Available: <span className="text-emerald-500 font-black">{(invItem.qtyOnHand || 0).toLocaleString()}</span> {item.unit || 'PCS'}
-                                                            </div>
-                                                        );
-                                                    })()}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-6">
@@ -466,8 +542,7 @@ const NewDeliveryNoteView = () => {
                         </div>
                     </div>
 
-                    {/* Document Options Segment */}
-                    <div className="space-y-6 pt-8 border-t border-slate-100">
+                    <div className="space-y-6 pt-6 border-t border-slate-50">
                         <div
                             onClick={() => setShowOptionsArea(!showOptionsArea)}
                             className="flex items-center justify-between group cursor-pointer hover:bg-slate-50/50 p-2 -m-2 rounded-2xl transition-all"
@@ -487,105 +562,102 @@ const NewDeliveryNoteView = () => {
                         </div>
 
                         {showOptionsArea && (
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-500 pb-4">
-                                <div
-                                    className="flex items-center space-x-3 cursor-pointer group"
-                                    onClick={() => setOptions(prev => ({ ...prev, columnLineNumber: !prev.columnLineNumber }))}
-                                >
-                                    <div className={cn(
-                                        "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
-                                        options.columnLineNumber ? "bg-amber-500 border-amber-500" : "border-slate-300 group-hover:border-amber-400"
-                                    )}>
-                                        {options.columnLineNumber && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-500">
+                                {([
+                                    ['Line Numbers', 'columnLineNumber'],
+                                    ['Custom Title', 'customTitle'],
+                                    ['Footers', 'footers']
+                                ] as const).map(([label, key]) => (
+                                    <div key={key} className="space-y-3">
+                                        <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
+                                            <div className="relative flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={(options as any)[key]}
+                                                    onChange={(e) => setOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 transition-all cursor-pointer"
+                                                />
+                                            </div>
+                                            <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight">{label}</span>
+                                        </label>
+                                        {key === 'customTitle' && options.customTitle && (
+                                            <div className="flex items-center space-x-2 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                <input
+                                                    type="text"
+                                                    value={options.customTitleValue}
+                                                    onChange={(e) => setOptions(prev => ({ ...prev, customTitleValue: e.target.value }))}
+                                                    placeholder="e.g. Delivery Note"
+                                                    className="w-full bg-indigo-50/50 border border-indigo-100/50 rounded-xl px-4 py-2 text-[11px] font-bold text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 placeholder:text-indigo-300/50"
+                                                />
+                                            </div>
+                                        )}
+                                        {key === 'footers' && options.footers && (
+                                            <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                <div className="relative flex items-center">
+                                                    <select
+                                                        value={options.footerValue}
+                                                        onChange={(e) => setOptions(prev => ({ ...prev, footerValue: e.target.value }))}
+                                                        className="w-full appearance-none bg-indigo-50/50 border border-indigo-100/50 rounded-xl px-4 py-2 text-[11px] font-bold text-indigo-600 outline-none focus:ring-2 focus:ring-indigo-500/10"
+                                                    >
+                                                        <option value="">-- Choose a template --</option>
+                                                        {footers.map(f => (
+                                                            <option key={f.id} value={f.id}>{f.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <ChevronDown size={14} className="absolute right-3 text-indigo-400 pointer-events-none" />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <span className="text-sm font-semibold text-slate-600">Column — Line number</span>
-                                </div>
-                                <div className="space-y-4">
-                                    <div
-                                        className="flex items-center space-x-3 cursor-pointer group"
-                                        onClick={() => setOptions(prev => ({ ...prev, customTitle: !prev.customTitle }))}
-                                    >
-                                        <div className={cn(
-                                            "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
-                                            options.customTitle ? "bg-amber-500 border-amber-500" : "border-slate-300 group-hover:border-amber-400"
-                                        )}>
-                                            {options.customTitle && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
-                                        </div>
-                                        <span className="text-sm font-semibold text-slate-600">Custom title</span>
-                                    </div>
-                                    {options.customTitle && (
-                                        <input
-                                            type="text"
-                                            value={options.customTitleValue}
-                                            onChange={(e) => setOptions(prev => ({ ...prev, customTitleValue: e.target.value }))}
-                                            placeholder="e.g. Proforma Note"
-                                            className="w-full bg-amber-50/50 border border-amber-100/50 rounded-xl px-4 py-2 text-[11px] font-bold text-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/10 placeholder:text-amber-300/50 animate-in slide-in-from-top-2 duration-300"
-                                        />
-                                    )}
-                                </div>
-                                <div className="space-y-4">
-                                    <div
-                                        className="flex items-center space-x-3 cursor-pointer group"
-                                        onClick={() => setOptions(prev => ({ ...prev, footers: !prev.footers }))}
-                                    >
-                                        <div className={cn(
-                                            "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
-                                            options.footers ? "bg-amber-500 border-amber-500" : "border-slate-300 group-hover:border-amber-400"
-                                        )}>
-                                            {options.footers && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
-                                        </div>
-                                        <span className="text-sm font-semibold text-slate-600">Footers</span>
-                                    </div>
-                                    {options.footers && (
-                                        <div className="space-y-4 animate-in slide-in-from-top-2 duration-300">
-                                            <select
-                                                onChange={(e) => {
-                                                    const footer = getFooters().find(f => f.id === e.target.value);
-                                                    if (footer) {
-                                                        setOptions(prev => ({ ...prev, footerValue: footer.content }));
-                                                    }
-                                                }}
-                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none"
-                                            >
-                                                <option value="">-- Choose template --</option>
-                                                    {footers.map(f => (
-                                                        <option key={f.id} value={f.id}>{f.name}</option>
-                                                    ))}
-                                            </select>
-                                            <textarea
-                                                value={options.footerValue}
-                                                onChange={(e) => setOptions(prev => ({ ...prev, footerValue: e.target.value }))}
-                                                placeholder="Terms & Conditions..."
-                                                rows={2}
-                                                className="w-full bg-amber-50/50 border border-amber-100/50 rounded-xl px-4 py-2 text-[11px] font-bold text-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/10 placeholder:text-amber-300/50 resize-none overflow-hidden"
-                                            />
-                                        </div>
-                                    )}
-                                </div>
+                                ))}
                             </div>
                         )}
-                    </div>
 
-                    {/* Supporting Documentation Segment */}
-                    <div className="space-y-6 pt-8 border-t border-slate-100">
-                        <div className="flex items-center space-x-4">
-                            <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400">
-                                <Image size={20} />
-                            </div>
-                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Supporting Documentation</h3>
-                        </div>
-
-                        <div className="relative group cursor-pointer">
-                            <div className="flex items-center p-6 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[28px] hover:border-indigo-300 hover:bg-slate-100 transition-all">
-                                <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center text-slate-300 group-hover:text-indigo-500 transition-colors">
-                                    <Plus size={24} />
+                        {/* Supporting Documentation Segment */}
+                        <div className="mt-6 pt-4 border-t border-slate-50 text-left">
+                            <div className="space-y-3 max-w-md">
+                                <div className="flex items-center space-x-2.5 mb-1 opacity-60">
+                                    <ImageIcon size={14} className="text-slate-400" />
+                                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Supporting Documentation</h3>
                                 </div>
-                                <div className="ml-6">
-                                    <h4 className="text-md font-black text-slate-700 tracking-tight">Attach Documents</h4>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Specs, Plans or References</p>
+                                <div
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="group relative flex items-center bg-slate-50 border border-slate-200 border-dashed rounded-xl px-4 py-2 cursor-pointer hover:bg-white hover:border-indigo-300 transition-all duration-300"
+                                >
+                                    <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-slate-400 mr-3 group-hover:text-indigo-500 transition-colors shadow-sm">
+                                        <Plus size={16} className={cn("transition-transform duration-300", fileName !== 'No file chosen' ? "rotate-45" : "")} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-[12px] font-bold text-slate-700 truncate leading-tight">
+                                            {fileName === 'No file chosen' ? 'Attach Documents' : fileName}
+                                        </p>
+                                        <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider leading-tight">
+                                            {fileName === 'No file chosen' ? 'Specs, plans or references' : 'Linked to delivery note'}
+                                        </p>
+                                    </div>
+                                    {fileName !== 'No file chosen' && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setFileName('No file chosen');
+                                                if (fileInputRef.current) fileInputRef.current.value = '';
+                                            }}
+                                            className="w-7 h-7 flex items-center justify-center bg-rose-50 text-rose-500 rounded-md hover:bg-rose-100 transition-all"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    )}
+                                    <input
+                                        type="file"
+                                        ref={fileInputRef}
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) setFileName(file.name);
+                                        }}
+                                    />
                                 </div>
                             </div>
-                            <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" />
                         </div>
                     </div>
 
@@ -596,11 +668,13 @@ const NewDeliveryNoteView = () => {
                             <div className="flex justify-between items-end">
                                 <div className="space-y-1">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase">Total Items</p>
-                                    <p className="text-2xl font-black text-slate-800 tracking-tight">{totalItems}</p>
+                                    <p className="text-2xl font-black text-slate-800 tracking-tight">{items.filter(it => it.item.trim() !== '' && it.itemId).length}</p>
                                 </div>
                                 <div className="text-right space-y-1">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase">Total Quantity</p>
-                                    <p className="text-2xl font-black text-indigo-600 tracking-tight">{totalQty} <span className="text-[10px] text-slate-400 opacity-60">PCS</span></p>
+                                    <p className="text-2xl font-black text-indigo-600 tracking-tight">
+                                        {items.reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0)} <span className="text-[10px] text-slate-400 opacity-60">PCS</span>
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -617,7 +691,7 @@ const NewDeliveryNoteView = () => {
                                     onClick={handleSave}
                                     className="flex-[1.5] px-8 py-4 bg-indigo-600 text-white rounded-[20px] font-black text-[12px] uppercase tracking-[0.15em] hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-200 active:scale-95 flex items-center justify-center gap-2"
                                 >
-                                    {isEditing ? <Save size={18} /> : <Save size={18} />}
+                                    <Save size={18} />
                                     {isEditing ? 'Update Delivery Note' : 'Create Delivery Note'}
                                 </button>
                             </div>

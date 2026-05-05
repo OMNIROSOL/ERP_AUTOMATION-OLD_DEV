@@ -139,6 +139,7 @@ const NewSalesInvoiceView = () => {
     const [currency, setCurrency] = useState('ZMW');
     const [billingAddress, setBillingAddress] = useState('');
     const [description, setDescription] = useState('');
+    const [division, setDivision] = useState('General');
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
     const [tpin, setTpin] = useState('');
@@ -253,26 +254,42 @@ const NewSalesInvoiceView = () => {
 
             if (id || copyFromId) {
                 const targetId = id || copyFromId;
+                setIsLoading(true);
                 setCopyFromId(copyFromId);
                 try {
-                    // Try to find the source document in various collections via API
-                    const [invoices, orders, quotes] = await Promise.all([
-                        apiService.getInvoices(),
-                        apiService.getOrders(),
-                        apiService.getQuotes()
-                    ]);
+                    // Try direct ID lookups for better performance and reliability
+                    let sourceDoc: any = null;
 
-                    const sourceDoc: any =
-                        invoices.find((i: any) => i.id === targetId) ||
-                        orders.find((o: any) => o.id === targetId) ||
-                        quotes.find((q: any) => q.id === targetId);
+                    try {
+                        sourceDoc = await apiService.getInvoice(targetId);
+                    } catch (e) {
+                        try {
+                            sourceDoc = await apiService.getOrder(targetId);
+                        } catch (e2) {
+                            try {
+                                sourceDoc = await apiService.getQuote(targetId);
+                            } catch (e3) {
+                                // Fallback to list search if direct lookup fails
+                                const [invoices, orders, quotes] = await Promise.all([
+                                    apiService.getInvoices().catch(() => []),
+                                    apiService.getOrders().catch(() => []),
+                                    apiService.getQuotes().catch(() => [])
+                                ]);
+                                sourceDoc =
+                                    invoices.find((i: any) => i.id === targetId) ||
+                                    orders.find((o: any) => o.id === targetId) ||
+                                    quotes.find((q: any) => q.id === targetId);
+                            }
+                        }
+                    }
 
                     if (sourceDoc) {
                         const docDate = sourceDoc.issueDate || sourceDoc.orderDate || '';
-                        setIssueDate(new Date(docDate).toISOString().split('T')[0]);
-                        setCustomer(sourceDoc.customer?.name || '');
-                        setCurrency(sourceDoc.currency || 'ZMW');
+                        setIssueDate(docDate ? new Date(docDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                        setCustomer(sourceDoc.customer?.name || sourceDoc.customer || '');
+                        setCurrency(sourceDoc.currency || sourceDoc.customer?.currency?.split(' - ')[0] || 'ZMW');
                         setBillingAddress(sourceDoc.billingAddress || sourceDoc.customer?.billingAddress || '');
+
                         if (copyFromId) {
                             fetchReference();
                             setUseManualRef(false);
@@ -280,26 +297,44 @@ const NewSalesInvoiceView = () => {
                             setReference(sourceDoc.reference);
                             setUseManualRef(true);
                         }
-                        setDescription(sourceDoc.description || '');
+
+                        setDescription(sourceDoc.description || sourceDoc.docOptions?.description || '');
+                        setDivision(sourceDoc.division || sourceDoc.docOptions?.division || sourceDoc.items?.[0]?.division || sourceDoc.customer?.division || 'General');
                         setTpin(sourceDoc.customer?.tpin || '');
+
+                        if (sourceDoc.dueDate && sourceDoc.issueDate) {
+                            const issue = new Date(sourceDoc.issueDate);
+                            const due = new Date(sourceDoc.dueDate);
+                            const diffTime = due.getTime() - issue.getTime();
+                            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                            if (diffDays > 0) {
+                                setDueDateDays(diffDays.toString());
+                                setDueDateType('Net');
+                            } else {
+                                setDueDateType('On receipt');
+                                setDueDateDays('0');
+                            }
+                        }
 
                         if (sourceDoc.items && sourceDoc.items.length > 0) {
                             setItems(sourceDoc.items.map((i: any) => ({
-                                id: i.id || Date.now() + Math.random(),
-                                itemId: i.itemId || i.item?.id,
-                                item: i.item?.itemName || 'Select Item',
+                                id: i.id || (Date.now() + Math.random()),
+                                itemId: i.itemId || i.item?.id || '',
+                                item: i.item?.itemName || i.itemName || i.item || 'Select Item',
                                 description: i.description || i.item?.description || '',
                                 account: i.account || 'Inventory sales',
-                                qty: i.qty ? i.qty.toString() : '1',
-                                unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
-                                discount: i.discount ? i.discount.toString() : '',
                                 division: i.division || 'General',
-                                taxCode: i.taxCode || i.tax_codes?.name || ''
+                                qty: (i.qty || '1').toString(),
+                                unitPrice: (i.unitPrice || '0').toString(),
+                                discount: (i.discount || '').toString(),
+                                taxCode: i.taxCode || i.tax_codes?.name || 'No tax'
                             })));
                         }
                     }
                 } catch (err) {
                     console.error('Failed to load source document:', err);
+                } finally {
+                    setIsLoading(false);
                 }
             } else {
                 setIssueDate(new Date().toISOString().split('T')[0]);
@@ -309,6 +344,7 @@ const NewSalesInvoiceView = () => {
                 fetchReference();
                 setUseManualRef(false);
                 setDescription('');
+                setDivision('General');
                 setTpin('');
                 setItems([{ id: Date.now(), item: 'Select Item', itemId: '', description: '', account: 'Inventory sales', division: 'General', qty: '1', unitPrice: '', discount: '', taxCode: '' }]);
             }
@@ -319,7 +355,7 @@ const NewSalesInvoiceView = () => {
     // Ensure descriptions are populated from master data if missing
     useEffect(() => {
         if (inventoryItems.length === 0 || items.length === 0) return;
-        
+
         const invMap: Record<string, any> = {};
         inventoryItems.forEach(i => { invMap[i.itemName] = i; });
 
@@ -340,7 +376,7 @@ const NewSalesInvoiceView = () => {
         }
     }, [inventoryItems, items]);
 
-    // Automatically sync currency when customer changes
+    // Automatically sync currency and due date when customer changes
     useEffect(() => {
         if (!customers || customers.length === 0 || !customer) return;
         const selected = customers.find(c =>
@@ -352,8 +388,14 @@ const NewSalesInvoiceView = () => {
             if (currencyCode !== currency) {
                 setCurrency(currencyCode);
             }
+
+            // Sync due date days with customer credit terms
+            if (selected.creditDays && !id && !copyFromId) {
+                setDueDateDays(selected.creditDays.toString());
+                setDueDateType('Net');
+            }
         }
-    }, [customer, customers, currency]);
+    }, [customer, customers, currency, id, copyFromId]);
 
     // Insights Logic
     const itemHistory = useMemo(() => {
@@ -453,6 +495,15 @@ const NewSalesInvoiceView = () => {
             return;
         }
 
+        const calculateDueDate = () => {
+            if (!issueDate) return null;
+            const date = new Date(issueDate);
+            if (dueDateType === 'Net') {
+                date.setDate(date.getDate() + (parseInt(dueDateDays) || 0));
+            }
+            return date.toISOString().split('T')[0];
+        };
+
         const invoiceData = {
             customerId: selectedCustomer.id,
             reference: reference,
@@ -461,7 +512,8 @@ const NewSalesInvoiceView = () => {
             description: description,
             billingAddress: billingAddress,
             issueDate: issueDate,
-            docOptions: options,
+            dueDate: calculateDueDate(),
+            docOptions: { ...options, division },
             items: validItems.map(i => ({
                 itemId: i.itemId,
                 description: i.description,
@@ -489,6 +541,18 @@ const NewSalesInvoiceView = () => {
         }
     };
 
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-8">
+                <div className="flex flex-col items-center justify-center space-y-4">
+                    <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-[11px] animate-pulse">Initializing Invoice Engine...</p>
+                    <p className="text-slate-300 text-[10px] uppercase tracking-tighter">Fetching related document data & master records</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="p-10 max-w-[1400px] mx-auto space-y-6 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
@@ -580,7 +644,7 @@ const NewSalesInvoiceView = () => {
                             </div>
                             <h2 className="text-lg font-black text-slate-800 tracking-tight">Customer Information</h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
                             <SelectField label="Selected Customer" value={customer} onChange={(e: any) => {
                                 const custName = e.target.value;
                                 setCustomer(custName);
@@ -589,6 +653,7 @@ const NewSalesInvoiceView = () => {
                                     setCurrency(selected.currency?.split(' - ')[0] || 'ZMW');
                                     setBillingAddress(selected.billingAddress || '');
                                     setTpin(selected.tpin || '');
+                                    if (selected.division) setDivision(selected.division);
                                 }
                             }} Icon={User}>
                                 <option value="">Select Target Customer...</option>
@@ -597,8 +662,11 @@ const NewSalesInvoiceView = () => {
                             <div className="md:col-span-2">
                                 <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="General description of the invoice contents..." Icon={Briefcase} />
                             </div>
+                            <div className="md:col-span-1"></div>
                         </div>
-                        <TextareaField label="Billing Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address for invoice delivery..." rows={2} />
+                        <div className="max-w-2xl">
+                            <TextareaField label="Billing Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address for invoice delivery..." rows={2} />
+                        </div>
                     </div>
 
                     {/* Section: Line Items */}

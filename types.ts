@@ -351,7 +351,7 @@ export interface RoleDefinition {
   permissions: ScreenPermission[];
 }
 
-export interface DocumentFooter {
+export interface Footer {
   id: string;
   name: string;
   content: string;
@@ -463,8 +463,3 @@ export interface PurchaseQuoteItem {
   totalAmount: number;
 }
 
-export interface FooterTemplate {
-  id: string;
-  name: string;
-  content: string;
-}

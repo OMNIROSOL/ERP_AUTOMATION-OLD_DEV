@@ -149,7 +149,9 @@ const EditSalesQuoteView = () => {
     const [useManualRef, setUseManualRef] = useState(false);
     const [fileName, setFileName] = useState('No file chosen');
     const [marginThreshold] = useState(10); // Default 10% - now a constant for this component
+    const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState('Active');
+    const [division, setDivision] = useState('General');
     const [customers, setCustomers] = useState<any[]>([]);
     const [inventoryItems, setInventoryItems] = useState<any[]>([]);
     const [footers, setFooters] = useState<any[]>([]);
@@ -222,21 +224,49 @@ const EditSalesQuoteView = () => {
         loadMasterData();
     }, []);
 
+
     useEffect(() => {
         const loadQuote = async () => {
             const searchParams = new URLSearchParams(location.search);
             const copyFromId = searchParams.get('copyFrom');
             if (id || copyFromId) {
                 const quoteId = id || copyFromId;
+                setIsLoading(true);
                 try {
-                    const allQuotes = await apiService.getQuotes();
-                    const quote = allQuotes.find((q: any) => q.id === quoteId);
+                    let quote: any = null;
+
+                    // Try direct lookup first
+                    try {
+                        quote = await apiService.getQuote(quoteId);
+                    } catch (e) {
+                        try {
+                            quote = await apiService.getOrder(quoteId);
+                        } catch (e2) {
+                            try {
+                                quote = await apiService.getInvoice(quoteId);
+                            } catch (e3) {
+                                // Fallback to list search
+                                const [quotes, orders, invoices] = await Promise.all([
+                                    apiService.getQuotes().catch(() => []),
+                                    apiService.getOrders().catch(() => []),
+                                    apiService.getInvoices().catch(() => [])
+                                ]);
+                                quote =
+                                    quotes.find((q: any) => q.id === quoteId) ||
+                                    orders.find((o: any) => o.id === quoteId) ||
+                                    invoices.find((i: any) => i.id === quoteId);
+                            }
+                        }
+                    }
+
                     if (quote) {
-                        setIssueDate(new Date(quote.issueDate).toISOString().split('T')[0]);
+                        const quoteDate = quote.issueDate || quote.orderDate || '';
+                        setIssueDate(quoteDate ? new Date(quoteDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
                         setExpiryDays(quote.expiryDays?.toString() || '30');
-                        setCustomer(quote.customer?.name || '');
+                        setCustomer(quote.customer?.name || quote.customer || '');
                         setCurrency(quote.currency || quote.customer?.currency?.split(' - ')[0] || 'ZMW');
-                        setBillingAddress(quote.billingAddress || '');
+                        setBillingAddress(quote.billingAddress || quote.customer?.billingAddress || '');
+
                         if (copyFromId) {
                             fetchReference();
                             setUseManualRef(false);
@@ -244,25 +274,33 @@ const EditSalesQuoteView = () => {
                             setReference(quote.reference);
                             setUseManualRef(true);
                         }
-                        setDescription(quote.description || '');
+
+                        setDescription(quote.description || quote.docOptions?.description || '');
+                        setDivision(quote.division || quote.docOptions?.division || quote.items?.[0]?.division || quote.customer?.division || 'General');
                         setStatus(quote.status || 'Active');
-                        setItems(quote.items.map((i: any) => ({
-                            id: i.id,
-                            itemId: i.itemId,
-                            item: i.item?.itemName || 'Unknown Item',
-                            description: i.description || i.item?.description || '',
-                            qty: i.qty.toString(),
-                            unitPrice: i.unitPrice.toString(),
-                            discount: i.discount ? i.discount.toString() : '',
-                            division: i.division || 'General',
-                            taxCode: i.taxCode || ''
-                        })));
+
+                        if (quote.items && quote.items.length > 0) {
+                            setItems(quote.items.map((i: any) => ({
+                                id: i.id || Date.now() + Math.random(),
+                                itemId: i.itemId || i.item?.id,
+                                item: i.item?.itemName || i.itemName || i.item || 'Select Item',
+                                description: i.description || i.item?.description || '',
+                                qty: i.qty ? i.qty.toString() : '1',
+                                unitPrice: i.unitPrice ? i.unitPrice.toString() : '0',
+                                discount: i.discount ? i.discount.toString() : '',
+                                division: i.division || 'General',
+                                taxCode: i.taxCode || ''
+                            })));
+                        }
+
                         if (quote.docOptions) {
                             setOptions(prev => ({ ...prev, ...quote.docOptions }));
                         }
                     }
                 } catch (err) {
                     console.error('Failed to load quote:', err);
+                } finally {
+                    setIsLoading(false);
                 }
             } else {
                 setIssueDate(new Date().toISOString().split('T')[0]);
@@ -283,7 +321,7 @@ const EditSalesQuoteView = () => {
     // Ensure descriptions are populated from master data if missing (e.g. legacy data or first load)
     useEffect(() => {
         if (Object.keys(inventoryMap).length === 0 || items.length === 0) return;
-        
+
         let changed = false;
         const newItems = items.map(item => {
             if (item.item && item.item !== 'Select Item' && !item.description) {
@@ -484,7 +522,7 @@ const EditSalesQuoteView = () => {
             expiryDays: parseInt(expiryDays) || 30,
             issueDate: issueDate, // Pass the date from state
             status: forceManualApproval ? 'Pending Approval' : (isEditing ? status : 'Active'),
-            docOptions: updatedOptions,
+            docOptions: { ...updatedOptions, division },
             items: validItems.map(i => ({
                 itemId: i.itemId,
                 description: i.description,

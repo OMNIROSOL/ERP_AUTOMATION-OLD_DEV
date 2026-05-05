@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import apiService from '../services/apiService';
+import { 
+    ChevronLeft, ChevronRight, Printer, FileText, 
+    Download, Mail, Edit, Copy, ChevronFirst, ChevronLast,
+    Box, MapPin, Calendar, Info, FileStack, Clock, ChevronDown, User
+} from 'lucide-react';
+import { cn } from '../utils/cn';
+import Badge from '../components/shared/Badge';
 
 const ViewDeliveryNoteView = () => {
     const { id } = useParams();
@@ -20,12 +27,22 @@ const ViewDeliveryNoteView = () => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                const [specificNote, notesList] = await Promise.all([
-                    apiService.getDeliveryNote(id!),
-                    apiService.getDeliveryNotes()
-                ]);
-                setNote(specificNote);
+                // Fetch the list first as a fallback
+                const notesList = await apiService.getDeliveryNotes().catch(() => []);
                 setAllNotes(notesList);
+
+                try {
+                    const specificNote = await apiService.getDeliveryNote(id!);
+                    setNote(specificNote);
+                } catch (err) {
+                    console.error('Direct fetch failed, trying fallback from list:', err);
+                    const fallbackNote = notesList.find((n: any) => n.id === id || n.reference === id);
+                    if (fallbackNote) {
+                        setNote(fallbackNote);
+                    } else {
+                        throw err; // Re-throw if even fallback fails
+                    }
+                }
             } catch (err) {
                 console.error('Failed to fetch delivery note:', err);
             } finally {
@@ -35,7 +52,7 @@ const ViewDeliveryNoteView = () => {
         fetchData();
     }, [id]);
 
-    const noteIndex = useMemo(() => allNotes.findIndex((n: any) => n.id === id || n.noteId === id), [allNotes, id]);
+    const noteIndex = useMemo(() => allNotes.findIndex((n: any) => (n.id === id || n.reference === id)), [allNotes, id]);
 
     const displayItems = useMemo(() => {
         if (!note?.items) return [];
@@ -68,7 +85,7 @@ const ViewDeliveryNoteView = () => {
 
     if (isLoading) {
         return (
-            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans">
+            <div className="flex flex-col items-center justify-center py-40 space-y-4 font-sans bg-slate-50/50 min-h-screen">
                 <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
                 <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading delivery note...</p>
             </div>
@@ -77,154 +94,169 @@ const ViewDeliveryNoteView = () => {
 
     if (!note) {
         return (
-            <div className="p-8 text-center text-gray-500">
-                <p>Delivery Note not found.</p>
-                <button onClick={() => navigate('/delivery-notes')} className="mt-4 text-blue-500 hover:underline">Return to list</button>
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+                <div className="max-w-md w-full bg-white rounded-[32px] p-12 text-center shadow-xl border border-slate-100">
+                    <div className="w-20 h-20 bg-rose-50 rounded-3xl flex items-center justify-center text-rose-500 mx-auto mb-6">
+                        <Info size={40} />
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-800 mb-2 tracking-tight">Document Not Found</h2>
+                    <p className="text-slate-500 text-sm mb-8 font-medium">The delivery note you are looking for doesn't exist or has been removed.</p>
+                    <button 
+                        onClick={() => navigate('/delivery-notes')} 
+                        className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                    >
+                        Return to List
+                    </button>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="bg-[#f3f4f6] min-h-full flex flex-col">
-            {/* Breadcrumb */}
-            <div className="bg-white px-4 py-2 border-b border-gray-200 flex items-center text-[11px] text-gray-500 space-x-1.5 select-none no-print">
-                <i className="fas fa-folder-open text-[#90a4ae]"></i>
-                <i className="fas fa-caret-right text-[#cfd8dc] scale-75"></i>
-                <Link to="/delivery-notes" className="hover:text-[#2196f3]">Delivery Notes</Link>
-                <i className="fas fa-caret-right text-[#cfd8dc] scale-75"></i>
-                <span className="text-gray-400">View</span>
-            </div>
-
-            {/* Toolbar */}
-            <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center justify-between no-print">
+        <div className="min-h-screen bg-[#f3f4f6]/50 flex flex-col font-sans selection:bg-indigo-100 selection:text-indigo-900">
+            {/* Compact Action Toolbar - Matching Sales Quote View */}
+            <div className="bg-[#f8fafc] border-b border-gray-300 px-6 py-3 flex items-center justify-between sticky top-0 z-50 no-print">
                 <div className="flex items-center space-x-3">
-                    <span className="text-[13px] text-gray-400 mr-2">Delivery Note</span>
-                    <div className="flex bg-white border border-gray-300 rounded-md shadow-sm overflow-visible relative">
-                        <button onClick={() => navigate(`/delivery-notes/edit/${note.id}`)} className="px-4 py-1.5 text-[12px] font-bold text-gray-700 hover:bg-gray-50 border-r border-gray-300 uppercase tracking-wider transition-colors">Edit</button>
-                        <div className="relative" ref={dropdownRef}>
-                            <button
-                                onClick={() => setIsCopyToOpen(!isCopyToOpen)}
-                                className={`px-4 py-1.5 text-[12px] font-bold text-gray-700 hover:bg-gray-50 flex items-center h-full uppercase tracking-wider transition-colors ${isCopyToOpen ? 'bg-gray-50' : ''}`}
-                            >
-                                <i className={`fas fa-caret-${isCopyToOpen ? 'down' : 'right'} text-[9px] mr-2 text-gray-900`}></i> Copy to
-                            </button>
-                            {isCopyToOpen && (
-                                <div className="absolute left-0 mt-1 w-64 bg-white border border-gray-200 shadow-xl rounded-md py-1 z-50">
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/sales-orders/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Sales Order</button>
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/sales-invoices/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Sales Invoice</button>
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/delivery-notes/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Delivery Note</button>
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/credit-notes/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Credit Note</button>
+                    <button 
+                        onClick={() => navigate('/delivery-notes')}
+                        className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                    >
+                        <ChevronLeft size={14} /> Back
+                    </button>
 
-                                    <div className="h-[1px] bg-gray-100 my-1 mx-2"></div>
+                    <button 
+                        onClick={() => navigate(`/delivery-notes/edit/${note.id}`)}
+                        className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                    >
+                        <Edit size={14} className="text-blue-600" /> Edit
+                    </button>
 
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/purchase-invoices/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Purchase Invoice</button>
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/goods-receipts/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Goods Receipt</button>
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/debit-notes/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Debit Note</button>
-
-                                    <div className="h-[1px] bg-gray-100 my-1 mx-2"></div>
-
-                                    <button onClick={() => { setIsCopyToOpen(false); navigate(`/receipts/new?copyFrom=${note.id}`); }} className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-gray-100 transition-colors">New Receipt</button>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="w-[1px] h-6 bg-gray-200 mx-1"></div>
-                    <div className="flex space-x-2">
-                        <button onClick={() => window.print()} className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded-md shadow-sm hover:bg-gray-50 transition-colors uppercase tracking-wider">Print</button>
-                        <button 
-                            onClick={async () => {
-                                if (!pdfRef.current) return;
-                                const html2canvas = (await import('html2canvas')).default;
-                                const jsPDF = (await import('jspdf')).jsPDF;
-                                
-                                const element = pdfRef.current;
-                                const originalStyle = element.getAttribute('style') || '';
-                                element.style.maxWidth = 'none';
-                                element.style.width = '850px';
-                                
-                                const canvas = await html2canvas(element, {
-                                    scale: 2,
-                                    useCORS: true,
-                                    backgroundColor: '#ffffff'
-                                });
-                                
-                                element.setAttribute('style', originalStyle);
-                                
-                                const imgData = canvas.toDataURL('image/png');
-                                const pdf = new jsPDF('p', 'mm', 'a4');
-                                const imgProps = pdf.getImageProperties(imgData);
-                                const pdfWidth = pdf.internal.pageSize.getWidth();
-                                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-                                
-                                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                                pdf.save(`${note.reference || 'DeliveryNote'}.pdf`);
-                            }} 
-                            className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded-md shadow-sm hover:bg-gray-50 transition-colors uppercase tracking-wider"
+                    <div className="relative" ref={dropdownRef}>
+                        <button
+                            onClick={() => setIsCopyToOpen(!isCopyToOpen)}
+                            className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 transition-colors"
                         >
-                            PDF
+                            <Copy size={14} /> Copy To
                         </button>
-                        <button className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded-md shadow-sm hover:bg-gray-50 transition-colors uppercase tracking-wider">Email</button>
+                        {isCopyToOpen && (
+                            <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in slide-in-from-top-1 duration-200">
+                                {[
+                                    { label: 'Sales Order', path: '/sales-orders/new' },
+                                    { label: 'Sales Invoice', path: '/sales-invoices/new' },
+                                    { label: 'Credit Note', path: '/credit-notes/new' },
+                                    { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
+                                    { label: 'Goods Receipt', path: '/goods-receipts/new' },
+                                    { label: 'Receipt', path: '/receipts/new' }
+                                ].map(item => (
+                                    <button 
+                                        key={item.label}
+                                        onClick={() => { setIsCopyToOpen(false); navigate(`${item.path}?copyFrom=${note.id}`); }} 
+                                        className="w-full text-left px-4 py-2 text-[12px] text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                                    >
+                                        New {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="w-[1px] h-6 bg-gray-200 mx-3"></div>
+
+                    <div className="flex space-x-2">
+                        <button onClick={() => window.print()} className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
+                            <Printer size={14} /> Print
+                        </button>
+                        <button className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
+                            <Download size={14} /> PDF
+                        </button>
+                        <button className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2">
+                            <Mail size={14} /> Email
+                        </button>
                     </div>
                 </div>
+
                 <div className="flex items-center space-x-2">
-                    <div className="flex bg-white border border-gray-300 rounded-md shadow-sm overflow-hidden">
-                        <button onClick={handleFirst} disabled={noteIndex === 0} className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 transition-colors"><i className="fas fa-step-backward text-[10px]"></i></button>
-                        <button onClick={handlePrev} disabled={noteIndex === 0} className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 transition-colors"><i className="fas fa-backward text-[10px]"></i></button>
+                    <div className="flex bg-white border border-gray-300 rounded shadow-sm">
+                        <button 
+                            onClick={handleFirst} 
+                            disabled={noteIndex === 0} 
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center transition-colors"
+                        >
+                            <ChevronFirst size={14} />
+                        </button>
+                        <button 
+                            onClick={handlePrev} 
+                            disabled={noteIndex === 0} 
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center transition-colors"
+                        >
+                            <ChevronLeft size={14} />
+                        </button>
                     </div>
-                    <span className="text-[11px] text-gray-400 mx-2 font-bold uppercase tracking-wider">{noteIndex + 1} / {allNotes.length}</span>
-                    <div className="flex bg-white border border-gray-300 rounded-md shadow-sm overflow-hidden">
-                        <button onClick={handleNext} disabled={noteIndex === allNotes.length - 1} className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 transition-colors"><i className="fas fa-forward text-[10px]"></i></button>
-                        <button onClick={handleLast} disabled={noteIndex === allNotes.length - 1} className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 transition-colors"><i className="fas fa-step-forward text-[10px]"></i></button>
+                    <span className="text-[11px] font-bold text-gray-400 mx-2 uppercase tracking-widest">{noteIndex + 1} / {allNotes.length}</span>
+                    <div className="flex bg-white border border-gray-300 rounded shadow-sm">
+                        <button 
+                            onClick={handleNext} 
+                            disabled={noteIndex === allNotes.length - 1} 
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 border-r border-gray-300 disabled:opacity-30 flex items-center transition-colors"
+                        >
+                            <ChevronRight size={14} />
+                        </button>
+                        <button 
+                            onClick={handleLast} 
+                            disabled={noteIndex === allNotes.length - 1} 
+                            className="px-3 py-1.5 text-gray-600 hover:bg-gray-50 disabled:opacity-30 flex items-center transition-colors"
+                        >
+                            <ChevronLast size={14} />
+                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Document */}
-            <div className="flex-1 p-6 flex justify-center overflow-auto bg-[#f3f4f6]">
-                <div className="bg-white shadow-xl p-12 w-full max-w-[850px] min-h-[1100px] relative font-sans text-gray-900 border border-gray-200" ref={pdfRef}>
+            {/* Document Area */}
+            <div className="flex-1 p-6 flex justify-start overflow-auto print:p-0">
+                <div className="bg-white shadow-xl p-12 w-[850px] max-w-full text-[13px] text-gray-800 relative rounded-none border border-gray-100 print:shadow-none print:border-none print:p-8 print:rounded-none" ref={pdfRef}>
                     <div className="flex justify-between items-start gap-12 mb-10 pb-10 border-b border-gray-100">
-                        <div className="flex-1">
+                        <div className="flex-1 space-y-6">
                             {/* Header Section */}
                             <div className="mb-6">
-                                <div className="flex justify-between items-start mb-1">
+                                <div className="flex items-center space-x-3 mb-1">
                                     <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">{note.customTitle || 'Delivery Note'}</h1>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {note.reference}</p>
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${note.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' : note.status === 'Cancelled' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>{note.status}</span>
-                                </div>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {note.reference}</p>
                             </div>
 
                             <div className="grid grid-cols-2 gap-12 items-start">
                                 {/* Customer */}
                                 <div>
-                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Customer</h3>
-                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{note.customer}</p>
-                                    <p className="text-gray-500 italic">No delivery address</p>
+                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Delivered To</h3>
+                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">
+                                        {typeof note.customer === 'string' ? note.customer : note.customer?.name || 'Unknown Customer'}
+                                    </p>
+                                    <div className="text-gray-500 space-y-1">
+                                        <p className="whitespace-pre-wrap leading-relaxed">
+                                            {note.deliveryAddress || note.customer?.shippingAddress || note.customer?.address || 'No delivery address recorded.'}
+                                        </p>
+                                    </div>
                                 </div>
 
                                 {/* Delivery Details */}
                                 <div className="border-l border-gray-100 pl-12">
-                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Details</h3>
+                                    <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Shipment Details</h3>
                                     <div className="space-y-3">
-                                        <div className="flex justify-between">
-                                            <span className="font-bold text-gray-500">Delivery Date:</span>
-                                            <span className="font-semibold">{note.deliveryDate}</span>
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Delivery Date:</span>
+                                            <span className="font-semibold">{note.deliveryDate ? new Date(note.deliveryDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '-'}</span>
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span className="font-bold text-gray-500">Reference:</span>
-                                            <span className="font-semibold">{note.reference}</span>
-                                        </div>
-                                        {note.invoiceNumber && (
-                                            <div className="flex justify-between">
-                                                <span className="font-bold text-gray-500">Invoice:</span>
-                                                <span className="font-semibold">{note.invoiceNumber}</span>
+                                        {note.orderNumber && (
+                                            <div className="flex">
+                                                <span className="w-32 text-gray-500">Sales Order:</span>
+                                                <span className="font-semibold">{note.orderNumber}</span>
                                             </div>
                                         )}
-                                        {note.orderNumber && (
-                                            <div className="flex justify-between">
-                                                <span className="font-bold text-gray-500">Order:</span>
-                                                <span className="font-semibold">{note.orderNumber}</span>
+                                        {note.inventoryLocation && (
+                                            <div className="flex">
+                                                <span className="w-32 text-gray-500">Location:</span>
+                                                <span className="font-semibold">{note.inventoryLocation}</span>
                                             </div>
                                         )}
                                     </div>
@@ -232,83 +264,115 @@ const ViewDeliveryNoteView = () => {
                             </div>
                         </div>
 
-                        {/* Company Logo - Large and Span across Header+Details */}
-                        <div className="w-[180px] shrink-0 pt-2">
+                        {/* Company Logo */}
+                        <div className="w-[180px] shrink-0 pt-2 animate-in fade-in zoom-in-95 duration-700">
                             <img src="/logo.png" alt="Company Logo" className="w-full object-contain" />
                         </div>
                     </div>
 
-                    {/* Description */}
+                    {/* Memo / Description */}
                     {note.description && (
-                        <div className="mb-6">
-                            <h2 className="font-bold uppercase text-[15px]">{note.description}</h2>
-                        </div>
-                    )}
-
-                    {/* Inventory Location */}
-                    {note.inventoryLocation && (
-                        <div className="mb-4 text-[13px] text-gray-600">
-                            <span className="font-bold">Inventory Location:</span> {note.inventoryLocation}
+                        <div className="mb-10 p-6 bg-slate-50/50 rounded-xl border border-slate-100">
+                            <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                <Info size={12} /> Shipment Memo
+                            </h2>
+                            <p className="text-gray-600 leading-relaxed italic">{note.description}</p>
                         </div>
                     )}
 
                     {/* Items Table */}
-                    <table className="w-full border-collapse border border-gray-300 text-[13px]">
-                        <thead>
-                            <tr className="bg-gray-50">
-                                <th className="border border-gray-300 p-3 text-left w-[40%] font-bold uppercase tracking-wider text-[11px] text-gray-600">Item</th>
-                                <th className="border border-gray-300 p-3 text-left w-[40%] font-bold uppercase tracking-wider text-[11px] text-gray-600">Description</th>
-                                <th className="border border-gray-300 p-3 text-center w-[20%] font-bold uppercase tracking-wider text-[11px] text-gray-600">Qty</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {displayItems.map((item: any, idx: number) => (
-                                <tr key={item.id || idx} className="hover:bg-gray-50 transition-colors">
-                                    <td className="border border-gray-300 p-3 align-top font-medium text-gray-900">{item.item || item.itemName}</td>
-                                    <td className="border border-gray-300 p-3 align-top text-gray-600">{item.description}</td>
-                                    <td className="border border-gray-300 p-3 text-center align-top font-bold text-gray-900">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
-                                </tr>
-                            ))}
-                            {displayItems.length === 0 && (
+                    <div className="mb-14 overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-[#f8fafc] border-y border-gray-200 text-right">
                                 <tr>
-                                    <td className="border border-gray-300 p-3 align-top text-center text-gray-400 italic" colSpan={3}>No items found</td>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Item</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right w-32">Quantity</th>
                                 </tr>
-                            )}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {displayItems.map((item: any, idx: number) => (
+                                    <tr key={item.id || idx} className="hover:bg-slate-50/30 transition-colors">
+                                        <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>
+                                        <td className="px-4 py-4">
+                                            <p className="font-semibold text-slate-900 uppercase tracking-tight">
+                                                {typeof item.item === 'object' ? (item.item?.itemName || item.item?.name) : (item.item || item.itemName || 'Unnamed Item')}
+                                            </p>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            {item.description ? <p className="text-[12px] text-gray-500 leading-relaxed italic">{item.description}</p> : <span className="text-gray-300">-</span>}
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                            <div className="flex flex-col items-end">
+                                                <span className="font-bold text-slate-900">{item.qty}</span>
+                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{item.unit || 'PCS'}</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {displayItems.length === 0 && (
+                                    <tr>
+                                        <td className="px-4 py-10 text-center text-slate-400 italic text-sm" colSpan={3}>No fulfillment items found in this note.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
 
-                    {/* Total Qty */}
-                    <div className="mt-0 flex justify-end">
-                        <div className="w-48">
-                            <div className="grid grid-cols-[1fr_80px] border-x border-b border-gray-300 bg-gray-50">
-                                <div className="p-3 text-right font-bold border-r border-gray-300 text-gray-700 uppercase tracking-wider text-[11px]">Total Qty</div>
-                                <div className="p-3 text-center font-bold text-gray-900">{totalQty}</div>
+                    {/* Total Summary */}
+                    <div className="flex justify-end mb-20">
+                        <div className="w-72 space-y-3">
+                            <div className="flex items-center justify-between text-gray-500">
+                                <span className="text-[11px] font-bold uppercase tracking-widest">Total Quantity</span>
+                                <span className="font-semibold">{totalQty}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-gray-500">
+                                <span className="text-[11px] font-bold uppercase tracking-widest">Item Types</span>
+                                <span className="font-semibold">{displayItems.length}</span>
+                            </div>
+                            <div className="flex items-center justify-between bg-slate-50 p-4 border-t-2 border-slate-900 mt-2">
+                                <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-900">Final Count</span>
+                                <span className="text-2xl font-bold text-slate-900 tracking-tighter">{totalQty}</span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Footer text */}
-                    {note.footers && (
-                        <div className="mt-8 text-[13px] text-gray-600 border-t border-gray-200 pt-4">
-                            {note.footers}
+                    {/* Footers */}
+                    {note.footer && (
+                        <div className="mb-20 p-8 border-t-2 border-dashed border-slate-100">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Terms & Special Instructions</h3>
+                            <div className="text-[13px] font-bold text-slate-500 leading-relaxed whitespace-pre-wrap italic">
+                                {note.footer}
+                            </div>
                         </div>
                     )}
 
-                    {/* Receiver Verification Section */}
-                    <div className="mt-24 pt-8 border-t border-gray-100 grid grid-cols-3 gap-12 text-[14px]">
-                        <div className="flex flex-col space-y-4">
-                            <span className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Receiver Name</span>
-                            <div className="border-b border-gray-300 w-full pt-4"></div>
+                    {/* Signature Section */}
+                    <div className="mt-24 grid grid-cols-2 gap-20 px-4">
+                        <div className="space-y-4">
+                            <div className="h-px bg-slate-200 w-full mb-6 relative">
+                                <div className="absolute -top-3 left-0 bg-white pr-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Authorized Signatory</div>
+                            </div>
+                            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Omni Rosol Logistics</p>
                         </div>
-                        <div className="flex flex-col space-y-4">
-                            <span className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Signature</span>
-                            <div className="border-b border-gray-300 w-full pt-4"></div>
-                        </div>
-                        <div className="flex flex-col space-y-4">
-                            <span className="font-bold text-gray-700 uppercase tracking-wider text-[11px]">Date</span>
-                            <div className="border-b border-gray-300 w-full pt-4"></div>
+                        <div className="space-y-4">
+                            <div className="h-px bg-slate-200 w-full mb-6 relative">
+                                <div className="absolute -top-3 left-0 bg-white pr-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Received In Good Condition By</div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Name / ID</p>
+                                    <div className="h-6 border-b border-slate-100"></div>
+                                </div>
+                                <div>
+                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-1">Date / Time</p>
+                                    <div className="h-6 border-b border-slate-100"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
                 </div>
             </div>
         </div>

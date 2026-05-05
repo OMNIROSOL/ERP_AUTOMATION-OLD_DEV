@@ -138,6 +138,7 @@ model SalesOrder {
   id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   reference      String      @unique
   orderDate      DateTime    @default(dbgenerated("CURRENT_DATE")) @map("order_date") @db.Date
+  expiryDate     DateTime?   @map("expiry_date") @db.Date
   customerId     String      @map("customer_id") @db.Uuid
   description    String?
   currency       String?     @default("ZMW")
@@ -164,6 +165,13 @@ model DeliveryNote {
   timestamp         DateTime?          @default(now()) @map("timestamp") @db.Timestamptz(6)
   items             DeliveryNoteItem[]
   customer          Customer           @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  orderNumber       String?            @map("order_number")
+  invoiceNumber     String?            @map("invoice_number")
+  deliveryAddress   String?            @map("delivery_address")
+  docOptions        Json?              @map("doc_options")
+  customTitle       String?            @map("custom_title")
+  footer            String?            @map("footer")
+  columnLineNumber  Boolean?           @map("column_line_number")
 
   @@map("delivery_notes")
   @@schema("sales")
@@ -173,6 +181,7 @@ model DeliveryNoteItem {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   deliveryNoteId String       @map("delivery_note_id") @db.Uuid
   itemId         String       @map("item_id") @db.Uuid
+  description    String?
   qty            Decimal      @db.Decimal(12, 4)
   deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   item           Item         @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)

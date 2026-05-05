@@ -23,6 +23,17 @@ import {
 import Badge from '../components/shared/Badge';
 import { cn } from '../utils/cn';
 
+const formatDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        return date.toLocaleDateString('en-GB').replace(/\//g, '.');
+    } catch (e) {
+        return dateStr;
+    }
+};
+
 const ViewSalesInvoiceView = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -65,7 +76,7 @@ const ViewSalesInvoiceView = () => {
 
     const totals = useMemo(() => {
         if (!invoice) return { subtotal: 0, tax: 0, total: 0 };
-        const totalAmount = parseFloat(invoice.grandTotal || invoice.invoiceAmount || invoice.amount || 0);
+        const totalAmount = parseFloat(String(invoice.grandTotal || invoice.invoiceAmount || invoice.amount || 0));
         const options = invoice.docOptions || {};
         const isTaxInclusive = options.amountsAreTaxInclusive || false;
 
@@ -337,7 +348,7 @@ const ViewSalesInvoiceView = () => {
                                 <div className="flex justify-between items-start mb-1">
                                     <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">{invoice.docOptions?.customTitleValue || 'Sales Invoice'}</h1>
                                 </div>
-                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {invoice.reference}</p>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-2">Reference: {invoice.reference}</p>
                             </div>
 
                             <div className="grid grid-cols-2 gap-12 items-start">
@@ -358,11 +369,29 @@ const ViewSalesInvoiceView = () => {
                                     <div className="space-y-3">
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Issue Date:</span>
-                                            <span className="font-semibold">{new Date(invoice.createdAt || Date.now()).toLocaleDateString('en-GB').replace(/\//g, '.')}</span>
+                                            <span className="font-semibold">{formatDate(invoice.issueDate)}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Due Date:</span>
+                                            <span className="font-semibold">
+                                                {(() => {
+                                                    if (invoice.dueDate) return formatDate(invoice.dueDate);
+                                                    if (invoice.issueDate) {
+                                                        const d = new Date(invoice.issueDate);
+                                                        d.setDate(d.getDate() + 30);
+                                                        return d.toLocaleDateString('en-GB').replace(/\//g, '.');
+                                                    }
+                                                    return '-';
+                                                })()}
+                                            </span>
                                         </div>
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Currency:</span>
                                             <span className="font-semibold">{invoice.currency || invoice.customer?.currency?.split(' - ')[0] || 'ZMW'}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <span className="w-32 text-gray-500">Division:</span>
+                                            <span className="font-semibold">{invoice.items?.[0]?.division || invoice.docOptions?.division || invoice.customer?.division || 'General'}</span>
                                         </div>
                                         {invoice.status && (
                                             <div className="flex">
@@ -390,6 +419,8 @@ const ViewSalesInvoiceView = () => {
                                 <tr>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Item</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
+                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Division</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Qty</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Unit Price</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Total</th>
@@ -400,8 +431,15 @@ const ViewSalesInvoiceView = () => {
                                     <tr key={idx}>
                                         <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>
                                         <td className="px-4 py-4">
-                                            <p className="font-semibold text-slate-900">{item.item?.itemName || item.item || '-'}</p>
-                                            <p className="text-[11px] text-gray-500">{item.item?.itemCode || ''}</p>
+                                            <p className="font-semibold text-slate-900">{item.item?.itemName || item.item || item.itemName || '-'}</p>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <p className="text-gray-500">
+                                                {item.description || item.item?.description || (item.item?.itemName || item.item || item.itemName || '-')}
+                                            </p>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <p className="text-gray-500">{item.division || 'General'}</p>
                                         </td>
                                         <td className="px-4 py-4 text-right font-medium">{item.qty}</td>
                                         <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -409,7 +447,7 @@ const ViewSalesInvoiceView = () => {
                                     </tr>
                                 )) : (
                                     <tr>
-                                        <td colSpan={5} className="px-4 py-8 text-center text-gray-400 italic">No items found in this invoice.</td>
+                                        <td colSpan={7} className="px-4 py-8 text-center text-gray-400 italic">No items found in this invoice.</td>
                                     </tr>
                                 )}
                             </tbody>

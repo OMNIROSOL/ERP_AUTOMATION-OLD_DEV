@@ -92,7 +92,7 @@ const SalesHistoryView = () => {
                 amount: parseFloat(o.amount) || 0,
                 type: 'Order',
                 reference: o.reference || '—',
-                status: o.status,
+                status: (o.status?.toLowerCase() === 'pending' || !o.status) ? 'Ordered' : o.status,
                 currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
                 timestamp: formatTimestamp(o.createdAt)
             });
@@ -130,8 +130,10 @@ const SalesHistoryView = () => {
     }, [refreshTrigger, dbQuotes, dbInvoices, dbOrders, dbDeliveryNotes]);
 
     const getComputedStatus = (item: any): string => {
-        if (item.type === 'Delivery' && !item.status) return 'Pending';
-        if (item.type !== 'Invoiced') return item.status || '—';
+        const normalizedStatus = item.status?.toString().toLowerCase().trim() || '';
+        if (item.type === 'Order' && (normalizedStatus === 'pending' || normalizedStatus === '')) return 'Ordered';
+        if (item.type === 'Delivery' && normalizedStatus === '') return 'Pending';
+        if (item.type !== 'Invoice') return item.status || '—';
         const balance = item.balanceDue !== undefined && item.balanceDue !== null
             ? parseFloat(item.balanceDue)
             : parseFloat(item.amount ?? 0);
@@ -394,7 +396,7 @@ const SalesHistoryView = () => {
                                             "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border inline-block",
                                             item.type === 'Quote' ? 'bg-blue-50 text-blue-600 border-blue-100' :
                                                 item.type === 'Order' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                                    item.type === 'Invoiced' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                                    item.type === 'Invoice' ? 'bg-purple-50 text-purple-600 border-purple-100' :
                                                         item.type === 'Receipt' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
                                                             item.type === 'Delivery' ? 'bg-slate-50 text-slate-600 border-slate-100' :
                                                                 'bg-emerald-50 text-emerald-600 border-emerald-100'
