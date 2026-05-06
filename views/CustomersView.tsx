@@ -146,9 +146,42 @@ const CustomersView = () => {
         setSortConfig({ key, direction });
     };
 
+    const enrichedCustomers = useMemo(() => {
+        return customers.map(customer => {
+            // Calculate Qty to Deliver: sum of quantities in pending delivery notes
+            const customerDNs = deliveryNotes.filter(dn => {
+                const dnCustId = dn.customerId || dn.customer?.id;
+                const dnCustName = dn.customerName || (typeof dn.customer === 'string' ? dn.customer : dn.customer?.name);
+                return (dnCustId === customer.id || dnCustName === customer.name) && 
+                       (dn.status || 'Pending') !== 'Delivered';
+            });
+            let qtyToDeliver = 0;
+            customerDNs.forEach(dn => {
+                dn.items?.forEach((it: any) => {
+                    qtyToDeliver += Number(it.qty || 0);
+                });
+            });
+
+            // Calculate Uninvoiced: sum of amounts from orders that aren't fully invoiced or rejected
+            const customerOrders = orders.filter(o => {
+                const oCustId = o.customerId || o.customer?.id;
+                const oCustName = o.customerName || (typeof o.customer === 'string' ? o.customer : o.customer?.name);
+                return (oCustId === customer.id || oCustName === customer.name) && 
+                       o.status !== 'Invoiced' && o.status !== 'Rejected';
+            });
+            const uninvoiced = customerOrders.reduce((sum, o) => sum + Number(o.amount || 0), 0);
+
+            return {
+                ...customer,
+                qtyToDeliver,
+                uninvoiced
+            };
+        });
+    }, [customers, deliveryNotes, orders]);
+
     const sortedCustomers = useMemo(() => {
         const query = searchQuery.toLowerCase();
-        let result = customers.filter(c => {
+        let result = enrichedCustomers.filter(c => {
             if (showInactive) {
                 if (!c.inactive && c.status !== 'Inactive') return false;
             } else {
@@ -175,7 +208,7 @@ const CustomersView = () => {
             });
         }
         return result;
-    }, [customers, searchQuery, sortConfig, showInactive]);
+    }, [enrichedCustomers, searchQuery, sortConfig, showInactive]);
 
     const toggleSelectAll = () => {
         if (selectedCustomerIds.size === currentSlice.length && currentSlice.length > 0) {
@@ -217,12 +250,14 @@ const CustomersView = () => {
         }
     };
 
-    const totals = useMemo<Record<string, { balance: number; withholding: number }>>(() => {
-        const res: Record<string, { balance: number; withholding: number }> = {};
+    const totals = useMemo<Record<string, { balance: number; withholding: number; qtyToDeliver: number; uninvoiced: number }>>(() => {
+        const res: Record<string, { balance: number; withholding: number; qtyToDeliver: number; uninvoiced: number }> = {};
         sortedCustomers.forEach(c => {
             const curCode = String(c.currency || 'ZMW').split(' ')[0] || 'ZMW';
-            if (!res[curCode]) res[curCode] = { balance: 0, withholding: 0 };
+            if (!res[curCode]) res[curCode] = { balance: 0, withholding: 0, qtyToDeliver: 0, uninvoiced: 0 };
             res[curCode].balance += Number(c.balance || 0);
+            res[curCode].qtyToDeliver += Number(c.qtyToDeliver || 0);
+            res[curCode].uninvoiced += Number(c.uninvoiced || 0);
             const wtVal = typeof c.withholdingTax === 'number' ? c.withholdingTax : parseFloat(String(c.withholdingTax || 0).replace(/[^-0-9.]/g, '')) || 0;
             res[curCode].withholding += wtVal;
         });
@@ -617,9 +652,15 @@ const CustomersView = () => {
                             )}
                             <td className="px-6 py-4"></td>
                             {columns.filter((c: any) => c.visible).map((col: any) => {
-                                if (col.id === 'balance' || col.id === 'withholdingTax') {
-                                    const key = col.id === 'balance' ? 'balance' : 'withholding';
+                                if (['balance', 'withholdingTax', 'uninvoiced'].includes(col.id)) {
+                                    const keyMap: Record<string, keyof typeof totals[string]> = {
+                                        'balance': 'balance',
+                                        'withholdingTax': 'withholding',
+                                        'uninvoiced': 'uninvoiced'
+                                    };
+                                    const key = keyMap[col.id];
                                     const activeCurs = Object.keys(totals).filter(cur => totals[cur][key] !== 0);
+                                    
                                     return (
                                         <td
                                             key={`total-${col.id}`}

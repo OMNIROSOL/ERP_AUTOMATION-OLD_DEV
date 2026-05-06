@@ -40,6 +40,16 @@ const DeliveryNotesView = () => {
                     customer: dn.customer?.name || dn.customerName || 'Unknown',
                     deliveryDate: dn.deliveryDate ? new Date(dn.deliveryDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
                     orderNumber: dn.reference || '-',
+                    deliveryAddress: dn.deliveryAddress || dn.customer?.deliveryAddress || dn.customer?.billingAddress || '-',
+                    timestamp: dn.timestamp ? new Date(dn.timestamp).toLocaleString('en-GB', { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: true 
+                    }).replace(/\//g, '.').replace(',', '') : '-',
                     status: dn.status || 'Pending'
                 }));
                 setDeliveryNotes(mappedData);
@@ -64,7 +74,7 @@ const DeliveryNotesView = () => {
             document.removeEventListener('mousedown', handleClickOutside);
             window.removeEventListener('delivery_notes_updated', handleRefresh);
         };
-    }, []);
+    }, [refreshTrigger]);
 
     const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(() => {
         const defaultVisible: Record<string, boolean> = {
@@ -77,8 +87,10 @@ const DeliveryNotesView = () => {
             'Inventory Location': false,
             'Description': false,
             'Qty delivered': true,
+            'Delivery address': true,
             'Timestamp': false,
-            'Status': true
+            'Status': true,
+            'Copy To': true
         };
 
         const saved = localStorage.getItem('delivery_note_columns');
@@ -96,8 +108,10 @@ const DeliveryNotesView = () => {
                     'inventory location': 'Inventory Location',
                     'description': 'Description',
                     'qty delivered': 'Qty delivered',
+                    'delivery address': 'Delivery address',
                     'timestamp': 'Timestamp',
-                    'status': 'Status'
+                    'status': 'Status',
+                    'copy to': 'Copy To'
                 };
                 const normalizedId = mapping[col.id.toLowerCase()] || col.id;
                 record[normalizedId] = col.visible;
@@ -125,7 +139,8 @@ const DeliveryNotesView = () => {
                         'description': 'Description',
                         'qty delivered': 'Qty delivered',
                         'timestamp': 'Timestamp',
-                        'status': 'Status'
+                        'status': 'Status',
+                        'copy to': 'Copy To'
                     };
                     const normalizedId = mapping[col.id.toLowerCase()] || col.id;
                     record[normalizedId] = col.visible;
@@ -206,11 +221,12 @@ const DeliveryNotesView = () => {
 
     const handleStatusChange = async (id: string, newStatus: string) => {
         try {
-            // await apiService.updateDeliveryNote(id, { status: newStatus });
-            setDeliveryNotes(prev => prev.map(n => n.id === id ? { ...n, status: newStatus } : n));
-            alert('Status updated (DB sync placeholder)');
-        } catch (err) {
+            await apiService.updateDeliveryNoteStatus(id, newStatus);
+            setRefreshTrigger(prev => prev + 1);
+        } catch (err: any) {
             console.error('Failed to update status:', err);
+            const msg = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Failed to update status: ${msg}`);
         }
     };
 
@@ -242,6 +258,10 @@ const DeliveryNotesView = () => {
 
         if (statusFilter !== 'All') {
             result = result.filter(note => (note.status || 'Pending') === statusFilter);
+        } else {
+            // "once delivered it will remove from delivery note"
+            // By default (All), we only show non-delivered notes.
+            result = result.filter(note => (note.status || 'Pending') !== 'Delivered');
         }
 
         if (invoiceFilter !== 'All') {
@@ -430,6 +450,15 @@ const DeliveryNotesView = () => {
             sortable: false
         },
         {
+            id: 'Delivery address',
+            header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Delivery address')}>Delivery Address <SortIcon column="Delivery address" /></div>,
+            className: 'min-w-[200px]',
+            accessor: (note: any) => (
+                <span className="text-slate-500 font-medium tracking-tight truncate max-w-[200px]" title={note.deliveryAddress}>{note.deliveryAddress || '—'}</span>
+            ),
+            sortable: false
+        },
+        {
             id: 'Customer',
             header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Customer')}>Customer <SortIcon column="Customer" /></div>,
             className: 'min-w-[200px]',
@@ -501,6 +530,33 @@ const DeliveryNotesView = () => {
                 );
             },
             sortable: false
+        },
+        {
+            id: 'Copy To',
+            header: 'Copy To',
+            accessor: (note: any) => (
+                <div className="relative group/copyto">
+                    <button className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all border border-transparent hover:border-indigo-100 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
+                        <Copy size={12} />
+                        <span className="hidden group-hover/copyto:inline">Copy</span>
+                    </button>
+                    <div className="absolute left-0 bottom-full mb-1 w-48 bg-white border border-slate-200 shadow-xl rounded-xl py-1 z-[100] opacity-0 invisible group-hover/copyto:opacity-100 group-hover/copyto:visible transition-all">
+                        {[
+                            { label: 'Sales Invoice', path: '/sales-invoices/new' },
+                            { label: 'Credit Note', path: '/credit-notes/new' },
+                            { label: 'Sales Order', path: '/sales-orders/new' }
+                        ].map(item => (
+                            <button
+                                key={item.label}
+                                onClick={() => navigate(`${item.path}?copyFrom=${note.id}`)}
+                                className="w-full text-left px-4 py-2 text-[11px] font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition-colors"
+                            >
+                                New {item.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )
         },
         {
             id: 'Timestamp',
@@ -626,7 +682,7 @@ const DeliveryNotesView = () => {
                         }}
                         className="bg-white border border-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-widest rounded-xl px-5 py-2.5 focus:outline-none transition-all cursor-pointer shadow-sm hover:border-slate-300"
                     >
-                        <option value="All">All Statuses</option>
+                        <option value="All">All Active</option>
                         <option value="Delivered">Delivered</option>
                         <option value="Pending">Pending</option>
                         <option value="Cancelled">Cancelled</option>

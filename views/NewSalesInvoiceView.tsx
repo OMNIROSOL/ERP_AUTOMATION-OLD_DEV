@@ -284,7 +284,7 @@ const NewSalesInvoiceView = () => {
                     }
 
                     if (sourceDoc) {
-                        const docDate = sourceDoc.issueDate || sourceDoc.orderDate || '';
+                        const docDate = copyFromId ? '' : (sourceDoc.issueDate || sourceDoc.orderDate || '');
                         setIssueDate(docDate ? new Date(docDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
                         setCustomer(sourceDoc.customer?.name || sourceDoc.customer || '');
                         setCurrency(sourceDoc.currency || sourceDoc.customer?.currency?.split(' - ')[0] || 'ZMW');

@@ -66,6 +66,8 @@ export const apiService = {
   getDeliveryNote: (id: string) => api.get(`/delivery-notes/${id}`).then(res => res.data),
   createDeliveryNote: (data: any) => api.post('/delivery-notes', data).then(res => res.data),
   updateDeliveryNote: (id: string, data: any) => api.put(`/delivery-notes/${id}`, data).then(res => res.data),
+  updateDeliveryNoteStatus: (id: string, status: string) => api.patch(`/delivery-notes/${id}`, { status }).then(res => res.data),
+
   
   getGoodsReceivedNotes: () => api.get('/goods-received-notes').then(res => res.data),
   createGoodsReceivedNote: (data: any) => api.post('/goods-received-notes', data).then(res => res.data),

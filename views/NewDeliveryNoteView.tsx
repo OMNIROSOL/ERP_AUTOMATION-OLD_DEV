@@ -170,36 +170,60 @@ const NewDeliveryNoteView = () => {
 
     useEffect(() => {
         const query = new URLSearchParams(location.search);
-        const invoiceId = query.get('invoiceId') || query.get('copyFrom');
+        const sourceId = query.get('invoiceId') || query.get('copyFrom');
 
-        if (invoiceId && !isEditing) {
-            const fetchInvoiceContext = async () => {
+        if (sourceId && !isEditing) {
+            const fetchSourceContext = async () => {
                 try {
-                    const invoice = await apiService.getInvoice(invoiceId);
-                    if (invoice) {
+                    // Try to find the source document from any sales module
+                    let sourceDoc: any = null;
+                    try {
+                        sourceDoc = await apiService.getInvoice(sourceId);
+                    } catch (e) {
+                        try {
+                            sourceDoc = await apiService.getOrder(sourceId);
+                        } catch (e2) {
+                            try {
+                                sourceDoc = await apiService.getQuote(sourceId);
+                            } catch (e3) {
+                                // Fallback to list search
+                                const [invoices, orders, quotes] = await Promise.all([
+                                    apiService.getInvoices().catch(() => []),
+                                    apiService.getOrders().catch(() => []),
+                                    apiService.getQuotes().catch(() => [])
+                                ]);
+                                sourceDoc = invoices.find((i: any) => i.id === sourceId) ||
+                                            orders.find((o: any) => o.id === sourceId) ||
+                                            quotes.find((q: any) => q.id === sourceId);
+                            }
+                        }
+                    }
+
+                    if (sourceDoc) {
                         setFormData(prev => ({
                             ...prev,
-                            customer: invoice.customer?.name || invoice.customerName || '',
-                            deliveryAddress: invoice.billingAddress || invoice.customer?.billingAddress || '',
-                            invoiceNumber: invoice.reference,
-                            orderNumber: invoice.salesOrder || '',
-                            description: `Shipment for Invoice ${invoice.reference}`
+                            customer: sourceDoc.customer?.name || sourceDoc.customerName || sourceDoc.customer || '',
+                            deliveryAddress: sourceDoc.deliveryAddress || sourceDoc.billingAddress || sourceDoc.customer?.billingAddress || '',
+                            invoiceNumber: sourceDoc.reference || '',
+                            orderNumber: sourceDoc.orderNumber || sourceDoc.reference || '',
+                            description: `Shipment for ${sourceDoc.reference}`
                         }));
-                        if (invoice.items) {
-                            setItems(invoice.items.map((it: any, idx: number) => ({
+                        if (sourceDoc.items) {
+                            setItems(sourceDoc.items.map((it: any, idx: number) => ({
                                 id: Date.now() + idx,
-                                item: it.itemName || it.item,
+                                item: it.item?.itemName || it.itemName || it.item || '',
+                                itemId: it.itemId || it.item?.id || '',
                                 description: it.description || '',
                                 qty: (it.qty || 0).toString(),
-                                unit: it.unitName || it.unit || ''
+                                unit: it.unitName || it.unit || it.item?.unitName || ''
                             })));
                         }
                     }
                 } catch (err) {
-                    console.error('Failed to fetch invoice for context:', err);
+                    console.error('Failed to fetch source document for context:', err);
                 }
             };
-            fetchInvoiceContext();
+            fetchSourceContext();
         }
     }, [location.search, isEditing]);
 
@@ -271,8 +295,9 @@ const NewDeliveryNoteView = () => {
             console.error('Failed to save delivery note:', err);
             const errMsg = err.response?.data?.error || err.message || 'Unknown error';
             const url = err.config?.url || 'unknown url';
+            const fullUrl = err.request?.responseURL || 'unknown full url';
             const method = err.config?.method?.toUpperCase() || 'unknown method';
-            alert(`Failed to save delivery note: ${errMsg}\nURL: ${url}\nMethod: ${method}`);
+            alert(`Failed to save delivery note: ${errMsg}\nRelative URL: ${url}\nFull URL: ${fullUrl}\nMethod: ${method}`);
         }
     };
 
@@ -282,7 +307,16 @@ const NewDeliveryNoteView = () => {
 
     const handleInputChange = (e: any) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        setFormData(prev => {
+            const updated = { ...prev, [name]: value };
+            if (name === 'customer') {
+                const customer = allCustomers.find(c => c.name === value || c.id === value);
+                if (customer) {
+                    updated.deliveryAddress = customer.deliveryAddress || customer.billingAddress || '';
+                }
+            }
+            return updated;
+        });
     };
 
     const totalQty = useMemo(() => {

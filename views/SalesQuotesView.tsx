@@ -646,7 +646,7 @@ const SalesQuotesView = () => {
             )}
 
             {/* Table Container - Invoice Style */}
-            <div className="mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 bg-white min-h-[400px] flex flex-col">
+            <div className="w-fit min-w-full overflow-x-auto mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 bg-white min-h-[400px] flex flex-col">
                 {isLoading ? (
                     <div className="flex-1 flex flex-col items-center justify-center py-20">
                         <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-4"></div>
@@ -656,7 +656,7 @@ const SalesQuotesView = () => {
                     <DataTable
                         data={paginatedData}
                         columns={columns as any}
-                        tableClassName="w-full"
+                        tableClassName="min-w-[1400px]"
                         className="border-none shadow-none bg-transparent"
                         hideDefaultPagination={true}
                         disableInternalScroll={true}

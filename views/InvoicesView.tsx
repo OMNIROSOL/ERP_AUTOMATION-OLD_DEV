@@ -82,7 +82,20 @@ const InvoicesView = () => {
                     timestamp: formatTimestamp(inv.createdAt),
                     tpin: inv.tpin || inv.customer?.tpin || '',
                     description: inv.description || inv.docOptions?.description || inv.items?.[0]?.description || '',
-                    Division: inv.items?.[0]?.division || inv.docOptions?.division || inv.division || inv.customer?.division || 'General'
+                    Division: inv.items?.[0]?.division || inv.docOptions?.division || inv.division || inv.customer?.division || 'General',
+                    // Dynamic Status Calculation
+                    status: (() => {
+                        const grandTotal = parseFloat(String(inv.grandTotal || 0));
+                        const balanceDue = parseFloat(String(inv.balanceDue || inv.grandTotal || 0));
+                        const dueDate = inv.dueDate ? new Date(inv.dueDate) : null;
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+
+                        if (balanceDue <= 0) return 'Paid';
+                        if (dueDate && dueDate < today) return 'Overdue';
+                        if (balanceDue < grandTotal) return 'Partially Paid';
+                        return 'Unpaid';
+                    })()
                 }));
                 setInvoices(mappedInvoices);
                 setDbDeliveryNotes(dnData);
@@ -200,18 +213,18 @@ const InvoicesView = () => {
     const deliveryNotes = dbDeliveryNotes;
 
     const filteredData = useMemo(() => {
-        let result = invoices.filter((inv: any) => inv.status !== 'Delivered');
-
+        let result = [...invoices];
+        
         // 1. Exact Customer Filter from URL Path
         if (customerName) {
             result = result.filter(inv => inv.customer.toLowerCase() === customerName.toLowerCase());
         }
 
         if (statusFilter !== 'All') {
-            result = result.filter(inv => {
-                if (statusFilter === 'Unpaid') return inv.status === 'Unpaid' || inv.status === 'Overdue';
-                return inv.status === statusFilter;
-            });
+            result = result.filter(inv => inv.status === statusFilter);
+        } else {
+            // "when status is paid in sales invoice then only it should removed in sales invoice list"
+            result = result.filter(inv => inv.status !== 'Paid');
         }
 
         const query = searchQuery.toLowerCase();
@@ -532,11 +545,19 @@ const InvoicesView = () => {
             id: 'Status',
             header: <div className="flex items-center cursor-pointer group hover:text-blue-600 transition-colors" onClick={() => handleSort('Status')}>Status <SortIcon column="Status" /></div>,
             className: 'whitespace-nowrap',
-            accessor: (inv: any) => (
-                <Badge variant={inv.status === 'Paid' || inv.status === 'Paid in full' ? 'success' : 'warning'} className="text-[10px]">
-                    {inv.status?.toUpperCase()}
-                </Badge>
-            ),
+            accessor: (inv: any) => {
+                const variantMap: Record<string, any> = {
+                    'Paid': 'success',
+                    'Partially Paid': 'info',
+                    'Overdue': 'error',
+                    'Unpaid': 'warning'
+                };
+                return (
+                    <Badge variant={variantMap[inv.status] || 'warning'} className="text-[10px]">
+                        {inv.status?.toUpperCase()}
+                    </Badge>
+                );
+            },
             sortable: false
         },
         {
@@ -774,8 +795,9 @@ const InvoicesView = () => {
                         }}
                         className="bg-white border border-slate-200 text-slate-600 text-[11px] font-black uppercase tracking-widest rounded-xl px-5 py-2.5 focus:outline-none transition-all cursor-pointer shadow-sm hover:border-slate-300"
                     >
-                        <option value="All">All Statuses</option>
+                        <option value="All">All Active</option>
                         <option value="Unpaid">Unpaid</option>
+                        <option value="Partially Paid">Partially Paid</option>
                         <option value="Paid">Paid</option>
                         <option value="Overdue">Overdue</option>
                     </select>

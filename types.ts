@@ -201,6 +201,7 @@ export interface DeliveryNote {
   customer: string;
   inventoryLocation?: string;
   description: string;
+  deliveryAddress?: string;
   status: 'Pending' | 'Delivered' | 'Cancelled';
   items?: QuoteItem[];
   timestamp?: string;

@@ -274,7 +274,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                     }
 
                     if (order) {
-                        const orderDate = order.orderDate || order.issueDate || '';
+                        const orderDate = copyFromId ? '' : (order.orderDate || order.issueDate || '');
                         let initialIssueDate = new Date().toISOString().split('T')[0];
                         if (orderDate) {
                             let d: Date;

@@ -126,7 +126,72 @@ const NewPurchaseInvoiceView = () => {
                 setDbItems(itemsData);
                 setDbFooters(footersData);
 
-                if (!id && !location.search.includes('copyFrom')) {
+                const searchParams = new URLSearchParams(location.search);
+                const copyFromId = searchParams.get('copyFrom');
+
+                if (id || copyFromId) {
+                    const targetId = id || copyFromId;
+                    try {
+                        let sourceDoc: any = null;
+                        // Try lookup across modules
+                        try {
+                            sourceDoc = await apiService.getPurchaseInvoice(targetId);
+                        } catch (e) {
+                            try {
+                                sourceDoc = await apiService.getInvoice(targetId);
+                            } catch (e2) {
+                                try {
+                                    sourceDoc = await apiService.getOrder(targetId);
+                                } catch (e3) {
+                                    sourceDoc = await apiService.getQuote(targetId);
+                                }
+                            }
+                        }
+
+                        if (sourceDoc) {
+                            const docDate = copyFromId ? '' : (sourceDoc.issueDate || sourceDoc.orderDate || '');
+                            setIssueDate(docDate ? new Date(docDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                            setDueDate(sourceDoc.dueDate ? new Date(sourceDoc.dueDate).toISOString().split('T')[0] : '');
+                            
+                            const sup = sups.find((s: any) => s.id === sourceDoc.supplierId || s.name === (sourceDoc.supplier?.name || sourceDoc.supplier));
+                            if (sup) {
+                                setSupplier(sup.name);
+                                setCurrency(sup.currency?.split(' - ')[0] || 'ZMW');
+                                setBillingAddress(sup.billingAddress || '');
+                            } else {
+                                setSupplier(sourceDoc.supplier?.name || sourceDoc.supplier || '');
+                                setCurrency(sourceDoc.currency || 'ZMW');
+                                setBillingAddress(sourceDoc.billingAddress || '');
+                            }
+
+                            if (copyFromId) {
+                                const nextRef = await apiService.getNextReference('purchase-invoice');
+                                setReference(nextRef);
+                                setUseManualRef(false);
+                            } else {
+                                setReference(sourceDoc.reference);
+                                setUseManualRef(true);
+                            }
+
+                            setDescription(sourceDoc.description || '');
+                            
+                            if (sourceDoc.items) {
+                                setItems(sourceDoc.items.map((i: any) => ({
+                                    id: Date.now() + Math.random(),
+                                    item: i.item?.itemName || i.itemName || i.item || 'Select Item',
+                                    account: i.account || 'Inventory',
+                                    description: i.description || '',
+                                    qty: (i.qty || '1').toString(),
+                                    unitPrice: (i.unitPrice || '0').toString(),
+                                    discount: (i.discount || '').toString(),
+                                    taxCode: i.taxCode || 'VAT 16%'
+                                })));
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Failed to load source document:', err);
+                    }
+                } else {
                     const nextRef = await apiService.getNextReference('purchase-invoice');
                     setReference(nextRef);
                 }
@@ -137,7 +202,7 @@ const NewPurchaseInvoiceView = () => {
             }
         };
         loadData();
-    }, [id]);
+    }, [id, location.search]);
 
     const calculations = useMemo(() => {
         let subtotal = 0;

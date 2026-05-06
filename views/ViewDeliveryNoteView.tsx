@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import Badge from '../components/shared/Badge';
+import { Check } from 'lucide-react';
 
 const ViewDeliveryNoteView = () => {
     const { id } = useParams();
@@ -131,6 +132,23 @@ const ViewDeliveryNoteView = () => {
                         <Edit size={14} className="text-blue-600" /> Edit
                     </button>
 
+                    {note.status !== 'Delivered' && (
+                        <button 
+                            onClick={async () => {
+                                try {
+                                    await apiService.updateDeliveryNoteStatus(note.id, 'Delivered');
+                                    setNote({ ...note, status: 'Delivered' });
+                                } catch (err) {
+                                    console.error('Failed to update status:', err);
+                                    alert('Failed to update status');
+                                }
+                            }}
+                            className="bg-blue-600 border border-blue-700 px-4 py-1.5 text-[12px] font-bold text-white rounded shadow-sm hover:bg-blue-700 flex items-center gap-2 transition-colors"
+                        >
+                            <Check size={14} /> Mark as Delivered
+                        </button>
+                    )}
+
                     <div className="relative" ref={dropdownRef}>
                         <button
                             onClick={() => setIsCopyToOpen(!isCopyToOpen)}
@@ -234,7 +252,7 @@ const ViewDeliveryNoteView = () => {
                                     </p>
                                     <div className="text-gray-500 space-y-1">
                                         <p className="whitespace-pre-wrap leading-relaxed">
-                                            {note.deliveryAddress || note.customer?.shippingAddress || note.customer?.address || 'No delivery address recorded.'}
+                                            {note.deliveryAddress || note.customer?.deliveryAddress || note.customer?.billingAddress || 'No delivery address recorded.'}
                                         </p>
                                     </div>
                                 </div>

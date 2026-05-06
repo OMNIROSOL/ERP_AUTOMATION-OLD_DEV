@@ -149,21 +149,82 @@ const NewPurchaseOrderView = () => {
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
-        const copyFromId = searchParams.get('copyFrom');
-        if (id || copyFromId) {
-            const orderId = id || copyFromId;
-            // For now we assume we can fetch them or we need to implement getPurchaseOrder(id)
+        const sourceId = searchParams.get('copyFrom');
+        if (id) {
             const fetchOrder = async () => {
                 try {
-                    // Placeholder: fetch from API if possible
-                    // const doc = await apiService.getPurchaseOrder(orderId);
-                    // For now we'll search in the list if we already fetched it, 
-                    // but usually we need a specific GET /api/purchase-orders/:id
+                    const data = await apiService.getPurchaseOrders();
+                    const order = data.find((o: any) => o.id === id);
+                    if (order) {
+                        setIssueDate(order.orderDate ? new Date(order.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                        setSupplier(order.supplier?.name || order.supplierName || order.supplier || '');
+                        setReference(order.reference || '');
+                        setUseManualRef(true);
+                        setDescription(order.description || '');
+                        setCurrency(order.currency || 'ZMW');
+                        if (order.items) {
+                            setItems(order.items.map((i: any) => ({
+                                id: i.id || (Date.now() + Math.random()),
+                                item: i.item?.itemName || i.itemName || i.item || 'Select Item',
+                                description: i.description || i.item?.description || '',
+                                qty: (i.qty || '1').toString(),
+                                unitPrice: (i.unitPrice || '0').toString(),
+                                discount: (i.discount || '').toString(),
+                                taxCode: i.taxCode || 'VAT 16%'
+                            })));
+                        }
+                    }
                 } catch (err) {
                     console.error('Failed to fetch order details:', err);
                 }
             };
             fetchOrder();
+        } else if (sourceId) {
+            const fetchSource = async () => {
+                try {
+                    let sourceDoc: any = null;
+                    try {
+                        sourceDoc = await apiService.getInvoice(sourceId);
+                    } catch (e) {
+                        try {
+                            sourceDoc = await apiService.getOrder(sourceId);
+                        } catch (e2) {
+                            try {
+                                sourceDoc = await apiService.getQuote(sourceId);
+                            } catch (e3) {
+                                const [invoices, orders, quotes] = await Promise.all([
+                                    apiService.getInvoices().catch(() => []),
+                                    apiService.getOrders().catch(() => []),
+                                    apiService.getQuotes().catch(() => [])
+                                ]);
+                                sourceDoc = invoices.find((i: any) => i.id === sourceId) ||
+                                            orders.find((o: any) => o.id === sourceId) ||
+                                            quotes.find((q: any) => q.id === sourceId);
+                            }
+                        }
+                    }
+
+                    if (sourceDoc) {
+                        setCurrency(sourceDoc.currency || sourceDoc.customer?.currency?.split(' - ')[0] || 'ZMW');
+                        setDescription(`Purchase for ${sourceDoc.reference}`);
+                        if (sourceDoc.items) {
+                            setItems(sourceDoc.items.map((i: any) => ({
+                                id: Date.now() + Math.random(),
+                                item: i.item?.itemName || i.itemName || i.item || 'Select Item',
+                                description: i.description || i.item?.description || '',
+                                qty: (i.qty || '1').toString(),
+                                // For Purchase Orders, we use Purchase Price if available, else Unit Price from Sales
+                                unitPrice: (i.item?.purchasePrice || i.unitPrice || '0').toString(),
+                                discount: (i.discount || '').toString(),
+                                taxCode: i.taxCode || 'VAT 16%'
+                            })));
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load source for purchase order:', err);
+                }
+            };
+            fetchSource();
         }
     }, [id, location.search]);
 

@@ -68,6 +68,46 @@ app.use((req, res, next) => {
 
 app.get('/api/users', (req, res) => res.json([]));
 
+app.get('/api/test-patch-route', (req, res) => {
+  res.json({ message: 'PATCH test route is reachable' });
+});
+
+app.patch('/api/delivery-notes/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  console.log(`PATCH DELIVERY NOTE STATUS HIT: ID=${id}, Status=${status}`);
+  try {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    console.log(`ID type check: isUuid=${isUuid}`);
+    
+    const existing = await prisma.deliveryNote.findFirst({
+      where: {
+        OR: [
+          { id: isUuid ? id : undefined },
+          { reference: id }
+        ]
+      }
+    });
+
+    if (!existing) {
+      console.warn(`Delivery note not found for status update: ${id}`);
+      return res.status(404).json({ error: 'Delivery note not found' });
+    }
+
+    console.log(`Found existing note: ${existing.id} (${existing.reference})`);
+
+    const result = await prisma.deliveryNote.update({
+      where: { id: existing.id },
+      data: { status }
+    });
+    console.log('PATCH DELIVERY NOTE STATUS SUCCESS:', result.id);
+    res.json(result);
+  } catch (err: any) {
+    console.error('PATCH DELIVERY NOTE STATUS ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const generateNextReference = async (type: string, tx: any = prisma) => {
   let count = 0;
   let prefix = '';
@@ -832,6 +872,8 @@ app.get('/api/delivery-notes/:id', async (req, res) => {
   }
 });
 
+
+
 app.post('/api/delivery-notes', async (req, res) => {
   const { customerId, reference, items, description, inventoryLocation, deliveryDate, orderNumber, invoiceNumber, status, docOptions, customTitle, footer, columnLineNumber, deliveryAddress } = req.body;
   try {
@@ -867,6 +909,7 @@ app.post('/api/delivery-notes', async (req, res) => {
 });
 
 app.put('/api/delivery-notes/:id', async (req, res) => {
+  console.log('PUT DELIVERY NOTE HIT:', req.params.id);
   const { id } = req.params;
   const { customerId, reference, items, description, inventoryLocation, deliveryDate, orderNumber, invoiceNumber, status, docOptions, customTitle, footer, columnLineNumber, deliveryAddress } = req.body;
   try {
@@ -886,32 +929,34 @@ app.put('/api/delivery-notes/:id', async (req, res) => {
     }
     targetId = existing.id;
 
-    // Delete existing items first
-    await prisma.deliveryNoteItem.deleteMany({ where: { deliveryNoteId: targetId } });
+    // Delete existing items ONLY if new items are provided
+    if (items) {
+      await prisma.deliveryNoteItem.deleteMany({ where: { deliveryNoteId: targetId } });
+    }
 
     const result = await prisma.deliveryNote.update({
       where: { id: targetId },
       data: {
-        customerId,
-        reference,
-        description,
-        deliveryAddress,
-        inventoryLocation,
-        deliveryDate: deliveryDate ? new Date(deliveryDate) : undefined,
-        orderNumber,
-        invoiceNumber,
-        status,
-        docOptions: docOptions || {},
-        customTitle,
-        footer,
-        columnLineNumber,
-        items: {
+        customerId: customerId || existing.customerId,
+        reference: reference || existing.reference,
+        description: description !== undefined ? description : existing.description,
+        deliveryAddress: deliveryAddress !== undefined ? deliveryAddress : existing.deliveryAddress,
+        inventoryLocation: inventoryLocation !== undefined ? inventoryLocation : existing.inventoryLocation,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : existing.deliveryDate,
+        orderNumber: orderNumber !== undefined ? orderNumber : existing.orderNumber,
+        invoiceNumber: invoiceNumber !== undefined ? invoiceNumber : existing.invoiceNumber,
+        status: status || existing.status,
+        docOptions: docOptions || existing.docOptions || {},
+        customTitle: customTitle !== undefined ? customTitle : existing.customTitle,
+        footer: footer !== undefined ? footer : existing.footer,
+        columnLineNumber: columnLineNumber !== undefined ? columnLineNumber : existing.columnLineNumber,
+        items: items ? {
           create: items.map((item: any) => ({
             itemId: item.itemId,
             description: item.description,
             qty: Number(item.qty)
           }))
-        }
+        } : undefined
       }
     });
     res.json(result);
@@ -1149,6 +1194,15 @@ app.delete('/api/footers/:id', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+app.use((req, res) => {
+  console.log(`[404] ${req.method} ${req.url}`);
+  res.status(404).json({ 
+    error: 'Route not found', 
+    method: req.method, 
+    url: req.url 
+  });
 });
 
 app.listen(PORT, () => {

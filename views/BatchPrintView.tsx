@@ -171,7 +171,8 @@ const BatchPrintView = () => {
         if (isSalesQuotes) {
             return allQuotes.filter(q => selectedIds.includes(q.id?.toString())).map(q => ({
                 ...q,
-                customer: q.customer?.name || q.customer || 'Unknown',
+                _docType: 'sales-quote',
+                customerName: q.customer?.name || q.customer || 'Unknown',
                 currency: q.currency || q.customer?.currency?.split(' - ')[0] || 'ZMW'
             }));
         }
@@ -181,7 +182,8 @@ const BatchPrintView = () => {
             console.log(`Found ${filtered.length} matching sales orders for batch print.`);
             return filtered.map(o => ({
                 ...o,
-                customer: o.customer?.name || o.customer || 'Unknown',
+                _docType: 'sales-order',
+                customerName: o.customer?.name || o.customer || 'Unknown',
                 currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
                 orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
                 items: (o.items || []).map((it: any) => ({
@@ -196,7 +198,8 @@ const BatchPrintView = () => {
         if (isSalesInvoices) {
             return allInvoices.filter(i => selectedIds.includes(i.id?.toString())).map(i => ({
                 ...i,
-                customer: i.customer?.name || i.customer || 'Unknown',
+                _docType: 'sales-invoice',
+                customerName: i.customer?.name || i.customer || 'Unknown',
                 currency: i.currency || i.customer?.currency?.split(' - ')[0] || 'ZMW'
             }));
         }
@@ -204,7 +207,8 @@ const BatchPrintView = () => {
         if (isDeliveryNotes) {
             return allDeliveryNotes.filter((dn: any) => selectedIds.includes(dn.id?.toString())).map(dn => ({
                 ...dn,
-                customer: dn.customer?.name || dn.customer || 'Unknown'
+                _docType: 'delivery-note',
+                customerName: dn.customer?.name || dn.customer || 'Unknown'
             }));
         }
 
@@ -218,14 +222,14 @@ const BatchPrintView = () => {
         if (isPurchaseQuotes) {
             return allPurchaseQuotes.filter(q => selectedIds.includes(q.id?.toString())).map(q => ({
                 ...q,
-                supplier: q.supplier?.name || q.supplier || 'Unknown'
+                supplierName: q.supplier?.name || q.supplier || 'Unknown'
             }));
         }
 
         if (isPurchaseOrders) {
             return allPurchaseOrders.filter(o => selectedIds.includes(o.id?.toString())).map(o => ({
                 ...o,
-                supplier: o.supplier?.name || o.supplier || 'Unknown'
+                supplierName: o.supplier?.name || o.supplier || 'Unknown'
             }));
         }
 
@@ -440,17 +444,20 @@ const BatchPrintView = () => {
                         );
                     }
 
-                    const isInvoice = 'issueDate' in item && 'balanceDue' in item;
-                    const isQuote = 'issueDate' in item && 'reference' in item && !isInvoice;
-                    const isOrder = 'orderDate' in item && 'reference' in item;
+                    const isInvoice = item._docType === 'sales-invoice' || ('issueDate' in item && 'balanceDue' in item);
+                    const isQuote = item._docType === 'sales-quote' || ('issueDate' in item && 'reference' in item && !isInvoice);
+                    const isOrder = item._docType === 'sales-order' || ('orderDate' in item && 'reference' in item);
                     const isPurchaseQuote = isQuote && 'supplier' in item;
                     const isPurchaseOrder = isOrder && 'supplier' in item;
-                    const isDeliveryNote = 'deliveryDate' in item && 'orderNumber' in item;
-                    const isReceipt = 'paidByContact' in item && 'paymentMethod' in item;
+                    const isDeliveryNote = item._docType === 'delivery-note' || ('deliveryDate' in item && 'orderNumber' in item);
+                    const isReceipt = item._docType === 'receipt' || ('paidByContact' in item && 'paymentMethod' in item);
 
                     if (isQuote || isOrder || isInvoice || isDeliveryNote || isReceipt) {
                         const dateLabel = isQuote || isInvoice ? 'Issue Date' : (isOrder ? 'Order Date' : (isDeliveryNote ? 'Delivery Date' : 'Receipt Date'));
-                        const dateValue = isQuote || isInvoice ? item.issueDate : (isOrder ? item.orderDate : (isDeliveryNote ? item.deliveryDate : item.date));
+                        const dateValue = (isQuote || isInvoice) ? item.issueDate : 
+                                         (isOrder ? item.orderDate : 
+                                         (isDeliveryNote ? (item.deliveryDate ? new Date(item.deliveryDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '-') : 
+                                         item.date));
 
                         const hasOptions = !!item.options;
                         const documentTitle = (hasOptions && item.options.customTitle && item.options.customTitleValue)
@@ -491,9 +498,14 @@ const BatchPrintView = () => {
                                         <div className="grid grid-cols-2 gap-12 items-start">
                                             {/* Billed To / Supplier */}
                                             <div>
-                                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">{(isPurchaseQuote || isPurchaseOrder) ? 'Supplier' : 'Billed To'}</h3>
-                                                <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{(isPurchaseQuote || isPurchaseOrder) ? item.supplier : item.customer}</p>
-                                                <p className="text-slate-500 text-[12px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">{item.billingAddress || ((isPurchaseQuote || isPurchaseOrder) ? '' : 'No billing address provided')}</p>
+                                                <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">{isDeliveryNote ? 'Delivered To' : ((isPurchaseQuote || isPurchaseOrder) ? 'Supplier' : 'Billed To')}</h3>
+                                                <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{(isPurchaseQuote || isPurchaseOrder) ? item.supplierName : item.customerName}</p>
+                                                <p className="text-slate-500 text-[12px] font-medium leading-relaxed max-w-xs whitespace-pre-wrap">
+                                                    {isDeliveryNote 
+                                                        ? (item.deliveryAddress || item.customer?.deliveryAddress || item.customer?.billingAddress || 'No delivery address recorded.')
+                                                        : (item.billingAddress || item.customer?.billingAddress || ((isPurchaseQuote || isPurchaseOrder) ? '' : 'No billing address provided'))
+                                                    }
+                                                </p>
                                             </div>
 
                                             {/* Order Details */}
@@ -550,11 +562,11 @@ const BatchPrintView = () => {
                                                 <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>
                                                 <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Item</th>
                                                 <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
-                                                <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
-                                                <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unit Price</th>
-                                                {item.options?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc</th>}
-                                                {(isPurchaseOrder || isPurchaseQuote) && !item.options?.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>}
-                                                <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
+                                                <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Qty</th>
+                                                {!isDeliveryNote && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Unit Price</th>}
+                                                {!isDeliveryNote && item.options?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Disc</th>}
+                                                {!isDeliveryNote && (isPurchaseOrder || isPurchaseQuote) && !item.options?.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Tax Amount</th>}
+                                                {!isDeliveryNote && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Total</th>}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
@@ -579,20 +591,20 @@ const BatchPrintView = () => {
                                                             <p className="text-gray-500">{line.description || '-'}</p>
                                                         </td>
                                                         <td className="px-4 py-4 text-right font-medium">{Number(line.qty).toLocaleString()} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{line.unit || ''}</span></td>
-                                                        <td className="px-4 py-4 text-right font-medium">{price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                                        {item.options?.columnDiscount && (
+                                                        {!isDeliveryNote && <td className="px-4 py-4 text-right font-medium">{price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>}
+                                                        {!isDeliveryNote && item.options?.columnDiscount && (
                                                             <td className="px-4 py-4 text-right">
                                                                 <span className="text-xs font-bold text-rose-500">
                                                                     {line.discount ? (item.options.columnDiscountType === 'Percentage' ? `${line.discount}%` : parseFloat(line.discount).toLocaleString()) : '-'}
                                                                 </span>
                                                             </td>
                                                         )}
-                                                        {(isPurchaseOrder || isPurchaseQuote) && !item.options?.amountsAreTaxInclusive && (
+                                                        {!isDeliveryNote && (isPurchaseOrder || isPurchaseQuote) && !item.options?.amountsAreTaxInclusive && (
                                                             <td className="px-4 py-4 text-right font-medium text-slate-400">
                                                                 {(lineTotal * (line.taxCode === 'VAT 16%' ? 0.16 : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                             </td>
                                                         )}
-                                                        <td className="px-4 py-4 text-right font-semibold">{(lineTotal * (line.taxCode === 'VAT 16%' ? (item.options?.amountsAreTaxInclusive ? 1 : 1.16) : 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                        {!isDeliveryNote && <td className="px-4 py-4 text-right font-semibold">{(lineTotal * (line.taxCode === 'VAT 16%' ? (item.options?.amountsAreTaxInclusive ? 1 : 1.16) : 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>}
                                                     </tr>
                                                 );
                                             }) : (
@@ -692,6 +704,25 @@ const BatchPrintView = () => {
                                                 grandTotal -= wTaxAmount;
                                             }
 
+                                            if (isDeliveryNote) {
+                                                const totalQty = (item.items || []).reduce((sum: number, line: any) => sum + (parseFloat(line.qty) || 0), 0);
+                                                return (
+                                                    <>
+                                                        <div className="flex justify-between items-center text-gray-500">
+                                                            <span className="text-[11px] font-bold uppercase tracking-widest">Item Count</span>
+                                                            <span className="font-semibold">{item.items?.length || 0}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2 print-bg-slate-50">
+                                                            <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-900">Total Quantity</span>
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">UNITS</p>
+                                                                <p className="text-2xl font-bold text-slate-900 tracking-tighter">{totalQty.toLocaleString()}</p>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                );
+                                            }
+
                                             return (
                                                 <>
                                                     <div className="flex justify-between items-center text-gray-500">
@@ -738,16 +769,6 @@ const BatchPrintView = () => {
                             <div className="mb-14">
                                 <div className="flex justify-between items-center mb-2">
                                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight uppercase leading-none">{item.name}</h1>
-                                    <div className="flex items-center space-x-2 status-badge-print">
-                                        {item.inactive && (
-                                            <span className="px-3 py-1 rounded bg-slate-100 text-slate-500 text-[11px] font-black uppercase tracking-widest border border-slate-200">
-                                                Inactive
-                                            </span>
-                                        )}
-                                        <span className={`px-4 py-1.5 rounded-md text-[13px] font-black uppercase tracking-widest shadow-sm ${item.status === 'Paid' ? 'bg-emerald-50 text-white' : 'bg-rose-50 text-white'}`}>
-                                            {item.status || 'Unpaid'}
-                                        </span>
-                                    </div>
                                 </div>
                                 <p className="text-[12px] font-bold text-slate-400 uppercase tracking-[0.2em]">UCN: {item.code}</p>
                             </div>

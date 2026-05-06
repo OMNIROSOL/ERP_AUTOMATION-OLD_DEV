@@ -150,12 +150,89 @@ const NewCreditNoteView = () => {
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
-        const copyFromId = searchParams.get('copyFrom');
+        const sourceId = searchParams.get('copyFrom');
 
         if (id) {
-            // Placeholder: fetch existing from API
-        } else if (copyFromId) {
-            // Placeholder: fetch source from API
+            const fetchExisting = async () => {
+                try {
+                    const data = await apiService.getCreditNotes();
+                    const note = data.find((n: any) => n.id === id);
+                    if (note) {
+                        setIssueDate(note.issueDate ? new Date(note.issueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                        setCustomer(note.customer?.name || note.customerName || note.customer || '');
+                        setReference(note.reference || '');
+                        setUseManualRef(true);
+                        setDescription(note.description || '');
+                        setCurrency(note.currency || 'ZMW');
+                        if (note.items) {
+                            setItems(note.items.map((i: any) => ({
+                                id: i.id || (Date.now() + Math.random()),
+                                item: i.item?.itemName || i.itemName || i.item || 'Select Item',
+                                itemId: i.itemId || i.item?.id || '',
+                                account: i.account || 'Inventory sales',
+                                qty: (i.qty || '1').toString(),
+                                unitPrice: (i.unitPrice || '0').toString(),
+                                unitCost: (i.unitCost || '0').toString(),
+                                unit: i.unit || '',
+                                taxCode: i.taxCode || 'VAT 16%'
+                            })));
+                        }
+                        if (note.docOptions) setOptions(prev => ({ ...prev, ...note.docOptions }));
+                    }
+                } catch (err) {
+                    console.error('Failed to load credit note:', err);
+                }
+            };
+            fetchExisting();
+        } else if (sourceId) {
+            const fetchSource = async () => {
+                try {
+                    let sourceDoc: any = null;
+                    try {
+                        sourceDoc = await apiService.getInvoice(sourceId);
+                    } catch (e) {
+                        try {
+                            sourceDoc = await apiService.getOrder(sourceId);
+                        } catch (e2) {
+                            try {
+                                sourceDoc = await apiService.getQuote(sourceId);
+                            } catch (e3) {
+                                const [invoices, orders, quotes] = await Promise.all([
+                                    apiService.getInvoices().catch(() => []),
+                                    apiService.getOrders().catch(() => []),
+                                    apiService.getQuotes().catch(() => [])
+                                ]);
+                                sourceDoc = invoices.find((i: any) => i.id === sourceId) ||
+                                            orders.find((o: any) => o.id === sourceId) ||
+                                            quotes.find((q: any) => q.id === sourceId);
+                            }
+                        }
+                    }
+
+                    if (sourceDoc) {
+                        setCustomer(sourceDoc.customer?.name || sourceDoc.customerName || sourceDoc.customer || '');
+                        setBillingAddress(sourceDoc.billingAddress || sourceDoc.customer?.billingAddress || '');
+                        setCurrency(sourceDoc.currency || sourceDoc.customer?.currency?.split(' - ')[0] || 'ZMW');
+                        setDescription(`Credit note for ${sourceDoc.reference}`);
+                        if (sourceDoc.items) {
+                            setItems(sourceDoc.items.map((i: any) => ({
+                                id: Date.now() + Math.random(),
+                                item: i.item?.itemName || i.itemName || i.item || 'Select Item',
+                                itemId: i.itemId || i.item?.id || '',
+                                account: i.account || 'Inventory sales',
+                                qty: (i.qty || '1').toString(),
+                                unitPrice: (i.unitPrice || '0').toString(),
+                                unitCost: (i.unitCost || '0').toString(),
+                                unit: i.unit || i.item?.unitName || '',
+                                taxCode: i.taxCode || 'VAT 16%'
+                            })));
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load source for credit note:', err);
+                }
+            };
+            fetchSource();
         }
     }, [id, location.search]);
 

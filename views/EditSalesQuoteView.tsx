@@ -260,7 +260,8 @@ const EditSalesQuoteView = () => {
                     }
 
                     if (quote) {
-                        const quoteDate = quote.issueDate || quote.orderDate || '';
+                        // Use today's date for 'copyFrom' operations, otherwise use the source document's date
+                        const quoteDate = copyFromId ? '' : (quote.issueDate || quote.orderDate || '');
                         setIssueDate(quoteDate ? new Date(quoteDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
                         setExpiryDays(quote.expiryDays?.toString() || '30');
                         setCustomer(quote.customer?.name || quote.customer || '');
