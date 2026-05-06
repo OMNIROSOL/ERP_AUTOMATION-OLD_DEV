@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Building2, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, ChevronUp } from 'lucide-react';
 import { Division } from '../types';
 import apiService from '../services/apiService';
@@ -67,9 +67,14 @@ const NewSupplierView = () => {
     const [email, setEmail] = useState('');
     const [division, setDivision] = useState('General');
     const [fileName, setFileName] = useState('No file chosen');
+    const [controlAccount, setControlAccount] = useState('Accounts Payable');
     const [emailError, setEmailError] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
+
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const copyFromCustomerId = queryParams.get('copyFrom');
 
     useEffect(() => {
         apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
@@ -80,7 +85,21 @@ const NewSupplierView = () => {
                 // Fallback to timestamp based code if API fails
                 setCode(`SUP-${Date.now().toString().slice(-4)}`);
             });
-    }, []);
+
+        if (copyFromCustomerId) {
+            apiService.getCustomer(copyFromCustomerId)
+                .then(customer => {
+                    if (customer) {
+                        setName(customer.name || '');
+                        setEmail(customer.email || '');
+                        setDivision(customer.division || 'General');
+                        setAddress(customer.billingAddress || '');
+                        setCurrency(customer.currency || 'ZMW - Zambian Kwacha');
+                    }
+                })
+                .catch(err => console.error('Failed to fetch customer for copy:', err));
+        }
+    }, [copyFromCustomerId]);
 
     const validateEmail = (email: string) => {
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -185,6 +204,13 @@ const NewSupplierView = () => {
                                 placeholder="finance@supplier.com" 
                                 error={emailError}
                             />
+                            <InputField 
+                                label="Control Account" 
+                                value={controlAccount} 
+                                onChange={(e: any) => setControlAccount(e.target.value)} 
+                                Icon={Landmark} 
+                                placeholder="e.g. Accounts Payable" 
+                            />
                         </div>
                     </div>
 
@@ -253,7 +279,9 @@ const NewSupplierView = () => {
                                     email: email,
                                     currency: currencyCode,
                                     billingAddress: address,
-                                    status: 'Paid'
+                                    status: 'Paid',
+                                    division: division,
+                                    controlAccount: controlAccount
                                 };
 
                                 try {

@@ -373,6 +373,7 @@ export interface Supplier {
   tpin?: string;
   withholdingTax?: number | string;
   inactive?: boolean;
+  controlAccount?: string;
 }
 
 export interface PurchaseOrder {

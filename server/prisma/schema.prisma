@@ -10,27 +10,27 @@ datasource db {
 }
 
 model Customer {
-  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  code           String         @unique
-  name           String
-  email          String?
-  currency       String?        @default("USD")
-  billingAddress String?        @map("billing_address")
-  deliveryAddress String?       @map("delivery_address")
-  tpin           String?
-  division       String?
-  salesPerson    String?        @map("sales_person")
-  creditDays     Int?           @default(30) @map("credit_days")
-  creditLimit    Decimal?       @default(0) @map("credit_limit") @db.Decimal(15, 2)
-  documentation  String?
-  inactive       Boolean?       @default(false)
-  balance        Decimal?       @default(0) @db.Decimal(15, 2)
-  status         String?        @default("Active")
-  createdAt      DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
-  deliveryNotes  DeliveryNote[]
-  salesInvoices  Invoice[]
-  salesOrders    SalesOrder[]
-  salesQuotes    SalesQuote[]
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code            String         @unique
+  name            String
+  email           String?
+  currency        String?        @default("USD")
+  billingAddress  String?        @map("billing_address")
+  status          String?        @default("Active")
+  createdAt       DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
+  balance         Decimal?       @default(0) @db.Decimal(15, 2)
+  creditDays      Int?           @default(30) @map("credit_days")
+  creditLimit     Decimal?       @default(0) @map("credit_limit") @db.Decimal(15, 2)
+  deliveryAddress String?        @map("delivery_address")
+  division        String?
+  documentation   String?
+  inactive        Boolean?       @default(false)
+  salesPerson     String?        @map("sales_person")
+  tpin            String?
+  deliveryNotes   DeliveryNote[]
+  salesInvoices   Invoice[]
+  salesOrders     SalesOrder[]
+  salesQuotes     SalesQuote[]
 
   @@map("customers")
   @@schema("master")
@@ -43,11 +43,11 @@ model Item {
   description     String?
   unitName        String?            @default("Pcs") @map("unit_name")
   valuationMethod String?            @default("FIFO") @map("valuation_method")
-  sellingPrice    Decimal?           @default(0) @map("selling_price") @db.Decimal(15, 2)
-  purchasePrice   Decimal?           @default(0) @map("purchase_price") @db.Decimal(15, 2)
-  qtyOnHand       Decimal?           @default(0) @map("qty_on_hand") @db.Decimal(15, 2)
   isInactive      Boolean?           @default(false) @map("is_inactive")
   createdAt       DateTime?          @default(now()) @map("created_at") @db.Timestamptz(6)
+  purchasePrice   Decimal?           @default(0) @map("purchase_price") @db.Decimal(15, 2)
+  sellingPrice    Decimal?           @default(0) @map("selling_price") @db.Decimal(15, 2)
+  qtyOnHand       Decimal?           @default(0) @map("qty_on_hand") @db.Decimal(15, 2)
   stockLedger     StockLedger[]
   deliveryItems   DeliveryNoteItem[]
   invoiceItems    InvoiceItem[]
@@ -79,13 +79,13 @@ model InvoiceItem {
   id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   invoiceId   String     @map("invoice_id") @db.Uuid
   itemId      String     @map("item_id") @db.Uuid
-  description String?
   qty         Decimal    @db.Decimal(12, 4)
   unitPrice   Decimal    @map("unit_price") @db.Decimal(15, 2)
-  discount    Decimal?   @default(0) @db.Decimal(15, 2)
-  division    String?    @default("General")
   tax_code_id String?    @db.Uuid
   totalAmount Decimal    @map("total_amount") @db.Decimal(15, 2)
+  discount    Decimal?   @default(0) @db.Decimal(15, 2)
+  division    String?    @default("General")
+  description String?
   invoice     Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   item        Item       @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   tax_codes   tax_codes? @relation(fields: [tax_code_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -119,13 +119,13 @@ model QuoteItem {
   quoteId     String?     @map("quote_id") @db.Uuid
   orderId     String?     @map("order_id") @db.Uuid
   itemId      String      @map("item_id") @db.Uuid
-  description String?
   qty         Decimal     @db.Decimal(12, 4)
   unitPrice   Decimal     @map("unit_price") @db.Decimal(15, 2)
+  totalAmount Decimal     @map("total_amount") @db.Decimal(15, 2)
+  taxCode     String?     @default("No tax") @map("tax_code")
   discount    Decimal?    @default(0) @db.Decimal(15, 2)
   division    String?     @default("General")
-  taxCode     String?     @default("No tax") @map("tax_code")
-  totalAmount Decimal     @map("total_amount") @db.Decimal(15, 2)
+  description String?
   item        Item        @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   order       SalesOrder? @relation(fields: [orderId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   quote       SalesQuote? @relation(fields: [quoteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -138,7 +138,6 @@ model SalesOrder {
   id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   reference      String      @unique
   orderDate      DateTime    @default(dbgenerated("CURRENT_DATE")) @map("order_date") @db.Date
-  expiryDate     DateTime?   @map("expiry_date") @db.Date
   customerId     String      @map("customer_id") @db.Uuid
   description    String?
   currency       String?     @default("ZMW")
@@ -147,6 +146,7 @@ model SalesOrder {
   billingAddress String?     @map("billing_address")
   docOptions     Json?       @default("{}") @map("doc_options")
   createdAt      DateTime?   @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiryDate     DateTime?   @map("expiry_date") @db.Date
   items          QuoteItem[]
   customer       Customer    @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -163,15 +163,15 @@ model DeliveryNote {
   status            String?            @default("Issued")
   inventoryLocation String?            @map("inventory_location")
   timestamp         DateTime?          @default(now()) @map("timestamp") @db.Timestamptz(6)
-  items             DeliveryNoteItem[]
-  customer          Customer           @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  orderNumber       String?            @map("order_number")
-  invoiceNumber     String?            @map("invoice_number")
+  columnLineNumber  Boolean?           @map("column_line_number")
+  customTitle       String?            @map("custom_title")
   deliveryAddress   String?            @map("delivery_address")
   docOptions        Json?              @map("doc_options")
-  customTitle       String?            @map("custom_title")
   footer            String?            @map("footer")
-  columnLineNumber  Boolean?           @map("column_line_number")
+  invoiceNumber     String?            @map("invoice_number")
+  orderNumber       String?            @map("order_number")
+  items             DeliveryNoteItem[]
+  customer          Customer           @relation(fields: [customerId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("delivery_notes")
   @@schema("sales")
@@ -181,8 +181,8 @@ model DeliveryNoteItem {
   id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   deliveryNoteId String       @map("delivery_note_id") @db.Uuid
   itemId         String       @map("item_id") @db.Uuid
-  description    String?
   qty            Decimal      @db.Decimal(12, 4)
+  description    String?
   deliveryNote   DeliveryNote @relation(fields: [deliveryNoteId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   item           Item         @relation(fields: [itemId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
@@ -297,17 +297,22 @@ model roles {
 }
 
 model suppliers {
-  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  code       String     @unique
-  name       String
-  email      String?
-  currency   String?    @default("USD")
-  billingAddress String? @map("billing_address")
-  status     String?    @default("Active")
-  created_at DateTime?  @default(now()) @db.Timestamptz(6)
-  invoices   invoices[]
-  purchaseQuotes PurchaseQuote[]
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code           String          @unique
+  name           String
+  email          String?
+  currency       String?         @default("USD")
+  status         String?         @default("Active")
+  created_at     DateTime?       @default(now()) @db.Timestamptz(6)
+  billingAddress String?         @map("billing_address")
+  balance        Decimal?        @default(0) @db.Decimal(15, 2)
+  division       String?
+  controlAccount String?         @default("Accounts Payable") @map("control_account")
+  inactive       Boolean?        @default(false)
+  tpin           String?
+  invoices       invoices[]
   purchaseOrders PurchaseOrder[]
+  purchaseQuotes PurchaseQuote[]
 
   @@schema("master")
 }
@@ -323,17 +328,17 @@ model tax_codes {
 }
 
 model PurchaseQuote {
-  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  reference      String             @unique
-  issueDate      DateTime           @default(dbgenerated("CURRENT_DATE")) @map("issue_date") @db.Date
-  supplierId     String             @map("supplier_id") @db.Uuid
-  description    String?
-  currency       String?            @default("ZMW")
-  amount         Decimal?           @default(0) @db.Decimal(15, 2)
-  status         String?            @default("Active")
-  createdAt      DateTime?          @default(now()) @map("created_at") @db.Timestamptz(6)
-  items          PurchaseQuoteItem[]
-  supplier       suppliers          @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reference   String              @unique
+  issueDate   DateTime            @default(dbgenerated("CURRENT_DATE")) @map("issue_date") @db.Date
+  supplierId  String              @map("supplier_id") @db.Uuid
+  description String?
+  currency    String?             @default("ZMW")
+  amount      Decimal?            @default(0) @db.Decimal(15, 2)
+  status      String?             @default("Active")
+  createdAt   DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
+  items       PurchaseQuoteItem[]
+  supplier    suppliers           @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("purchase_quotes")
   @@schema("purchase")
@@ -354,17 +359,17 @@ model PurchaseQuoteItem {
 }
 
 model PurchaseOrder {
-  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  reference      String             @unique
-  orderDate      DateTime           @default(dbgenerated("CURRENT_DATE")) @map("order_date") @db.Date
-  supplierId     String             @map("supplier_id") @db.Uuid
-  description    String?
-  currency       String?            @default("ZMW")
-  amount         Decimal?           @default(0) @db.Decimal(15, 2)
-  status         String?            @default("Open")
-  createdAt      DateTime?          @default(now()) @map("created_at") @db.Timestamptz(6)
-  items          PurchaseOrderItem[]
-  supplier       suppliers          @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reference   String              @unique
+  orderDate   DateTime            @default(dbgenerated("CURRENT_DATE")) @map("order_date") @db.Date
+  supplierId  String              @map("supplier_id") @db.Uuid
+  description String?
+  currency    String?             @default("ZMW")
+  amount      Decimal?            @default(0) @db.Decimal(15, 2)
+  status      String?             @default("Open")
+  createdAt   DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
+  items       PurchaseOrderItem[]
+  supplier    suppliers           @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("purchase_orders")
   @@schema("purchase")
@@ -415,4 +420,3 @@ model Footer {
   @@map("footers")
   @@schema("master")
 }
-

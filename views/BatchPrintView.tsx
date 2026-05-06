@@ -41,7 +41,7 @@ const BatchPrintView = () => {
         const fetchBaseData = async () => {
             setIsLoading(true);
             try {
-                const [custs, supps, quotes, orders, invoices, dns, receipts, pQuotes, pOrders, footers, codes] = await Promise.all([
+                const [custs, supps, quotes, orders, invs, dns, rects, pQuotes, pOrders, footers, codes] = await Promise.all([
                     apiService.getCustomers().catch(() => []),
                     apiService.getSuppliers().catch(() => []),
                     apiService.getQuotes().catch(() => []),
@@ -54,13 +54,51 @@ const BatchPrintView = () => {
                     apiService.getFooters().catch(() => []),
                     apiService.getTaxCodes().catch(() => [])
                 ]);
-                setAllCustomers(custs);
-                setAllSuppliers(supps);
-                setAllQuotes(quotes);
-                setAllOrders(orders);
-                setAllInvoices(invoices);
+
+                // Fallback for potentially missing records (deep fetch)
+                let finalSupps = [...supps];
+                let finalCusts = [...custs];
+                let finalQuotes = [...quotes];
+                let finalOrders = [...orders];
+                let finalInvs = [...invs];
+
+                const missingIds = selectedIds.filter(id => {
+                    const tid = id.trim().toLowerCase();
+                    if (isSuppliers) return !supps.find(s => s.id?.toString().toLowerCase() === tid);
+                    if (isCustomers) return !custs.find(c => c.id?.toString().toLowerCase() === tid);
+                    if (isSalesQuotes) return !quotes.find(q => q.id?.toString().toLowerCase() === tid);
+                    if (isSalesOrders) return !orders.find(o => o.id?.toString().toLowerCase() === tid);
+                    if (isSalesInvoices) return !invs.find(i => i.id?.toString().toLowerCase() === tid);
+                    return false;
+                });
+
+                if (missingIds.length > 0) {
+                    console.log(`Deep fetching ${missingIds.length} missing records...`);
+                    const recovered = await Promise.all(missingIds.map(async (id) => {
+                        try {
+                            if (isSuppliers) return await apiService.getSupplier(id);
+                            if (isCustomers) return await apiService.getCustomer(id);
+                            if (isSalesQuotes) return await apiService.getQuote(id);
+                            if (isSalesOrders) return await apiService.getOrder(id);
+                            if (isSalesInvoices) return await apiService.getInvoice(id);
+                        } catch (e) { return null; }
+                    }));
+                    
+                    const validRecovered = recovered.filter(Boolean);
+                    if (isSuppliers) finalSupps = [...finalSupps, ...validRecovered];
+                    if (isCustomers) finalCusts = [...finalCusts, ...validRecovered];
+                    if (isSalesQuotes) finalQuotes = [...finalQuotes, ...validRecovered];
+                    if (isSalesOrders) finalOrders = [...finalOrders, ...validRecovered];
+                    if (isSalesInvoices) finalInvs = [...finalInvs, ...validRecovered];
+                }
+
+                setAllCustomers(finalCusts);
+                setAllSuppliers(finalSupps);
+                setAllQuotes(finalQuotes);
+                setAllOrders(finalOrders);
+                setAllInvoices(finalInvs);
                 setAllDeliveryNotes(dns);
-                setAllReceipts(receipts);
+                setAllReceipts(rects);
                 setAllPurchaseQuotes(pQuotes);
                 setAllPurchaseOrders(pOrders);
                 setAllFooters(footers);
@@ -72,7 +110,7 @@ const BatchPrintView = () => {
             }
         };
         fetchBaseData();
-    }, []);
+    }, [isSuppliers, isCustomers, isSalesQuotes, isSalesOrders, isSalesInvoices, selectedIds.join(',')]);
 
     const items = useMemo(() => {
         // Handle Single-Invoice Detail Reports (Selected Lines)
@@ -161,73 +199,118 @@ const BatchPrintView = () => {
 
         // Default Batch Prints (Documents/Customers)
         if (isSuppliers) {
-            return allSuppliers.filter(s => selectedIds.includes(s.id?.toString()));
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => {
+                const found = allSuppliers.find(s => s.id?.toString().toLowerCase() === id);
+                if (found) return found;
+                // Return a clear placeholder if still not found after deep fetch
+                return { 
+                    id, 
+                    name: `Record Not Found (${id})`, 
+                    code: 'MISSING', 
+                    isMissing: true,
+                    division: 'Unknown',
+                    email: 'N/A'
+                };
+            });
         }
 
         if (isCustomers) {
-            return allCustomers.filter(c => selectedIds.includes(c.id?.toString()));
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => {
+                const found = allCustomers.find(c => c.id?.toString().toLowerCase() === id);
+                if (found) return found;
+                return { id, name: `Record Not Found (${id})`, code: 'MISSING', isMissing: true };
+            });
         }
 
         if (isSalesQuotes) {
-            return allQuotes.filter(q => selectedIds.includes(q.id?.toString())).map(q => ({
-                ...q,
-                _docType: 'sales-quote',
-                customerName: q.customer?.name || q.customer || 'Unknown',
-                currency: q.currency || q.customer?.currency?.split(' - ')[0] || 'ZMW'
-            }));
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => {
+                const found = allQuotes.find(q => q.id?.toString().toLowerCase() === id);
+                if (found) return {
+                    ...found,
+                    _docType: 'sales-quote',
+                    customerName: found.customer?.name || found.customer || 'Unknown',
+                    currency: found.currency || found.customer?.currency?.split(' - ')[0] || 'ZMW'
+                };
+                return { id, isMissing: true, _docType: 'sales-quote' };
+            });
         }
 
         if (isSalesOrders) {
-            const filtered = allOrders.filter(o => selectedIds.includes(o.id?.toString()));
-            console.log(`Found ${filtered.length} matching sales orders for batch print.`);
-            return filtered.map(o => ({
-                ...o,
-                _docType: 'sales-order',
-                customerName: o.customer?.name || o.customer || 'Unknown',
-                currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
-                orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
-                items: (o.items || []).map((it: any) => ({
-                    ...it,
-                    item: it.item?.itemName || it.itemName || it.item || 'Select Item',
-                    description: it.description || it.item?.description || '',
-                    total: (parseFloat(it.qty) * parseFloat(it.unitPrice)).toFixed(2)
-                }))
-            }));
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => {
+                const o = allOrders.find(order => order.id?.toString().toLowerCase() === id);
+                if (!o) return { id, isMissing: true, _docType: 'sales-order' };
+                return {
+                    ...o,
+                    _docType: 'sales-order',
+                    customerName: o.customer?.name || o.customer || 'Unknown',
+                    currency: o.currency || o.customer?.currency?.split(' - ')[0] || 'ZMW',
+                    orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    items: (o.items || []).map((it: any) => ({
+                        ...it,
+                        item: it.item?.itemName || it.itemName || it.item || 'Select Item',
+                        description: it.description || it.item?.description || '',
+                        total: (parseFloat(it.qty) * parseFloat(it.unitPrice)).toFixed(2)
+                    }))
+                };
+            });
         }
 
         if (isSalesInvoices) {
-            return allInvoices.filter(i => selectedIds.includes(i.id?.toString())).map(i => ({
-                ...i,
-                _docType: 'sales-invoice',
-                customerName: i.customer?.name || i.customer || 'Unknown',
-                currency: i.currency || i.customer?.currency?.split(' - ')[0] || 'ZMW'
-            }));
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => {
+                const i = allInvoices.find(inv => inv.id?.toString().toLowerCase() === id);
+                if (!i) return { id, isMissing: true, _docType: 'sales-invoice' };
+                return {
+                    ...i,
+                    _docType: 'sales-invoice',
+                    customerName: i.customer?.name || i.customer || 'Unknown',
+                    currency: i.currency || i.customer?.currency?.split(' - ')[0] || 'ZMW'
+                };
+            });
         }
 
         if (isDeliveryNotes) {
-            return allDeliveryNotes.filter((dn: any) => selectedIds.includes(dn.id?.toString())).map(dn => ({
-                ...dn,
-                _docType: 'delivery-note',
-                customerName: dn.customer?.name || dn.customer || 'Unknown'
-            }));
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => {
+                const dn = allDeliveryNotes.find((d: any) => d.id?.toString().toLowerCase() === id);
+                if (!dn) return { id, isMissing: true, _docType: 'delivery-note' };
+                return {
+                    ...dn,
+                    _docType: 'delivery-note',
+                    customerName: dn.customer?.name || dn.customer || 'Unknown'
+                };
+            });
         }
 
         if (isReceipts) {
-            return allReceipts.filter(r => selectedIds.includes(r.id?.toString())).map(r => ({
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => 
+                allReceipts.find(r => r.id?.toString().toLowerCase() === id)
+            ).filter(Boolean).map(r => ({
                 ...r,
                 customer: r.customer?.name || r.customer || 'Unknown'
             }));
         }
 
         if (isPurchaseQuotes) {
-            return allPurchaseQuotes.filter(q => selectedIds.includes(q.id?.toString())).map(q => ({
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => 
+                allPurchaseQuotes.find(q => q.id?.toString().toLowerCase() === id)
+            ).filter(Boolean).map(q => ({
                 ...q,
                 supplierName: q.supplier?.name || q.supplier || 'Unknown'
             }));
         }
 
         if (isPurchaseOrders) {
-            return allPurchaseOrders.filter(o => selectedIds.includes(o.id?.toString())).map(o => ({
+            const normalizedIds = selectedIds.map(id => id.trim().toLowerCase()).filter(id => id.length > 0);
+            return normalizedIds.map(id => 
+                allPurchaseOrders.find(o => o.id?.toString().toLowerCase() === id)
+            ).filter(Boolean).map(o => ({
                 ...o,
                 supplierName: o.supplier?.name || o.supplier || 'Unknown'
             }));
@@ -760,6 +843,64 @@ const BatchPrintView = () => {
                                         </p>
                                     </div>
                                 )}
+                            </div>
+                        );
+                    }
+
+                    if (isSuppliers) {
+                        return (
+                            <div key={item.id} className={`document-page print-container bg-white shadow-xl p-12 w-[850px] max-w-full text-[13px] text-gray-800 relative mx-auto ${index < items.length - 1 ? 'print-break mb-12' : ''}`}>
+                                <div className="mb-14">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h1 className="text-2xl font-bold text-slate-900 tracking-tight uppercase leading-none">{item.name}</h1>
+                                    </div>
+                                    <p className="text-[12px] font-bold text-slate-400 uppercase tracking-[0.2em]">SUN: {item.code}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-12 mb-10">
+                                    <div>
+                                        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-2">Business Details</h3>
+                                        <div className="space-y-2">
+                                            <div className="flex">
+                                                <span className="w-32 text-gray-500">Division:</span>
+                                                <span className="font-medium">{item.division || 'General'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-2">Financial Settings</h3>
+                                        <div className="space-y-2">
+                                            <div className="flex">
+                                                <span className="w-32 text-gray-500">Currency:</span>
+                                                <span className="font-medium">{item.currency || 'ZMW'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 gap-12 mb-10">
+                                    <div>
+                                        <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 border-b border-gray-100 pb-2">Contact & Address</h3>
+                                        <div className="space-y-2">
+                                            <div className="flex">
+                                                <span className="w-32 text-gray-500">Email:</span>
+                                                <a href={`mailto:${item.email || ''}`} className="font-medium text-blue-600 lowercase hover:underline">{item.email || '-'}</a>
+                                            </div>
+                                            <div className="flex mt-3">
+                                                <span className="w-32 text-gray-500">Address:</span>
+                                                <span className="font-medium whitespace-pre-wrap">{item.billingAddress || item.address || '-'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="summary-box-print mt-20 bg-slate-50 p-10 rounded-none">
+                                    <h3 className="text-[15px] font-black text-slate-900 uppercase tracking-tight mb-8">Accounts Payable Summary</h3>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-slate-500 font-bold uppercase tracking-widest text-[12px]">Outstanding Balance</span>
+                                        <span className="font-black text-3xl text-slate-900 tracking-tighter">
+                                            <span className="text-[14px] mr-3 text-slate-400 font-bold">{item.currency || 'ZMW'}</span>
+                                            {(item.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         );
                     }

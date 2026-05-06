@@ -70,6 +70,7 @@ const EditSupplierView = () => {
     const [fileName, setFileName] = useState('No file chosen');
     const [emailError, setEmailError] = useState('');
     const [inactive, setInactive] = useState(false);
+    const [controlAccount, setControlAccount] = useState('Accounts Payable');
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
 
@@ -90,6 +91,7 @@ const EditSupplierView = () => {
                     setDivision(found.division || 'General');
                     setFileName(found.documentation || 'No file chosen');
                     setInactive(found.inactive || false);
+                    setControlAccount(found.controlAccount || 'Accounts Payable');
                 }
             } catch (err) {
                 console.error('Failed to load supplier:', err);
@@ -205,6 +207,13 @@ const EditSupplierView = () => {
                                 placeholder="finance@supplier.com" 
                                 error={emailError}
                             />
+                            <InputField 
+                                label="Control Account" 
+                                value={controlAccount || 'Accounts Payable'} 
+                                onChange={(e: any) => setControlAccount(e.target.value)} 
+                                Icon={Landmark} 
+                                placeholder="e.g. Accounts Payable" 
+                            />
                         </div>
                     </div>
 
@@ -294,7 +303,8 @@ const EditSupplierView = () => {
                                         billingAddress: address,
                                         currency: currency,
                                         documentation: fileName !== 'No file chosen' ? fileName : undefined,
-                                        inactive: inactive
+                                        inactive: inactive,
+                                        controlAccount: controlAccount
                                     });
                                     alert('Supplier profile updated successfully!');
                                     navigate('/suppliers');

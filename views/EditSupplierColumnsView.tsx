@@ -26,12 +26,15 @@ const EditSupplierColumnsView = () => {
             { id: 'balance', label: 'Accounts payable', visible: true },
             { id: 'withholdingTax', label: 'Withholding tax payable', visible: false },
             { id: 'status', label: 'Status', visible: true },
-            { id: 'availableCredit', label: 'Available credit', visible: false },
             { id: 'timestamp', label: 'Timestamp', visible: false }
         ];
 
         if (saved) {
-            return JSON.parse(saved);
+            const parsed = JSON.parse(saved);
+            return defaultCols.map(def => {
+                const existing = parsed.find((p: any) => p.id === def.id);
+                return existing ? { ...def, visible: existing.visible } : def;
+            });
         }
         return defaultCols;
     });

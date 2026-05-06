@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { User, Hash, Coins, ChevronDown, MapPin, CreditCard, Landmark, Mail, Briefcase, Layers, Upload, X, ChevronRight, IdCard, TrendingUp, ChevronUp } from 'lucide-react';
 import { Division } from '../types';
 import apiService from '../services/apiService';
@@ -76,6 +76,10 @@ const NewCustomerView = () => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [availableDivisions, setAvailableDivisions] = useState<Division[]>([]);
 
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const copyFromSupplierId = queryParams.get('copyFrom');
+
     useEffect(() => {
         apiService.getDivisions().then(setAvailableDivisions).catch(err => console.error('Failed to fetch divisions:', err));
         apiService.getNextReference('customer')
@@ -85,7 +89,27 @@ const NewCustomerView = () => {
                 // Fallback to a formatted code if API fails
                 setCode(`CUST-`);
             });
-    }, []);
+
+        if (copyFromSupplierId) {
+            apiService.getSupplier(copyFromSupplierId)
+                .then(supplier => {
+                    if (supplier) {
+                        setName(supplier.name || '');
+                        setEmail(supplier.email || '');
+                        setDivision(supplier.division || 'General');
+                        setBillingAddress(supplier.billingAddress || '');
+                        setDeliveryAddress(supplier.billingAddress || '');
+                        if (supplier.tpin) setTpin(supplier.tpin);
+                        
+                        if (supplier.currency) {
+                            const fullCurrency = supplier.currency === 'USD' ? 'USD - US Dollar' : 'ZMW - Zambian Kwacha';
+                            setCurrency(fullCurrency);
+                        }
+                    }
+                })
+                .catch(err => console.error('Failed to fetch supplier for copy:', err));
+        }
+    }, [copyFromSupplierId]);
 
     const validateEmail = (email: string) => {
         const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

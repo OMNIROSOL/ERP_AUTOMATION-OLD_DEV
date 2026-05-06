@@ -977,11 +977,36 @@ app.get('/api/suppliers', async (req, res) => {
   }
 });
 
+app.get('/api/suppliers/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const supplier = await prisma.suppliers.findUnique({
+      where: { id }
+    });
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    res.json(supplier);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 app.post('/api/suppliers', async (req, res) => {
-  const { code, name, email, currency, billingAddress, status } = req.body;
+  const { code, name, email, currency, billingAddress, status, division, tpin, controlAccount } = req.body;
   try {
     const result = await prisma.suppliers.create({
-      data: { code, name, email, currency, billingAddress, status: status || 'Paid' }
+      data: { 
+        code, 
+        name, 
+        email, 
+        currency, 
+        billingAddress, 
+        status: status || 'Paid',
+        division,
+        tpin,
+        controlAccount: controlAccount || 'Accounts Payable'
+      }
     });
     res.json(result);
   } catch (err) {
@@ -991,11 +1016,11 @@ app.post('/api/suppliers', async (req, res) => {
 
 app.put('/api/suppliers/:id', async (req, res) => {
   const { id } = req.params;
-  const { code, name, email, currency, billingAddress, status } = req.body;
+  const { code, name, email, currency, billingAddress, status, division, tpin, inactive, controlAccount } = req.body;
   try {
     const result = await prisma.suppliers.update({
       where: { id },
-      data: { code, name, email, currency, billingAddress, status }
+      data: { code, name, email, currency, billingAddress, status, division, tpin, inactive, controlAccount }
     });
     res.json(result);
   } catch (err) {

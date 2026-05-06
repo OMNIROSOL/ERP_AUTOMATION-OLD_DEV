@@ -15,10 +15,47 @@ import {
     Image as ImageIcon,
     CheckCircle2,
     AlertTriangle,
-    Save
+    Save,
+    Package
 } from 'lucide-react';
+import { cn } from '../utils/cn';
 import apiService from '../services/apiService';
 import { PurchaseQuote, Supplier, InventoryItem, FooterTemplate } from '../types';
+
+const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, readOnly }: any) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <div className="relative group">
+            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
+            <input
+                type={type}
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                readOnly={readOnly}
+                className={`w-full bg-slate-50 border ${error ? 'border-rose-500 ring-4 ring-rose-500/10' : 'border-slate-200'} rounded-2xl ${Icon ? 'pl-11' : 'px-5'} py-3 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 ${error ? 'focus:ring-rose-500/10 focus:border-rose-500' : 'focus:ring-indigo-500/10 focus:border-indigo-500'} transition-all ${readOnly ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+            />
+        </div>
+        {error && <p className="text-[10px] font-bold text-rose-500 ml-1 mt-1 uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-300">{error}</p>}
+    </div>
+);
+
+const SelectField = ({ label, value, onChange, Icon, children }: any) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <div className="relative group">
+            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
+            <select
+                value={value}
+                onChange={onChange}
+                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
+            >
+                {children}
+            </select>
+            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
+    </div>
+);
 
 const EditPurchaseQuoteView = () => {
     const { id } = useParams();

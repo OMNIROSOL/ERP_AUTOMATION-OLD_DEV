@@ -96,7 +96,6 @@ const SuppliersView = () => {
         { id: 'status', label: 'Status', visible: true },
         { id: 'balance', label: 'Accounts payable', visible: true },
         { id: 'withholdingTax', label: 'Withholding tax payable', visible: false },
-        { id: 'availableCredit', label: 'Available credit', visible: false },
         { id: 'timestamp', label: 'Timestamp', visible: false }
     ];
 
@@ -165,9 +164,9 @@ const SuppliersView = () => {
         sortedSuppliers.forEach(s => {
             const curCode = String(s.currency || 'ZMW').split(' ')[0] || 'ZMW';
             if (!res[curCode]) res[curCode] = { balance: 0, withholding: 0 };
-            
+
             const cleanVal = (v: any) => typeof v === 'number' ? v : parseFloat(String(v || 0).replace(/[^-0-9.]/g, '')) || 0;
-            
+
             res[curCode].balance += cleanVal(s.balance);
             res[curCode].withholding += cleanVal(s.withholdingTax);
         });
@@ -353,7 +352,7 @@ const SuppliersView = () => {
                                 </th>
                             )}
                             <th className="sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
-                            {columns.filter((c: any) => c.visible || c.id === 'name').map((col: any) => (
+                            {columns.filter((c: any) => c.visible || c.id === 'name' || c.id === 'division' || c.id === 'controlAccount').map((col: any) => (
                                 <th
                                     key={col.id}
                                     className={`sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[280px]' : ''} shadow-sm`}
@@ -378,7 +377,7 @@ const SuppliersView = () => {
                                 </td>
                             </tr>
                         ) : currentSlice.length > 0 ? (
-                             currentSlice.map((supplier: any) => (
+                            currentSlice.map((supplier: any) => (
                                 <tr key={supplier.id} className={`group hover:bg-indigo-50/30 transition-all duration-300 ${selectedSupplierIds.has(supplier.id) ? 'bg-indigo-50/50' : ''}`}>
                                     {isBatchViewMode && (
                                         <td className="px-6 py-4 text-center">
@@ -408,10 +407,18 @@ const SuppliersView = () => {
                                             </button>
                                         </div>
                                     </td>
-                                    {columns.filter((c: any) => c.visible).map((col: any) => {
+                                    {columns.filter((c: any) => c.visible || c.id === 'name' || c.id === 'division' || c.id === 'controlAccount').map((col: any) => {
                                         const val = supplier[col.id];
 
-                                        if (col.id === 'balance' || col.id === 'withholdingTax' || col.id === 'availableCredit') {
+                                        if (col.id === 'division' || col.id === 'controlAccount') {
+                                            return (
+                                                <td key={col.id} className="px-6 py-4 text-[12px] font-medium text-slate-600 whitespace-nowrap">
+                                                    {val || (supplier as any)[col.id] || (col.id === 'division' ? 'General' : 'Accounts Payable')}
+                                                </td>
+                                            );
+                                        }
+
+                                        if (col.id === 'balance' || col.id === 'withholdingTax') {
                                             const symbol = (supplier.currency || 'ZMW').split(' ')[0];
                                             const cleanVal = typeof val === 'number' ? val : parseFloat(String(val || 0).replace(/[^-0-9.]/g, '')) || 0;
                                             return (
@@ -524,9 +531,8 @@ const SuppliersView = () => {
                             {isBatchViewMode && <td className="px-6 py-4"></td>}
                             <td className="px-6 py-4"></td>
                             {(() => {
-                                const activeCols = columns.filter((c: any) => c.visible);
+                                const activeCols = columns.filter((c: any) => c.visible || c.id === 'name' || c.id === 'division' || c.id === 'controlAccount');
                                 const allCurrencies = Array.from(new Set(sortedSuppliers.map(s => String(s.currency || 'ZMW').split(' ')[0] || 'ZMW'))).sort();
-                                
                                 return activeCols.map((col: any) => {
                                     if (col.id === 'balance' || col.id === 'withholdingTax') {
                                         const key = col.id === 'balance' ? 'balance' : 'withholding';
@@ -540,8 +546,8 @@ const SuppliersView = () => {
                                                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-tight w-7 text-right">{cur}</span>
                                                                 <span className={cn(
                                                                     "text-[12px] font-black tracking-tight",
-                                                                    amount !== 0 
-                                                                        ? (col.id === 'balance' ? 'text-indigo-600' : 'text-slate-900') 
+                                                                    amount !== 0
+                                                                        ? (col.id === 'balance' ? 'text-indigo-600' : 'text-slate-900')
                                                                         : 'text-slate-300'
                                                                 )}>
                                                                     {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
