@@ -129,7 +129,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isEditing = Boolean(id);
 
-    const [issueDate, setIssueDate] = useState('');
+    const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [expiryDate, setExpiryDate] = useState('');
     const [customer, setCustomer] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -277,17 +277,15 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                         const orderDate = copyFromId ? '' : (order.orderDate || order.issueDate || '');
                         let initialIssueDate = new Date().toISOString().split('T')[0];
                         if (orderDate) {
-                            let d: Date;
-                            // Precise check for DD.MM.YYYY (exactly two dots)
                             const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
                             if (dottedPattern.test(orderDate)) {
                                 const [day, month, year] = orderDate.split('.');
-                                d = new Date(`${year}-${month}-${day}`);
+                                initialIssueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
                             } else {
-                                d = new Date(orderDate);
-                            }
-                            if (!isNaN(d.getTime())) {
-                                initialIssueDate = d.toISOString().split('T')[0];
+                                const d = new Date(orderDate);
+                                if (!isNaN(d.getTime())) {
+                                    initialIssueDate = d.toISOString().split('T')[0];
+                                }
                             }
                         }
                         setIssueDate(initialIssueDate);
@@ -659,7 +657,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Customer...</option>
-                                        {customers.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {customers.filter((c: any) => (!c.inactive && c.status !== 'Inactive') || c.name === customer).map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
                                     </SelectField>
                                 </div>
                                 <TextareaField label="Billing Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address for delivery..." rows={3} />

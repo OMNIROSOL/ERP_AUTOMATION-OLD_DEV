@@ -58,7 +58,7 @@ app.use((req, res, next) => {
   (req as any).requestId = id;
   const start = Date.now();
   console.log(`[REQ ${id}] ${req.method} ${req.url}`);
-  
+
   res.on('finish', () => {
     const duration = Date.now() - start;
     console.log(`[REQ ${id}] Finished in ${duration}ms with status ${res.statusCode}`);
@@ -79,7 +79,7 @@ app.patch('/api/delivery-notes/:id', async (req, res) => {
   try {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     console.log(`ID type check: isUuid=${isUuid}`);
-    
+
     const existing = await prisma.deliveryNote.findFirst({
       where: {
         OR: [
@@ -111,7 +111,7 @@ app.patch('/api/delivery-notes/:id', async (req, res) => {
 const generateNextReference = async (type: string, tx: any = prisma) => {
   let count = 0;
   let prefix = '';
-  
+
   console.log(`[REF GEN] Generating next reference for type: ${type}`);
 
   const getNextNum = async (model: any, pref: string) => {
@@ -149,7 +149,8 @@ const generateNextReference = async (type: string, tx: any = prisma) => {
     case 'order': count = await getNextNum(tx.salesOrder, 'SO-'); prefix = 'SO'; break;
     case 'delivery': count = await getNextNum(tx.deliveryNote, 'DN-'); prefix = 'DN'; break;
     case 'receipt': count = await getNextNum(tx.receipt, 'RCP-'); prefix = 'RCP'; break;
-    case 'purchase-quote': count = await getNextNum(tx.purchaseQuote, 'PQ-'); prefix = 'PQ'; break;
+    case 'purchase-quote':
+    case 'purchase-enquiry': count = await getNextNum(tx.purchaseEnquiry, 'PE-'); prefix = 'PE'; break;
     case 'purchase-order': count = await getNextNum(tx.purchaseOrder, 'PO-'); prefix = 'PO'; break;
     case 'purchase-invoice': count = await getNextNum(tx.invoices, 'PINV-'); prefix = 'PINV'; break;
     case 'customer': count = await getNextCodeNum(tx.customer, 'CUST-'); prefix = 'CUST'; break;
@@ -158,7 +159,7 @@ const generateNextReference = async (type: string, tx: any = prisma) => {
     case 'credit-note': prefix = 'CN'; count = Math.floor(Math.random() * 1000); break;
     default: throw new Error('Invalid document type');
   }
-  
+
   const nextRef = `${prefix}-${(count + 1).toString().padStart(4, '0')}`;
   console.log(`[REF GEN] Result: ${nextRef}`);
   return nextRef;
@@ -201,7 +202,7 @@ app.get('/api/customers', async (req, res) => {
       return {
         ...customer,
         balance,
-        status: balance <= 0 ? 'Paid' : 'Unpaid'
+        status: customer.inactive ? 'Inactive' : (balance <= 0 ? 'Paid' : 'Unpaid')
       };
     });
 
@@ -232,7 +233,7 @@ app.get('/api/customers/:id', async (req, res) => {
     res.json({
       ...customer,
       balance,
-      status: balance <= 0 ? 'Paid' : 'Unpaid'
+      status: customer.inactive ? 'Inactive' : (balance <= 0 ? 'Paid' : 'Unpaid')
     });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -386,13 +387,13 @@ app.delete('/api/divisions/:id', async (req, res) => {
 app.get('/api/invoices', async (req, res) => {
   try {
     const invoices = await prisma.invoice.findMany({
-      include: { 
-        customer: true, 
-        items: { 
-          include: { 
-            item: true 
-          } 
-        } 
+      include: {
+        customer: true,
+        items: {
+          include: {
+            item: true
+          }
+        }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -634,8 +635,8 @@ app.post('/api/quotes/:id/convert', async (req, res) => {
           description: quote.description,
           billingAddress: quote.billingAddress,
           orderDate: new Date(),
-          expiryDate: (quote.issueDate && quote.expiryDays) 
-            ? new Date(new Date(quote.issueDate).getTime() + quote.expiryDays * 24 * 60 * 60 * 1000) 
+          expiryDate: (quote.issueDate && quote.expiryDays)
+            ? new Date(new Date(quote.issueDate).getTime() + quote.expiryDays * 24 * 60 * 60 * 1000)
             : new Date(new Date().getTime() + 30 * 24 * 60 * 60 * 1000),
           status: 'Ordered',
           docOptions: quote.docOptions || {},
@@ -726,7 +727,7 @@ app.post('/api/orders', async (req, res) => {
   try {
     console.log('Validating items...');
     if (!items || !Array.isArray(items)) throw new Error('Items must be an array');
-    
+
     const prismaData: any = {
       customerId,
       reference,
@@ -756,8 +757,8 @@ app.post('/api/orders', async (req, res) => {
         })
       }
     };
-    
-    console.log('Sending to Prisma:', JSON.stringify(prismaData, (key, value) => 
+
+    console.log('Sending to Prisma:', JSON.stringify(prismaData, (key, value) =>
       key === 'items' ? undefined : value, 2)); // Hide items to keep log clean
     console.log('Items count:', prismaData.items.create.length);
 
@@ -831,7 +832,7 @@ app.patch('/api/orders/:id', async (req, res) => {
 app.get('/api/delivery-notes', async (req, res) => {
   try {
     const notes = await prisma.deliveryNote.findMany({
-      include: { 
+      include: {
         customer: true,
         items: { include: { item: true } }
       },
@@ -849,7 +850,7 @@ app.get('/api/delivery-notes/:id', async (req, res) => {
     const { id } = req.params;
     let note = await prisma.deliveryNote.findUnique({
       where: { id },
-      include: { 
+      include: {
         customer: true,
         items: { include: { item: true } }
       }
@@ -858,7 +859,7 @@ app.get('/api/delivery-notes/:id', async (req, res) => {
     if (!note) {
       note = await prisma.deliveryNote.findUnique({
         where: { reference: id },
-        include: { 
+        include: {
           customer: true,
           items: { include: { item: true } }
         }
@@ -969,8 +970,14 @@ app.put('/api/delivery-notes/:id', async (req, res) => {
 // --- SUPPLIERS ---
 app.get('/api/suppliers', async (req, res) => {
   try {
-    const suppliers = await prisma.suppliers.findMany();
-    res.json(suppliers);
+    const suppliers = await prisma.suppliers.findMany({
+      orderBy: { created_at: 'desc' }
+    });
+    const suppliersWithStatus = suppliers.map(supplier => ({
+      ...supplier,
+      status: supplier.inactive ? 'Inactive' : supplier.status
+    }));
+    res.json(suppliersWithStatus);
   } catch (err: any) {
     console.error('Fetch suppliers error:', err);
     res.status(500).json({ error: err.message });
@@ -986,7 +993,10 @@ app.get('/api/suppliers/:id', async (req, res) => {
     if (!supplier) {
       return res.status(404).json({ error: 'Supplier not found' });
     }
-    res.json(supplier);
+    res.json({
+      ...supplier,
+      status: supplier.inactive ? 'Inactive' : supplier.status
+    });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -996,12 +1006,12 @@ app.post('/api/suppliers', async (req, res) => {
   const { code, name, email, currency, billingAddress, status, division, tpin, controlAccount } = req.body;
   try {
     const result = await prisma.suppliers.create({
-      data: { 
-        code, 
-        name, 
-        email, 
-        currency, 
-        billingAddress, 
+      data: {
+        code,
+        name,
+        email,
+        currency,
+        billingAddress,
         status: status || 'Paid',
         division,
         tpin,
@@ -1167,14 +1177,200 @@ app.get('/api/debit-notes', (req, res) => res.json([]));
 app.get('/api/credit-notes', (req, res) => res.json([]));
 
 // --- PROCUREMENT ---
-// Purchase schema not fully defined yet, omitted.
+app.get('/api/purchase-enquiries', async (req, res) => {
+  try {
+    const enquiries = await prisma.purchaseEnquiry.findMany({
+      include: {
+        supplier: true,
+        items: {
+          include: { item: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(enquiries);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/purchase-enquiries/:id', async (req, res) => {
+  try {
+    const enquiry = await prisma.purchaseEnquiry.findUnique({
+      where: { id: req.params.id },
+      include: {
+        supplier: true,
+        items: {
+          include: { item: true }
+        }
+      }
+    });
+    if (!enquiry) return res.status(404).json({ error: 'Purchase enquiry not found' });
+    res.json(enquiry);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+app.post('/api/purchase-enquiries', async (req, res) => {
+  const { supplierId, reference, items, amount, currency, description, issueDate, status, docOptions } = req.body;
+  try {
+    const result = await prisma.purchaseEnquiry.create({
+      data: {
+        supplierId,
+        reference,
+        amount: Number(amount),
+        currency,
+        description,
+        issueDate: issueDate ? parseDate(issueDate) : undefined,
+        status: status || 'Active',
+        docOptions: docOptions || {},
+        items: {
+          create: items.map((item: any) => ({
+            itemId: item.itemId || null,
+            description: item.description,
+            qty: Number(item.qty),
+            unitPrice: Number(item.unitPrice),
+            taxCode: item.taxCode || 'VAT 16%',
+            unit: item.unit || '',
+            totalAmount: Number(item.totalAmount)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[PURCHASE ENQUIRY CREATE ERROR]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/purchase-enquiries/:id', async (req, res) => {
+  const { id } = req.params;
+  const { supplierId, reference, items, amount, currency, description, issueDate, status, docOptions } = req.body;
+  try {
+    await prisma.purchaseEnquiryItem.deleteMany({ where: { purchaseEnquiryId: id } });
+    const result = await prisma.purchaseEnquiry.update({
+      where: { id },
+      data: {
+        supplierId,
+        reference,
+        amount: Number(amount),
+        currency,
+        description,
+        issueDate: issueDate ? parseDate(issueDate) : undefined,
+        status: status || 'Active',
+        docOptions: docOptions || {},
+        items: {
+          create: items.map((item: any) => ({
+            itemId: item.itemId || null,
+            description: item.description,
+            qty: Number(item.qty),
+            unitPrice: Number(item.unitPrice),
+            taxCode: item.taxCode || 'VAT 16%',
+            unit: item.unit || '',
+            totalAmount: Number(item.totalAmount)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/purchase-enquiries/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  try {
+    const result = await prisma.purchaseEnquiry.update({
+      where: { id },
+      data: { status }
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/purchase-orders', async (req, res) => {
+  try {
+    const orders = await prisma.purchaseOrder.findMany({
+      include: { supplier: true, items: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(orders);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/purchase-orders/:id', async (req, res) => {
+  try {
+    const order = await prisma.purchaseOrder.findUnique({
+      where: { id: req.params.id },
+      include: { supplier: true, items: true }
+    });
+    if (!order) return res.status(404).json({ error: 'Purchase order not found' });
+    res.json(order);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/purchase-orders/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  try {
+    const result = await prisma.purchaseOrder.update({
+      where: { id },
+      data: { status }
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/purchase-orders', async (req, res) => {
+  const { supplierId, reference, items, amount, currency, description, orderDate, status } = req.body;
+  try {
+    const result = await prisma.purchaseOrder.create({
+      data: {
+        supplierId,
+        reference,
+        amount: Number(amount),
+        currency,
+        description,
+        orderDate: orderDate ? new Date(orderDate) : undefined,
+        status: status || 'Open',
+        items: {
+          create: items.map((item: any) => ({
+            itemId: item.itemId || null,
+            description: item.description,
+            qty: Number(item.qty),
+            unitPrice: Number(item.unitPrice),
+            totalAmount: Number(item.totalAmount)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/purchase-invoices', async (req, res) => {
-  const invs = await prisma.invoices.findMany({
-    include: { suppliers: true },
-    orderBy: { created_at: 'desc' }
-  });
-  res.json(invs);
+  try {
+    const invs = await prisma.invoices.findMany({
+      include: { suppliers: true },
+      orderBy: { created_at: 'desc' }
+    });
+    res.json(invs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- FOOTERS ---
@@ -1223,10 +1419,10 @@ app.delete('/api/footers/:id', async (req, res) => {
 
 app.use((req, res) => {
   console.log(`[404] ${req.method} ${req.url}`);
-  res.status(404).json({ 
-    error: 'Route not found', 
-    method: req.method, 
-    url: req.url 
+  res.status(404).json({
+    error: 'Route not found',
+    method: req.method,
+    url: req.url
   });
 });
 

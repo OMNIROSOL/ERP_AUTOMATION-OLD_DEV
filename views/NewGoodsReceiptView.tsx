@@ -144,7 +144,7 @@ const NewGoodsReceiptView = () => {
                                         className="w-full border border-[#cfd8dc] border-l-0 px-3 py-1.5 text-[14px] text-[#263238] rounded-r-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
                                     >
                                         <option value=""></option>
-                                        {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        {dbSuppliers.filter(s => (!s.inactive && s.status !== 'Inactive') || s.name === supplier).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                     </select>
                                     <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[10px] pointer-events-none"></i>
                                 </div>

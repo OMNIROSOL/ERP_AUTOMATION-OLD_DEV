@@ -18,7 +18,7 @@ const PurchaseHistoryView = () => {
     useEffect(() => {
         const handleRefresh = () => setRefreshTrigger(prev => prev + 1);
         window.addEventListener('storage', handleRefresh);
-        window.addEventListener('purchase_quotes_updated', handleRefresh);
+        window.addEventListener('purchase_enquiries_updated', handleRefresh);
         window.addEventListener('purchase_orders_updated', handleRefresh);
         window.addEventListener('purchase_invoices_updated', handleRefresh);
         window.addEventListener('debit_notes_updated', handleRefresh);
@@ -26,7 +26,7 @@ const PurchaseHistoryView = () => {
         
         return () => {
             window.removeEventListener('storage', handleRefresh);
-            window.removeEventListener('purchase_quotes_updated', handleRefresh);
+            window.removeEventListener('purchase_enquiries_updated', handleRefresh);
             window.removeEventListener('purchase_orders_updated', handleRefresh);
             window.removeEventListener('purchase_invoices_updated', handleRefresh);
             window.removeEventListener('grn_updated', handleRefresh);
@@ -54,7 +54,7 @@ const PurchaseHistoryView = () => {
             setIsLoading(true);
             try {
                 const [quotes, orders, invoices] = await Promise.all([
-                    apiService.getPurchaseQuotes(),
+                    apiService.getPurchaseEnquiries(),
                     apiService.getPurchaseOrders(),
                     apiService.getPurchaseInvoices()
                 ]);
@@ -79,7 +79,7 @@ const PurchaseHistoryView = () => {
                 date: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
                 supplier: q.supplier?.name || 'Unknown',
                 amount: parseFloat(q.amount) || 0,
-                type: 'Quote',
+                type: 'Enquiry',
                 reference: q.reference || '—',
                 status: q.status,
                 timestamp: q.createdAt ? new Date(q.createdAt).toLocaleString() : '—'
@@ -237,7 +237,7 @@ const PurchaseHistoryView = () => {
                             className="bg-white border border-gray-300 text-[11px] font-black uppercase tracking-wider rounded-md px-4 py-2 shadow-sm"
                         >
                              <option value="All">All Types</option>
-                            <option value="Quote">Purchase Quote</option>
+                            <option value="Enquiry">Purchase Enquiry</option>
                             <option value="Order">Order</option>
                             <option value="Invoice">Invoice</option>
                             <option value="GRN">GRN</option>
@@ -287,7 +287,7 @@ const PurchaseHistoryView = () => {
                                         <button 
                                             onClick={() => {
                                                 const sName = encodeURIComponent(item.supplier || '');
-                                                if (item.type === 'Quote') navigate(`/purchase-quotes/view/${item.id}`);
+                                                if (item.type === 'Enquiry') navigate(`/purchase-quotes/view/${item.id}`);
                                                 else if (item.type === 'Order') navigate(`/purchase-orders/supplier/${sName}`);
                                                 else if (item.type === 'Invoice') navigate(`/purchase-invoices/supplier/${sName}`);
                                                 else if (item.type === 'GRN') navigate(`/goods-received-notes/supplier/${sName}`);
@@ -321,7 +321,7 @@ const PurchaseHistoryView = () => {
                                                         { label: 'Sales Invoice', path: '/sales-invoices/new' },
                                                         { label: 'Delivery Note', path: '/delivery-notes/new' },
                                                         { label: 'Credit Note', path: '/credit-notes/new' },
-                                                        { label: 'Purchase Quote', path: '/purchase-quotes/new' },
+                                                        { label: 'Purchase Enquiry', path: '/purchase-quotes/new' },
                                                         { label: 'Purchase Order', path: '/purchase-orders/new' },
                                                         { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
                                                         { label: 'Goods Receipt', path: '/goods-receipts/new' },

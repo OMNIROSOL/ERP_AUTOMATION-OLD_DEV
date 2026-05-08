@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { PurchaseQuote, ScreenPermission, AppUser } from '../types';
+import { PurchaseEnquiry, ScreenPermission, AppUser } from '../types';
 import apiService from '../services/apiService';
 import Button from '../components/shared/Button';
 import Badge from '../components/shared/Badge';
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { motion } from 'framer-motion';
+import { formatTimestamp } from '../utils/dateUtils';
 
 const PurchaseQuotesView = () => {
     const navigate = useNavigate();
@@ -137,13 +138,14 @@ const PurchaseQuotesView = () => {
         const fetchQuotes = async () => {
             setIsLoading(true);
             try {
-                const data = await apiService.getPurchaseQuotes();
+                const data = await apiService.getPurchaseEnquiries();
                 const mapped = data.map((q: any) => ({
                     ...q,
                     supplier: q.supplier?.name || q.supplier || 'Unknown',
                     currency: q.currency || q.supplier?.currency?.split(' - ')[0] || 'ZMW',
                     issueDate: q.issueDate ? new Date(q.issueDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
-                    amount: parseFloat(q.amount) || 0
+                    amount: parseFloat(q.amount) || 0,
+                    timestamp: formatTimestamp(q.createdAt)
                 }));
                 setPurchaseQuotes(mapped);
             } catch (err) {
@@ -157,12 +159,11 @@ const PurchaseQuotesView = () => {
 
     const handleStatusChange = async (id: string, newStatus: string) => {
         try {
-            // await apiService.updatePurchaseQuoteStatus(id, newStatus);
-            // If accepted, we might want to create a PO
-            alert('Status update implemented in API, but not yet linked in UI for full PO conversion.');
+            await apiService.updatePurchaseEnquiryStatus(id, newStatus);
             setRefreshTrigger(prev => prev + 1);
         } catch (err) {
             console.error('Failed to update status:', err);
+            alert('Failed to update status. Please try again.');
         }
     };
 
@@ -320,7 +321,7 @@ const PurchaseQuotesView = () => {
         {
             id: 'Reference',
             header: <div className="flex items-center cursor-pointer group hover:text-indigo-600 transition-colors" onClick={() => handleSort('Reference')}>Reference <SortIcon column="Reference" /></div>,
-            className: 'whitespace-nowrap min-w-[140px]',
+            className: 'whitespace-nowrap min-w-[120px]',
             accessor: (o: any) => (
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100/50">
@@ -333,7 +334,7 @@ const PurchaseQuotesView = () => {
         {
             id: 'Supplier',
             header: <div className="flex items-center cursor-pointer group hover:text-indigo-600 transition-colors" onClick={() => handleSort('Supplier')}>Supplier <SortIcon column="Supplier" /></div>,
-            className: 'min-w-[200px]',
+            className: 'min-w-[160px]',
             accessor: (o: any) => (
                 <span className="font-medium text-slate-600">{o.supplier || 'Unknown'}</span>
             )
@@ -404,23 +405,11 @@ const PurchaseQuotesView = () => {
             id: 'Timestamp',
             header: <div className="flex items-center cursor-pointer group hover:text-indigo-600 transition-colors" onClick={() => handleSort('Timestamp')}>Timestamp <SortIcon column="Timestamp" /></div>,
             className: 'whitespace-nowrap',
-            accessor: (o: any) => {
-                let displayVal = '—';
-                if (o.timestamp) {
-                    const dateObj = new Date(o.timestamp);
-                    if (!isNaN(dateObj.getTime())) {
-                        displayVal = dateObj.toLocaleString('en-GB', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            hour: '2-digit', minute: '2-digit', second: '2-digit',
-                            hour12: true
-                        }).replace(/\//g, '.').replace(',', '').toUpperCase();
-                    } else {
-                        // Fallback for old data that might already be a formatted string
-                        displayVal = o.timestamp;
-                    }
-                }
-                return <span className="text-[10px] text-slate-400 font-medium font-sans tracking-tight whitespace-nowrap">{displayVal}</span>;
-            }
+            accessor: (o: any) => (
+                <span className="text-[10px] text-slate-400 font-medium font-sans tracking-tight whitespace-nowrap">
+                    {o.timestamp || '—'}
+                </span>
+            )
         }
     ];
 
@@ -438,12 +427,12 @@ const PurchaseQuotesView = () => {
                         <FileText size={14} />
                         <span className="text-gray-400">Procurement Module</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Purchase Quotes</h1>
-                    <p className="text-gray-500 text-sm font-medium">Manage and track supplier proposals</p>
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Purchase Enquiry</h1>
+                    <p className="text-gray-500 text-sm font-medium">Manage and track supplier enquiries</p>
                 </div>
                 {perms?.add !== false && (
                     <button onClick={() => navigate('/purchase-quotes/new')} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-[12px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-500/20 flex items-center uppercase tracking-widest">
-                        <Plus size={16} className="mr-2" /> REQUEST QUOTE
+                        <Plus size={16} className="mr-2" /> CREATE ENQUIRY
                     </button>
                 )}
             </div>
@@ -496,11 +485,14 @@ const PurchaseQuotesView = () => {
                 </div>
             )}
 
-            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm">
+            <div className="w-fit min-w-full overflow-visible mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50">
                 <DataTable
                     data={isLoading ? [] : paginatedData}
                     columns={columns as any}
+                    tableClassName="min-w-[1100px]"
+                    className="border-none shadow-none bg-transparent"
                     hideDefaultPagination={true}
+                    stickyHeader={true}
                     disableInternalScroll={true}
                     emptyState={
                         isLoading ? (
@@ -512,16 +504,25 @@ const PurchaseQuotesView = () => {
                     }
                     tableFooter={
                         <tr className="bg-slate-50/50">
-                            {columns.map(col => (
-                                <td key={col.id} className="px-6 py-4 text-right font-black">
-                                    {col.id === 'Amount' && Object.keys(currencyTotals).map(cur => (
-                                        <div key={cur} className="flex items-center justify-end gap-1.5">
-                                            <span className="text-[9px] text-slate-400 uppercase">{cur}</span>
-                                            <span className="text-[12px] underline decoration-slate-200 underline-offset-4">{currencyTotals[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                                        </div>
-                                    ))}
-                                </td>
-                            ))}
+                            {columns.map(col => {
+                                if (col.id === 'Reference') {
+                                    return (
+                                        <td key={`total-label-${col.id}`} className="px-6 py-4 text-left">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Grand Totals:</span>
+                                        </td>
+                                    );
+                                }
+                                return (
+                                    <td key={col.id} className="px-6 py-4 text-right font-black">
+                                        {col.id === 'Amount' && Object.keys(currencyTotals).map(cur => (
+                                            <div key={cur} className="flex items-center justify-end gap-1.5">
+                                                <span className="text-[9px] text-slate-400 uppercase">{cur}</span>
+                                                <span className="text-[12px] underline decoration-slate-200 underline-offset-4">{currencyTotals[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                        ))}
+                                    </td>
+                                );
+                            })}
                         </tr>
                     }
                 />

@@ -82,7 +82,7 @@ const NewPurchaseInvoiceView = () => {
     const location = useLocation();
     const isEditing = Boolean(id);
 
-    const [issueDate, setIssueDate] = useState('');
+    const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [dueDate, setDueDate] = useState('');
     const [supplier, setSupplier] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -111,20 +111,23 @@ const NewPurchaseInvoiceView = () => {
     const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
     const [dbItems, setDbItems] = useState<any[]>([]);
     const [dbFooters, setDbFooters] = useState<FooterTemplate[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const [sups, itemsData, footersData] = await Promise.all([
+                const [sups, itemsData, footersData, codesData] = await Promise.all([
                     apiService.getSuppliers(),
                     apiService.getItems(),
-                    apiService.getFooters()
+                    apiService.getFooters(),
+                    apiService.getTaxCodes()
                 ]);
                 setDbSuppliers(sups);
                 setDbItems(itemsData);
                 setDbFooters(footersData);
+                setTaxCodes(codesData);
 
                 const searchParams = new URLSearchParams(location.search);
                 const copyFromId = searchParams.get('copyFrom');
@@ -150,8 +153,31 @@ const NewPurchaseInvoiceView = () => {
 
                         if (sourceDoc) {
                             const docDate = copyFromId ? '' : (sourceDoc.issueDate || sourceDoc.orderDate || '');
-                            setIssueDate(docDate ? new Date(docDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
-                            setDueDate(sourceDoc.dueDate ? new Date(sourceDoc.dueDate).toISOString().split('T')[0] : '');
+                            let parsedIssueDate = new Date().toISOString().split('T')[0];
+                            if (docDate) {
+                                const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                                if (dottedPattern.test(docDate)) {
+                                    const [day, month, year] = docDate.split('.');
+                                    parsedIssueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                } else {
+                                    const d = new Date(docDate);
+                                    if (!isNaN(d.getTime())) parsedIssueDate = d.toISOString().split('T')[0];
+                                }
+                            }
+                            setIssueDate(parsedIssueDate);
+
+                            let parsedDueDate = '';
+                            if (sourceDoc.dueDate) {
+                                const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                                if (dottedPattern.test(sourceDoc.dueDate)) {
+                                    const [day, month, year] = sourceDoc.dueDate.split('.');
+                                    parsedDueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                                } else {
+                                    const d = new Date(sourceDoc.dueDate);
+                                    if (!isNaN(d.getTime())) parsedDueDate = d.toISOString().split('T')[0];
+                                }
+                            }
+                            setDueDate(parsedDueDate);
                             
                             const sup = sups.find((s: any) => s.id === sourceDoc.supplierId || s.name === (sourceDoc.supplier?.name || sourceDoc.supplier));
                             if (sup) {
@@ -184,7 +210,7 @@ const NewPurchaseInvoiceView = () => {
                                     qty: (i.qty || '1').toString(),
                                     unitPrice: (i.unitPrice || '0').toString(),
                                     discount: (i.discount || '').toString(),
-                                    taxCode: i.taxCode || 'VAT 16%'
+                                    taxCode: i.taxCode || 'No tax'
                                 })));
                             }
                         }
@@ -219,11 +245,14 @@ const NewPurchaseInvoiceView = () => {
             }
 
             let taxAmount = 0;
-            if (item.taxCode === 'VAT 16%') {
+            const selectedTax = taxCodes.find(tc => tc.name === item.taxCode);
+            const taxRate = selectedTax ? (parseFloat(selectedTax.rate) / 100) : 0;
+
+            if (taxRate > 0) {
                 if (options.amountsAreTaxInclusive) {
-                    taxAmount = netTotal - (netTotal / 1.16);
+                    taxAmount = netTotal - (netTotal / (1 + taxRate));
                     netTotal = netTotal - taxAmount;
-                } else taxAmount = netTotal * 0.16;
+                } else taxAmount = netTotal * taxRate;
             }
             subtotal += netTotal;
             totalTax += taxAmount;
@@ -232,13 +261,14 @@ const NewPurchaseInvoiceView = () => {
         const freightTotal = freightItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
         const freightTax = freightItems.reduce((sum, item) => {
             const amt = parseFloat(item.amount) || 0;
-            if (item.taxCode === 'VAT 16%') return sum + (amt * 0.16);
-            return sum;
+            const selectedTax = taxCodes.find(tc => tc.name === item.taxCode);
+            const taxRate = selectedTax ? (parseFloat(selectedTax.rate) / 100) : 0;
+            return sum + (amt * taxRate);
         }, 0);
 
         let grandTotal = subtotal + totalTax + freightTotal + freightTax;
         return { lineCalcs, subtotal, totalTax: totalTax + freightTax, grandTotal, freightTotal };
-    }, [items, options, freightItems]);
+    }, [items, options, freightItems, taxCodes]);
 
     const handleSave = async () => {
         if (!supplier) {
@@ -368,7 +398,7 @@ const NewPurchaseInvoiceView = () => {
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Supplier...</option>
-                                        {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        {dbSuppliers.filter(s => (!s.inactive && s.status !== 'Inactive') || s.name === supplier).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                     </SelectField>
                                 </div>
                                 <TextareaField label="Supplier Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address of supplier..." rows={3} />
@@ -383,7 +413,7 @@ const NewPurchaseInvoiceView = () => {
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Invoice Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', account: 'Inventory', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'No tax' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -516,8 +546,11 @@ const NewPurchaseInvoiceView = () => {
                                                             }}
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                         >
+                                                            <option value="" disabled>Select Tax...</option>
                                                             <option value="No tax">No tax</option>
-                                                            <option value="VAT 16%">VAT 16%</option>
+                                                            {taxCodes.map(tc => (
+                                                                <option key={tc.id} value={tc.name}>{tc.name}</option>
+                                                            ))}
                                                         </select>
                                                     </td>
                                                     {!options.amountsAreTaxInclusive && (

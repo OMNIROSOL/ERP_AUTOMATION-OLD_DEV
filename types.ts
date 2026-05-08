@@ -438,7 +438,7 @@ export interface GoodsReceivedNote {
   timestamp?: string;
 }
 
-export interface PurchaseQuote {
+export interface PurchaseEnquiry {
   id: string;
   issueDate: string;
   reference: string;
@@ -450,18 +450,21 @@ export interface PurchaseQuote {
   billingAddress?: string;
   expiryDays?: string;
   timestamp?: string;
-  items?: QuoteItem[];
+  items?: PurchaseEnquiryItem[];
   customTitle?: string;
   footer?: string;
   options?: DocumentOptions;
 }
-export interface PurchaseQuoteItem {
+export interface PurchaseEnquiryItem {
   id: string;
-  purchaseQuoteId: string;
+  purchaseEnquiryId: string;
   itemId?: string;
   description?: string;
   qty: number;
   unitPrice: number;
   totalAmount: number;
+  taxCode?: string;
+  unit?: string;
+  division?: string;
 }
 

@@ -97,7 +97,7 @@ const NewPurchaseOrderView = () => {
     const location = useLocation();
     const isEditing = Boolean(id);
 
-    const [issueDate, setIssueDate] = useState('');
+    const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [supplier, setSupplier] = useState('');
     const [currency, setCurrency] = useState('ZMW');
     const [billingAddress, setBillingAddress] = useState('');
@@ -119,20 +119,23 @@ const NewPurchaseOrderView = () => {
     const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
     const [dbItems, setDbItems] = useState<any[]>([]);
     const [dbFooters, setDbFooters] = useState<Footer[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
             setIsLoading(true);
             try {
-                const [sups, itemsData, footersData] = await Promise.all([
+                const [sups, itemsData, footersData, codesData] = await Promise.all([
                     apiService.getSuppliers(),
                     apiService.getItems(),
-                    apiService.getFooters()
+                    apiService.getFooters(),
+                    apiService.getTaxCodes()
                 ]);
                 setDbSuppliers(sups);
                 setDbItems(itemsData);
                 setDbFooters(footersData);
+                setTaxCodes(codesData);
 
                 if (!id && !location.search.includes('copyFrom')) {
                     const nextRef = await apiService.getNextReference('purchase-order');
@@ -153,10 +156,23 @@ const NewPurchaseOrderView = () => {
         if (id) {
             const fetchOrder = async () => {
                 try {
-                    const data = await apiService.getPurchaseOrders();
-                    const order = data.find((o: any) => o.id === id);
+                    const order = await apiService.getPurchaseOrder(id);
                     if (order) {
-                        setIssueDate(order.orderDate ? new Date(order.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                        let initialIssueDate = new Date().toISOString().split('T')[0];
+                        const dateToParse = order.orderDate || order.issueDate;
+                        if (dateToParse) {
+                            const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                            if (dottedPattern.test(dateToParse)) {
+                                const [day, month, year] = dateToParse.split('.');
+                                initialIssueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                const d = new Date(dateToParse);
+                                if (!isNaN(d.getTime())) {
+                                    initialIssueDate = d.toISOString().split('T')[0];
+                                }
+                            }
+                        }
+                        setIssueDate(initialIssueDate);
                         setSupplier(order.supplier?.name || order.supplierName || order.supplier || '');
                         setReference(order.reference || '');
                         setUseManualRef(true);
@@ -243,11 +259,14 @@ const NewPurchaseOrderView = () => {
             }
 
             let taxAmount = 0;
-            if (item.taxCode === 'VAT 16%') {
+            const selectedTax = taxCodes.find(tc => tc.name === item.taxCode);
+            const taxRate = selectedTax ? (parseFloat(selectedTax.rate) / 100) : 0;
+
+            if (taxRate > 0) {
                 if (options.amountsAreTaxInclusive) {
-                    taxAmount = netTotal - (netTotal / 1.16);
+                    taxAmount = netTotal - (netTotal / (1 + taxRate));
                     netTotal = netTotal - taxAmount;
-                } else taxAmount = netTotal * 0.16;
+                } else taxAmount = netTotal * taxRate;
             }
             subtotal += netTotal;
             totalTax += taxAmount;
@@ -264,7 +283,7 @@ const NewPurchaseOrderView = () => {
         }
 
         return { lineCalcs, subtotal, totalTax, grandTotal, whtAmount };
-    }, [items, options]);
+    }, [items, options, taxCodes]);
 
     const handleSave = async () => {
         if (!supplier) {
@@ -305,7 +324,6 @@ const NewPurchaseOrderView = () => {
 
         try {
             if (isEditing) {
-                // await apiService.updatePurchaseOrder(id!, quoteData);
                 alert('Update not yet implemented in backend.');
             } else {
                 await apiService.createPurchaseOrder(quoteData);
@@ -391,7 +409,7 @@ const NewPurchaseOrderView = () => {
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Supplier...</option>
-                                        {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                        {dbSuppliers.filter(s => (!s.inactive && s.status !== 'Inactive') || s.name === supplier).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                     </SelectField>
                                 </div>
                                 <TextareaField label="Supplier Address" value={billingAddress} onChange={(e: any) => setBillingAddress(e.target.value)} placeholder="Physical address of supplier..." rows={3} />
@@ -406,7 +424,7 @@ const NewPurchaseOrderView = () => {
                                     </div>
                                     <h2 className="text-lg font-black text-slate-800 tracking-tight">Order Line Items</h2>
                                 </div>
-                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'VAT 16%' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                <button onClick={() => setItems(prev => [...prev, { id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '0', discount: '', taxCode: 'No tax' }])} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
                                     <Plus size={14} /> <span>Add Row</span>
                                 </button>
                             </div>
@@ -520,8 +538,11 @@ const NewPurchaseOrderView = () => {
                                                             }}
                                                             className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                         >
+                                                            <option value="" disabled>Select Tax...</option>
                                                             <option value="No tax">No tax</option>
-                                                            <option value="VAT 16%">VAT 16%</option>
+                                                            {taxCodes.map(tc => (
+                                                                <option key={tc.id} value={tc.name}>{tc.name}</option>
+                                                            ))}
                                                         </select>
                                                     </td>
                                                     {!options.amountsAreTaxInclusive && (

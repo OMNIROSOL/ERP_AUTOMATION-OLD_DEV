@@ -132,7 +132,7 @@ const NewSalesInvoiceView = () => {
     const isEditing = Boolean(id);
 
     // Form State
-    const [issueDate, setIssueDate] = useState('');
+    const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [dueDateType, setDueDateType] = useState('Net');
     const [dueDateDays, setDueDateDays] = useState('0');
     const [customer, setCustomer] = useState('');
@@ -285,7 +285,18 @@ const NewSalesInvoiceView = () => {
 
                     if (sourceDoc) {
                         const docDate = copyFromId ? '' : (sourceDoc.issueDate || sourceDoc.orderDate || '');
-                        setIssueDate(docDate ? new Date(docDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                        let parsedIssueDate = new Date().toISOString().split('T')[0];
+                        if (docDate) {
+                            const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                            if (dottedPattern.test(docDate)) {
+                                const [day, month, year] = docDate.split('.');
+                                parsedIssueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                const d = new Date(docDate);
+                                if (!isNaN(d.getTime())) parsedIssueDate = d.toISOString().split('T')[0];
+                            }
+                        }
+                        setIssueDate(parsedIssueDate);
                         setCustomer(sourceDoc.customer?.name || sourceDoc.customer || '');
                         setCurrency(sourceDoc.currency || sourceDoc.customer?.currency?.split(' - ')[0] || 'ZMW');
                         setBillingAddress(sourceDoc.billingAddress || sourceDoc.customer?.billingAddress || '');
@@ -657,7 +668,7 @@ const NewSalesInvoiceView = () => {
                                 }
                             }} Icon={User}>
                                 <option value="">Select Target Customer...</option>
-                                {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                {customers.filter(c => (!c.inactive && c.status !== 'Inactive') || c.name === customer).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                             </SelectField>
                             <div className="md:col-span-2">
                                 <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="General description of the invoice contents..." Icon={Briefcase} />

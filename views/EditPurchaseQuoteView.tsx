@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import apiService from '../services/apiService';
-import { PurchaseQuote, Supplier, InventoryItem, FooterTemplate } from '../types';
+import { PurchaseEnquiry, Supplier, InventoryItem, FooterTemplate } from '../types';
 
 const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, readOnly }: any) => (
     <div className="space-y-2">
@@ -65,7 +65,7 @@ const EditPurchaseQuoteView = () => {
     const isEditing = Boolean(id);
 
     const [isLoading, setIsLoading] = useState(true);
-    const [issueDate, setIssueDate] = useState('');
+    const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [supplier, setSupplier] = useState('');
     const [currency, setCurrency] = useState('ZMW');
     const [address, setAddress] = useState('');
@@ -81,6 +81,11 @@ const EditPurchaseQuoteView = () => {
     const [footers, setFooters] = useState<FooterTemplate[]>([]);
     const [historicalInvoices, setHistoricalInvoices] = useState<any[]>([]);
     const [historicalQuotes, setHistoricalQuotes] = useState<any[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
+
+    const updateItem = (id: any, field: string, value: any) => {
+        setItems(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i));
+    };
 
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
@@ -89,12 +94,14 @@ const EditPurchaseQuoteView = () => {
         columnLineNumber: true,
         columnDiscount: false,
         columnDiscountType: 'Percentage',
+        columnTaxAmount: true,
+        columnTotal: true,
         withholdingTax: false,
         withholdingTaxType: 'Rate',
         withholdingTaxValue: '0',
         hideTotalAmount: false,
         customTitle: false,
-        customTitleValue: 'Purchase Quote',
+        customTitleValue: 'Purchase Enquiry',
         footers: false,
         footerValue: 'Terms & Conditions apply.',
         cancelled: false
@@ -106,45 +113,61 @@ const EditPurchaseQuoteView = () => {
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                const [suppliers, itemsData, footersData, quotes, invoices] = await Promise.all([
-                    apiService.getSuppliers(),
-                    apiService.getItems(),
-                    apiService.getFooters(),
-                    apiService.getPurchaseQuotes(),
-                    apiService.getPurchaseInvoices()
+                const [suppliers, itemsData, footersData, codesData] = await Promise.all([
+                    apiService.getSuppliers().catch(e => { console.error('Suppliers failed:', e); return []; }),
+                    apiService.getItems().catch(e => { console.error('Items failed:', e); return []; }),
+                    apiService.getFooters().catch(e => { console.error('Footers failed:', e); return []; }),
+                    apiService.getTaxCodes().catch(e => { console.error('Tax codes failed:', e); return []; })
                 ]);
+
                 setAllSuppliers(suppliers);
                 setInventoryItems(itemsData);
                 setFooters(footersData);
-                setHistoricalQuotes(quotes);
-                setHistoricalInvoices(invoices);
+                setTaxCodes(codesData);
+
+                // Load historical data separately
+                apiService.getPurchaseEnquiries().then(setHistoricalQuotes).catch(e => console.error('Quotes failed:', e));
+                apiService.getPurchaseInvoices().then(setHistoricalInvoices).catch(e => console.error('Invoices failed:', e));
 
                 const searchParams = new URLSearchParams(location.search);
                 const copyFromId = searchParams.get('copyFrom');
 
                 if (id || copyFromId) {
                     const quoteId = id || copyFromId;
-                    const quote = await apiService.getPurchaseQuote(quoteId!);
-                    if (quote) {
-                        setIssueDate(quote.issueDate ? quote.issueDate.split('.').reverse().join('-') : new Date().toISOString().split('T')[0]);
-                        setSupplier(quote.supplier || '');
-                        setCurrency(quote.currency || 'ZMW');
-                        setAddress(quote.billingAddress || '');
+                    const enquiry = await apiService.getPurchaseEnquiry(quoteId!);
+                    if (enquiry) {
+                        let initialIssueDate = new Date().toISOString().split('T')[0];
+                        if (enquiry.issueDate) {
+                            const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                            if (dottedPattern.test(enquiry.issueDate)) {
+                                const [day, month, year] = enquiry.issueDate.split('.');
+                                initialIssueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                const d = new Date(enquiry.issueDate);
+                                if (!isNaN(d.getTime())) {
+                                    initialIssueDate = d.toISOString().split('T')[0];
+                                }
+                            }
+                        }
+                        setIssueDate(initialIssueDate);
+                        setSupplier(enquiry.supplier?.name || enquiry.supplier || '');
+                        setCurrency(enquiry.currency || enquiry.supplier?.currency?.split(' - ')[0] || 'ZMW');
+                        setAddress(enquiry.supplier?.billingAddress || enquiry.billingAddress || '');
 
                         if (copyFromId) {
-                            const nextRef = await apiService.getNextReference('purchase-quote');
+                            const nextRef = await apiService.getNextReference('purchase-enquiry').catch(() => '');
                             setReference(nextRef);
                             setUseManualRef(false);
                         } else {
-                            setReference(quote.reference || '');
+                            setReference(enquiry.reference || '');
                             setUseManualRef(true);
                         }
 
-                        setDescription(quote.description || '');
-                        setStatus(id ? (quote.status || 'Active') : 'Active');
-                        setItems(quote.items?.map((i: any) => ({
+                        setDescription(enquiry.description || '');
+                        setStatus(id ? (enquiry.status || 'Active') : 'Active');
+                        setItems(enquiry.items?.map((i: any) => ({
                             id: i.id || Date.now() + Math.random(),
-                            item: i.item || '',
+                            item: i.item?.itemName || itemsData.find((it: any) => it.id === i.itemId)?.itemName || i.item || '',
                             description: i.description || '',
                             qty: (i.qty || 0).toString(),
                             unitPrice: (i.unitPrice || 0).toString(),
@@ -152,13 +175,13 @@ const EditPurchaseQuoteView = () => {
                             discount: i.discount || '',
                             taxCode: i.taxCode || 'VAT 16%'
                         })) || []);
-                        if (quote.options) {
-                            setOptions(prev => ({ ...prev, ...quote.options }));
+                        if (enquiry.options) {
+                            setOptions(prev => ({ ...prev, ...enquiry.options }));
                         }
                     }
                 } else {
                     setIssueDate(new Date().toISOString().split('T')[0]);
-                    const nextRef = await apiService.getNextReference('purchase-quote');
+                    const nextRef = await apiService.getNextReference('purchase-enquiry').catch(() => '');
                     setReference(nextRef);
                     setItems([{ id: Date.now(), item: 'Select Item', description: '', qty: '1', unitPrice: '', unit: '', discount: '', taxCode: 'VAT 16%' }]);
                 }
@@ -172,60 +195,13 @@ const EditPurchaseQuoteView = () => {
     }, [id, location.search]);
 
     const formatDateForSave = (dateStr: string) => {
-        if (!dateStr) return new Date().toLocaleDateString('en-GB').replace(/\//g, '.');
-        if (dateStr.includes('.')) return dateStr;
-        const [year, month, day] = dateStr.split('-');
-        return `${day}.${month}.${year}`;
+        if (!dateStr) return new Date().toISOString().split('T')[0];
+        if (dateStr.includes('.')) {
+            const [day, month, year] = dateStr.split('.');
+            return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        }
+        return dateStr;
     };
-
-    const itemHistory = useMemo(() => {
-        const global: Record<string, any[]> = {};
-        const supplierPurchases: Record<string, any[]> = {};
-        const supplierQuotes: Record<string, any[]> = {};
-
-        historicalInvoices.forEach(doc => {
-            if (!doc.items) return;
-            doc.items.forEach(i => {
-                const itemName = (i as any).item;
-                if (!itemName || itemName === 'Select Item') return;
-                const entry = { date: doc.issueDate, price: parseFloat((i as any).unitPrice) || 0, qty: parseFloat((i as any).qty) || 0, supplier: doc.supplier, ref: doc.reference, type: 'Invoice' };
-                if (!global[itemName]) global[itemName] = [];
-                global[itemName].push(entry);
-                if (supplier && doc.supplier === supplier) {
-                    if (!supplierPurchases[itemName]) supplierPurchases[itemName] = [];
-                    supplierPurchases[itemName].push(entry);
-                }
-            });
-        });
-
-        historicalQuotes.forEach(doc => {
-            if (!doc.items) return;
-            doc.items.forEach(i => {
-                const itemName = (i as any).item;
-                if (!itemName || itemName === 'Select Item') return;
-                const entry = { date: doc.issueDate, price: parseFloat((i as any).unitPrice) || 0, qty: parseFloat((i as any).qty) || 0, supplier: doc.supplier, ref: doc.reference, type: 'Quote' };
-                if (supplier && doc.supplier === supplier) {
-                    if (!supplierQuotes[itemName]) supplierQuotes[itemName] = [];
-                    supplierQuotes[itemName].push(entry);
-                }
-            });
-        });
-
-        const sortAndSlice = (history: Record<string, any[]>) => {
-            Object.keys(history).forEach(item => {
-                history[item].sort((a, b) => {
-                    const getDate = (d: string) => d.includes('.') ? d.split('.').reverse().join('-') : d;
-                    return new Date(getDate(b.date)).getTime() - new Date(getDate(a.date)).getTime();
-                });
-                history[item] = history[item].slice(0, 3);
-            });
-        };
-
-        sortAndSlice(global);
-        sortAndSlice(supplierPurchases);
-        sortAndSlice(supplierQuotes);
-        return { global, supplierPurchases, supplierQuotes };
-    }, [supplier]);
 
     const calculations = useMemo(() => {
         let subtotal = 0;
@@ -242,12 +218,15 @@ const EditPurchaseQuoteView = () => {
             }
 
             let taxAmount = 0;
-            if (item.taxCode === 'VAT 16%') {
+            const selectedTax = taxCodes.find(tc => tc.name === item.taxCode);
+            const taxRate = selectedTax ? (parseFloat(selectedTax.rate) / 100) : 0;
+
+            if (taxRate > 0) {
                 if (options.amountsAreTaxInclusive) {
-                    taxAmount = netTotal - (netTotal / 1.16);
+                    taxAmount = netTotal - (netTotal / (1 + taxRate));
                     netTotal -= taxAmount;
                 } else {
-                    taxAmount = netTotal * 0.16;
+                    taxAmount = netTotal * taxRate;
                 }
             }
 
@@ -271,49 +250,61 @@ const EditPurchaseQuoteView = () => {
         }
 
         return { lineCalcs, subtotal, totalTax, grandTotal, whtAmount };
-    }, [items, options]);
+    }, [items, options, taxCodes]);
 
     const handleSave = async () => {
         if (!supplier) { alert('Please select a supplier.'); return; }
         const validItems = items.filter(i => i.item && i.item !== 'Select Item');
         if (validItems.length === 0) { alert('Please select at least one valid item.'); return; }
 
-        const quoteData: Partial<PurchaseQuote> = {
+        const selectedSupplier = allSuppliers.find(s => s.name === supplier);
+        if (!selectedSupplier) {
+            alert('Supplier not found in database.');
+            return;
+        }
+
+        const quoteData = {
             issueDate: formatDateForSave(issueDate),
             reference: reference,
-            supplier: supplier,
+            supplierId: selectedSupplier.id,
             description: description,
             currency: currency,
             amount: calculations.grandTotal,
-            status: status as any,
+            status: status,
             billingAddress: address,
-            items: items.filter(i => i.item !== 'Select Item').map(i => ({
-                ...i,
-                qty: parseFloat(i.qty) || 0,
-                unitPrice: parseFloat(i.unitPrice) || 0
-            })),
+            items: validItems.map(i => {
+                const invItem = inventoryItems.find(it => it.itemName === i.item);
+                const qty = parseFloat(i.qty) || 0;
+                const unitPrice = parseFloat(i.unitPrice) || 0;
+                return {
+                    itemId: invItem?.id || null,
+                    itemName: i.item,
+                    description: i.description || i.item,
+                    qty: qty,
+                    unitPrice: unitPrice,
+                    taxCode: i.taxCode,
+                    unit: i.unit,
+                    totalAmount: qty * unitPrice
+                };
+            }),
             options: options
         };
 
         try {
             if (isEditing && id) {
-                await apiService.updatePurchaseQuote(id, quoteData);
+                await apiService.updatePurchaseEnquiry(id, quoteData);
             } else {
-                await apiService.createPurchaseQuote(quoteData);
+                await apiService.createPurchaseEnquiry(quoteData);
             }
             navigate('/purchase-quotes');
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to save purchase quote:', err);
-            alert('Failed to save purchase quote');
+            const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Failed to save purchase quote: ${errMsg}`);
         }
     };
 
-    const requiresApproval = useMemo(() => {
-        return items.some(item => {
-            const invItem = inventoryItems.find(i => i.itemName === item.item || i.itemCode === item.item);
-            return invItem && parseFloat(item.unitPrice) > (invItem.purchasePrice || 0) * 1.25;
-        });
-    }, [items, inventoryItems]);
+    const requiresApproval = false;
 
     if (isLoading) {
         return (
@@ -329,11 +320,13 @@ const EditPurchaseQuoteView = () => {
             <div className="flex justify-between items-center text-left">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
-                        <span className="cursor-pointer hover:underline" onClick={() => navigate('/purchase-quotes')}>Purchase Quotes</span>
+                        <span className="cursor-pointer hover:underline" onClick={() => navigate('/purchase-quotes')}>PURCHASE ENQUIRY</span>
                         <ChevronRight size={10} className="opacity-50" />
                         <span className="text-slate-400">{isEditing ? 'Edit' : 'New'}</span>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">Purchase Quotation</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+                        {isEditing ? 'Edit Purchase Enquiry' : 'New Purchase Enquiry'}
+                    </h1>
                 </div>
                 <button onClick={() => navigate('/purchase-quotes')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-full text-slate-400 hover:bg-slate-50 transition-colors shadow-sm"><X size={20} /></button>
             </div>
@@ -352,7 +345,7 @@ const EditPurchaseQuoteView = () => {
                         <div className="space-y-2 text-left">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Reference</label>
                             <div className="flex items-center bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:border-indigo-500 transition-all">
-                                <div className="px-4 border-r border-slate-200 cursor-pointer" onClick={() => setUseManualRef(!useManualRef)}>
+                                <div className="h-full px-4 border-r border-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => setUseManualRef(!useManualRef)}>
                                     <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${!useManualRef ? 'bg-indigo-600' : 'border-slate-300 border-2'}`}>
                                         {!useManualRef && <CheckCircle2 size={12} className="text-white" />}
                                     </div>
@@ -374,7 +367,7 @@ const EditPurchaseQuoteView = () => {
                             }
                         }} Icon={User}>
                             <option value="">Select Supplier...</option>
-                            {allSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                            {allSuppliers.filter(s => (!s.inactive && s.status !== 'Inactive') || s.name === supplier).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                         </SelectField>
                         <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="Summary of request..." Icon={Briefcase} />
                     </div>
@@ -405,108 +398,93 @@ const EditPurchaseQuoteView = () => {
                             <Plus size={14} /> <span>Add New Row</span>
                         </button>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto mx-[-40px] scrollbar-hide">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200">
-                                    {options.columnLineNumber && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12 text-center">#</th>}
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-40">ITEM</th>
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">QTY</th>
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">UNIT PRICE</th>
-                                    {options.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right whitespace-nowrap">DISCOUNT</th>}
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">TAX CODE</th>
-                                    {!options.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right">TAX AMOUNT</th>}
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right font-black">TOTAL</th>
-                                    <th className="px-4 py-3 w-10"></th>
+                                    {options.columnLineNumber && <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-10 text-center">#</th>}
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[180px]">ITEM</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[160px]">DESCRIPTION</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-16 text-right">QTY</th>
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right">UNIT PRICE</th>
+                                    {options.columnDiscount && <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-24 text-right">DISCOUNT</th>}
+                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32">TAX CODE</th>
+                                    {options.columnTaxAmount && (
+                                        <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-28 text-right leading-tight">
+                                            TAX<br />AMOUNT
+                                        </th>
+                                    )}
+                                    {options.columnTotal && <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-32 text-right font-black">TOTAL</th>}
+                                    <th className="px-6 py-4 w-10"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-left">
                                 {items.map((item, index) => {
                                     const calc = calculations.lineCalcs[index];
+                                    const invItem = inventoryItems.find(i => i.itemName === item.item || i.itemCode === item.item);
                                     return (
                                         <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
-                                            {options.columnLineNumber && <td className="px-4 py-4 text-xs font-bold text-slate-400 text-center">{index + 1}</td>}
-                                            <td className="px-4 py-4">
-                                                <div className="relative group/select">
-                                                    <select
-                                                        value={item.item}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            const invItem = inventoryItems.find(i => i.itemName === val || i.itemCode === val);
-                                                            setItems(prev => {
-                                                                const newItems = prev.map(i => i.id === item.id ? {
-                                                                    ...i,
-                                                                    item: val,
-                                                                    description: invItem ? (invItem.description || val) : i.description,
-                                                                    unit: invItem ? (invItem.unitName || '') : (i as any).unit
-                                                                } : i);
-                                                                return newItems;
-                                                            });
-                                                        }}
-                                                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer truncate"
-                                                    >
-                                                        <option value="Select Item">Select Item</option>
-                                                        {inventoryItems.map(i => (
-                                                            <option key={i.id} value={i.itemName}>{i.itemName}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <input
-                                                    type="text"
-                                                    value={item.description}
+                                            {options.columnLineNumber && <td className="px-6 py-5 text-center text-sm font-bold text-slate-300">{index + 1}</td>}
+                                            <td className="px-6 py-5">
+                                                <select
+                                                    value={item.item}
                                                     onChange={(e) => {
                                                         const val = e.target.value;
-                                                        setItems(prev => prev.map(i => i.id === item.id ? { ...i, description: val } : i));
+                                                        const selected = inventoryItems.find(i => i.itemName === val);
+                                                        setItems(prev => prev.map(i => i.id === item.id ? {
+                                                            ...i,
+                                                            item: val,
+                                                            description: selected ? (selected.description || val) : i.description,
+                                                            unit: selected ? (selected.unitName || '') : i.unit
+                                                        } : i));
                                                     }}
-                                                    className="w-full bg-transparent border-none p-0 text-sm text-slate-600 outline-none placeholder:text-slate-300"
-                                                    placeholder="Add description..."
+                                                    className="w-full bg-transparent border-none p-0 text-sm font-black text-indigo-600 outline-none appearance-none cursor-pointer"
+                                                >
+                                                    <option value="Select Item">Select Item</option>
+                                                    {inventoryItems.map(i => <option key={i.id} value={i.itemName}>{i.itemName}</option>)}
+                                                </select>
+                                            </td>
+                                            <td className="px-6 py-5">
+                                                <textarea
+                                                    value={item.description}
+                                                    onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                                                    rows={1}
+                                                    placeholder="Enter details..."
+                                                    className="w-full bg-transparent border-none p-0 text-sm font-medium text-slate-600 outline-none resize-none placeholder:text-slate-300 min-h-[20px] scrollbar-hide"
                                                 />
                                             </td>
-                                            <td className="px-4 py-4 relative group/qty text-right">
-                                                <div className="flex flex-col items-end">
+                                            <td className="px-6 py-5 relative group/qty text-right">
+                                                <div className="flex flex-col items-end min-w-[60px]">
                                                     <input
                                                         type="text"
                                                         value={item.qty}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: val } : i));
-                                                        }}
-                                                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
+                                                        onChange={(e) => updateItem(item.id, 'qty', e.target.value)}
+                                                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700 tabular-nums"
                                                     />
-                                                    <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-between w-full">
-                                                        <span>Stock: {(inventoryItems.find(i => i.itemName === item.item || i.itemCode === item.item)?.qtyOnHand || 0).toLocaleString()}</span>
-                                                        <span className="text-indigo-500 font-black">{(item as any).unit || ''}</span>
+                                                    <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tight flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                                        <span className="opacity-70">Stock: {(invItem?.qtyOnHand || 0).toLocaleString()}</span>
+                                                        <span className="text-indigo-500 font-black">{invItem?.unitName || (item as any).unit || ''}</span>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-4 relative group/price text-right">
-                                                <div className="flex flex-col items-end">
+                                            <td className="px-6 py-5 relative group/price text-right">
+                                                <div className="flex flex-col items-end min-w-[80px]">
                                                     <input
                                                         type="text"
                                                         value={item.unitPrice}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            setItems(prev => prev.map(i => i.id === item.id ? { ...i, unitPrice: val } : i));
-                                                        }}
-                                                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
+                                                        onChange={(e) => updateItem(item.id, 'unitPrice', e.target.value)}
+                                                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700 tabular-nums"
                                                         placeholder="0.00"
                                                     />
-
                                                 </div>
                                             </td>
                                             {options.columnDiscount && (
-                                                <td className="px-4 py-4">
+                                                <td className="px-6 py-5">
                                                     <div className="flex items-center justify-end gap-1">
                                                         <input
                                                             type="text"
                                                             value={item.discount}
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                setItems(prev => prev.map(i => i.id === item.id ? { ...i, discount: val } : i));
-                                                            }}
+                                                            onChange={(e) => updateItem(item.id, 'discount', e.target.value)}
                                                             className="w-16 bg-transparent border-none p-0 text-sm font-bold text-indigo-600 text-right outline-none placeholder:text-slate-300"
                                                             placeholder="0"
                                                         />
@@ -514,29 +492,28 @@ const EditPurchaseQuoteView = () => {
                                                     </div>
                                                 </td>
                                             )}
-                                            <td className="px-4 py-4">
+                                            <td className="px-6 py-5">
                                                 <select
                                                     value={item.taxCode}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        setItems(prev => prev.map(i => i.id === item.id ? { ...i, taxCode: val } : i));
-                                                    }}
+                                                    onChange={(e) => updateItem(item.id, 'taxCode', e.target.value)}
                                                     className="w-full bg-transparent border-none p-0 text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer"
                                                 >
-                                                    <option value="VAT 16%">VAT 16%</option>
                                                     <option value="No tax">No tax</option>
+                                                    {taxCodes.map(tc => <option key={tc.id} value={tc.name}>{tc.name}</option>)}
                                                 </select>
                                             </td>
-                                            {!options.amountsAreTaxInclusive && (
-                                                <td className="px-4 py-4 text-sm font-bold text-slate-400 text-right">
+                                            {options.columnTaxAmount && (
+                                                <td className="px-6 py-5 text-sm font-bold text-slate-400 text-right tabular-nums">
                                                     {calc.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                 </td>
                                             )}
-                                            <td className="px-4 py-4 text-sm font-bold text-slate-800 text-right tabular-nums">
-                                                <span className="text-[10px] font-black text-slate-400 mr-1.5 opacity-60">{currency}</span>
-                                                {calc.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                            </td>
-                                            <td className="px-4 py-4">
+                                            {options.columnTotal && (
+                                                <td className="px-6 py-5 text-sm font-bold text-slate-800 text-right tabular-nums whitespace-nowrap">
+                                                    <span className="text-[10px] font-black text-slate-400 mr-1.5 opacity-60">{currency}</span>
+                                                    {calc.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </td>
+                                            )}
+                                            <td className="px-6 py-5">
                                                 <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity justify-end">
                                                     <button
                                                         onClick={() => {
@@ -578,19 +555,23 @@ const EditPurchaseQuoteView = () => {
                                 </span>
                             </div>
                             <div className="flex justify-end items-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] gap-8 text-right">
-                                <span>Tax Component</span>
-                                <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">{calculations.totalTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                <span>Tax Amount</span>
+                                <span className="text-slate-700 font-bold tabular-nums text-[13px] w-32 text-right">
+                                    {calculations.totalTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
                             </div>
                             {options.withholdingTax && (
                                 <div className="flex justify-end items-center text-[10px] font-black text-rose-400 uppercase tracking-[0.2em] gap-8 text-right">
                                     <span>Withholding Tax</span>
-                                    <span className="text-rose-600 font-bold tabular-nums text-[13px] w-32 text-right">-{calculations.whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <span className="text-rose-600 font-bold tabular-nums text-[13px] w-32 text-right">
+                                        -{calculations.whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
                                 </div>
                             )}
                             {!options.hideTotalAmount && (
-                                <div className="flex justify-end items-center bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50 mt-2 h-14 gap-x-6">
+                                <div className="flex justify-end items-center bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 mt-4 h-16 gap-x-6 shadow-sm shadow-indigo-100/30">
                                     <div className="flex-1 text-left">
-                                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total Payable</p>
+                                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em]">Total</p>
                                     </div>
                                     <h2 className="text-xl font-bold text-slate-900 tracking-tight tabular-nums flex items-baseline">
                                         <span className="text-xs font-medium text-indigo-400 mr-2 uppercase">{currency}</span>
@@ -628,9 +609,9 @@ const EditPurchaseQuoteView = () => {
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-500">
                             {([
                                 ['Tax Inclusive', 'amountsAreTaxInclusive'],
-                                ['Rounding', 'rounding'],
                                 ['Line Numbers', 'columnLineNumber'],
                                 ['Discount', 'columnDiscount'],
+                                ['Line Total', 'columnTotal'],
                                 ['Withholding Tax', 'withholdingTax'],
                                 ['Hide Total', 'hideTotalAmount'],
                                 ['Custom Title', 'customTitle'],
@@ -730,41 +711,39 @@ const EditPurchaseQuoteView = () => {
                 </div>
 
                 {/* Submission Area */}
-                <div className="bg-slate-50 p-10 mt-12 mb-10 mx-[-48px] border-t border-slate-100 rounded-b-3xl">
-                    <div className="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
-                        <div className="flex-1 w-full text-left">
-                            {requiresApproval && (
-                                <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start space-x-3">
-                                    <AlertTriangle size={16} className="text-amber-500 mt-0.5" />
-                                    <div className="space-y-1">
-                                        <p className="text-[10px] font-black text-amber-900 uppercase tracking-widest leading-none">Internal Review Required</p>
-                                        <p className="text-[11px] font-medium text-amber-700 leading-relaxed">Inventory threshold exceeded or budget constraints active. Managerial approval required before proceeding.</p>
-                                    </div>
+                <div className="bg-slate-50 p-10 mt-12 mb-[-40px] mx-[-40px] border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-8 rounded-b-[40px]">
+                    <div className="flex-1 w-full text-left">
+                        {requiresApproval && (
+                            <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start space-x-3">
+                                <AlertTriangle size={16} className="text-amber-500 mt-0.5" />
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-amber-900 uppercase tracking-widest leading-none">Internal Review Required</p>
+                                    <p className="text-[11px] font-medium text-amber-700 leading-relaxed">Inventory threshold exceeded or budget constraints active. Managerial approval required before proceeding.</p>
                                 </div>
-                            )}
-                        </div>
-
-                        <div className="flex items-center space-x-4 w-full md:w-auto">
-                            <button
-                                onClick={() => navigate('/purchase-quotes')}
-                                className="px-8 py-4 rounded-2xl text-[12px] font-black text-slate-500 hover:bg-slate-200 transition-all uppercase tracking-[0.2em]"
-                            >
-                                Discard
-                            </button>
-                            <div className="flex space-x-3">
-                                <button
-                                    onClick={() => handleSave()}
-                                    disabled={requiresApproval}
-                                    className={cn(
-                                        "px-10 py-4 rounded-2xl text-[12px] font-black transition-all shadow-xl uppercase tracking-[0.2em] flex items-center gap-2",
-                                        requiresApproval
-                                            ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                                            : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20"
-                                    )}
-                                >
-                                    <Save size={18} /> {isEditing ? 'Update Quote' : 'Create Purchase Quote'}
-                                </button>
                             </div>
+                        )}
+                    </div>
+
+                    <div className="flex items-center space-x-4 w-full md:w-auto">
+                        <button
+                            onClick={() => navigate('/purchase-quotes')}
+                            className="px-8 py-4 rounded-2xl text-[12px] font-black text-slate-500 hover:bg-slate-200 transition-all uppercase tracking-[0.2em]"
+                        >
+                            Discard
+                        </button>
+                        <div className="flex space-x-3">
+                            <button
+                                onClick={() => handleSave()}
+                                disabled={requiresApproval}
+                                className={cn(
+                                    "px-10 py-4 rounded-2xl text-[12px] font-black transition-all shadow-xl uppercase tracking-[0.2em] flex items-center gap-2",
+                                    requiresApproval
+                                        ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                        : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-600/20"
+                                )}
+                            >
+                                <Save size={18} /> {isEditing ? 'Update Enquiry' : 'Create Purchase Enquiry'}
+                            </button>
                         </div>
                     </div>
                 </div>

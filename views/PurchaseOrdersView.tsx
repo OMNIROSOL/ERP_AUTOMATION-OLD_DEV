@@ -133,12 +133,12 @@ const PurchaseOrdersView = () => {
 
     const handleStatusChange = async (id: string, newStatus: string, shouldNavigate: boolean = false) => {
         try {
-            // await apiService.updatePurchaseOrderStatus(id, newStatus);
-            alert('Status update implemented in API, but not yet fully linked in UI for invoice conversion.');
+            await apiService.updatePurchaseOrderStatus(id, newStatus);
             setRefreshTrigger(prev => prev + 1);
             if (shouldNavigate) navigate('/purchase-invoices');
         } catch (err) {
             console.error('Failed to update status:', err);
+            alert('Failed to update status. Please try again.');
         }
     };
 

@@ -26,7 +26,7 @@ export const apiService = {
   getCustomerTransactions: (id: string) => api.get(`/customers/${id}/transactions`).then(res => res.data),
   createCustomer: (data: any) => api.post('/customers', data).then(res => res.data),
   updateCustomer: (id: string, data: any) => api.put(`/customers/${id}`, data).then(res => res.data),
-  
+
   getItems: () => api.get('/items').then(res => res.data),
   getItem: (id: string) => api.get(`/items/${id}`).then(res => res.data),
   createItem: (data: any) => api.post('/items', data).then(res => res.data),
@@ -36,12 +36,12 @@ export const apiService = {
   getDivisions: () => api.get('/divisions').then(res => res.data),
   createDivision: (data: any) => api.post('/divisions', data).then(res => res.data),
   deleteDivision: (id: string) => api.delete(`/divisions/${id}`).then(res => res.data),
-  
+
   getAccounts: () => api.get('/accounts').then(res => res.data),
   getAccount: (id: string) => api.get(`/accounts/${id}`).then(res => res.data),
   createAccount: (data: any) => api.post('/accounts', data).then(res => res.data),
   updateAccount: (id: string, data: any) => api.put(`/accounts/${id}`, data).then(res => res.data),
-  
+
   // Sales
   getQuotes: () => api.get('/quotes').then(res => res.data),
   createQuote: (data: any) => api.post('/quotes', data).then(res => res.data),
@@ -68,10 +68,10 @@ export const apiService = {
   updateDeliveryNote: (id: string, data: any) => api.put(`/delivery-notes/${id}`, data).then(res => res.data),
   updateDeliveryNoteStatus: (id: string, status: string) => api.patch(`/delivery-notes/${id}`, { status }).then(res => res.data),
 
-  
+
   getGoodsReceivedNotes: () => api.get('/goods-received-notes').then(res => res.data),
   createGoodsReceivedNote: (data: any) => api.post('/goods-received-notes', data).then(res => res.data),
-  
+
   getReceipts: () => api.get('/receipts').then(res => res.data),
   getReceipt: (id: string) => api.get(`/receipts/${id}`).then(res => res.data),
   createReceipt: (data: any) => api.post('/receipts', data).then(res => res.data),
@@ -96,7 +96,7 @@ export const apiService = {
   getInventoryTransfer: (id: string) => api.get(`/inventory-transfers/${id}`).then(res => res.data),
   createInventoryTransfer: (data: any) => api.post('/inventory-transfers', data).then(res => res.data),
   updateInventoryTransfer: (id: string, data: any) => api.put(`/inventory-transfers/${id}`, data).then(res => res.data),
-  
+
   getInventoryWriteOffs: () => api.get('/inventory-write-offs').then(res => res.data),
   getInventoryWriteOff: (id: string) => api.get(`/inventory-write-offs/${id}`).then(res => res.data),
   createInventoryWriteOff: (data: any) => api.post('/inventory-write-offs', data).then(res => res.data),
@@ -117,16 +117,18 @@ export const apiService = {
   updateSupplier: (id: string, data: any) => api.put(`/suppliers/${id}`, data).then(res => res.data),
 
   // Procurement
-  getPurchaseQuotes: () => api.get('/purchase-quotes').then(res => res.data),
-  getPurchaseQuote: (id: string) => api.get(`/purchase-quotes/${id}`).then(res => res.data),
-  createPurchaseQuote: (data: any) => api.post('/purchase-quotes', data).then(res => res.data),
-  updatePurchaseQuote: (id: string, data: any) => api.put(`/purchase-quotes/${id}`, data).then(res => res.data),
-  
+  getPurchaseEnquiries: () => api.get('/purchase-enquiries').then(res => res.data),
+  getPurchaseEnquiry: (id: string) => api.get(`/purchase-enquiries/${id}`).then(res => res.data),
+  createPurchaseEnquiry: (data: any) => api.post('/purchase-enquiries', data).then(res => res.data),
+  updatePurchaseEnquiry: (id: string, data: any) => api.put(`/purchase-enquiries/${id}`, data).then(res => res.data),
+  updatePurchaseEnquiryStatus: (id: string, status: string) => api.patch(`/purchase-enquiries/${id}`, { status }).then(res => res.data),
+
   getPurchaseOrders: () => api.get('/purchase-orders').then(res => res.data),
   getPurchaseOrder: (id: string) => api.get(`/purchase-orders/${id}`).then(res => res.data),
   createPurchaseOrder: (data: any) => api.post('/purchase-orders', data).then(res => res.data),
   updatePurchaseOrder: (id: string, data: any) => api.put(`/purchase-orders/${id}`, data).then(res => res.data),
-  
+  updatePurchaseOrderStatus: (id: string, status: string) => api.patch(`/purchase-orders/${id}`, { status }).then(res => res.data),
+
   getPurchaseInvoices: () => api.get('/purchase-invoices').then(res => res.data),
   getPurchaseInvoice: (id: string) => api.get(`/purchase-invoices/${id}`).then(res => res.data),
   createPurchaseInvoice: (data: any) => api.post('/purchase-invoices', data).then(res => res.data),
@@ -138,9 +140,9 @@ export const apiService = {
 
   // Reference Generation
   getLocations: () => api.get('/locations').then(res => res.data),
-  getNextReference: (type: 'invoice' | 'quote' | 'order' | 'delivery' | 'customer' | 'supplier' | 'purchase-quote' | 'purchase-order' | 'receipt' | 'purchase-invoice' | 'debit-note' | 'credit-note') => 
+  getNextReference: (type: 'invoice' | 'quote' | 'order' | 'delivery' | 'customer' | 'supplier' | 'purchase-quote' | 'purchase-enquiry' | 'purchase-order' | 'receipt' | 'purchase-invoice' | 'debit-note' | 'credit-note') =>
     api.get(`/reference/next/${type}`).then(res => res.data.nextRef),
-  
+
   // Accounts
   getBankAccounts: () => api.get('/bank-accounts').then(res => res.data),
   createBankAccount: (data: any) => api.post('/bank-accounts', data).then(res => res.data),

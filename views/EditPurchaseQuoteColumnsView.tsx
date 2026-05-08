@@ -39,7 +39,7 @@ const EditPurchaseQuoteColumnsView = () => {
         <div className="bg-slate-50 min-h-screen selection:bg-indigo-100 selection:text-indigo-900 font-sans p-8 md:p-12 animate-in fade-in duration-700">
             <div className="max-w-2xl mx-auto mb-10">
                 <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-4">
-                    <span className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => navigate('/purchase-quotes')}>Purchase Quotes</span>
+                    <span className="cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => navigate('/purchase-quotes')}>Purchase Enquiry</span>
                     <ChevronRight size={10} className="opacity-50" />
                     <span className="text-slate-400">Column Configuration</span>
                 </div>
@@ -50,7 +50,7 @@ const EditPurchaseQuoteColumnsView = () => {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Configure Columns</h1>
-                        <p className="text-slate-500 font-medium text-sm">Select which data fields you want to see for Purchase Quotes.</p>
+                        <p className="text-slate-500 font-medium text-sm">Select which data fields you want to see for Purchase Enquiry.</p>
                     </div>
                 </div>
             </div>

@@ -398,7 +398,7 @@ const NewCreditNoteView = () => {
                                         }
                                     }} Icon={UserPlus}>
                                         <option value="">Select Target Customer...</option>
-                                        {dbCustomers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {dbCustomers.filter(c => (!c.inactive && c.status !== 'Inactive') || c.name === customer).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                     </SelectField>
 
                                     <div className="grid grid-cols-2 gap-4">

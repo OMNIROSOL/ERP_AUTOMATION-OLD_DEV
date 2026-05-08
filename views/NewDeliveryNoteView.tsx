@@ -462,7 +462,7 @@ const NewDeliveryNoteView = () => {
                                     Icon={User}
                                 >
                                     <option value="">Select Customer</option>
-                                    {allCustomers.map(c => (
+                                    {allCustomers.filter(c => (!c.inactive && c.status !== 'Inactive') || c.name === formData.customer).map(c => (
                                         <option key={c.id} value={c.name}>{c.name}</option>
                                     ))}
                                 </SelectField>

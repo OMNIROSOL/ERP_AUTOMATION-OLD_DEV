@@ -174,7 +174,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, setIsCollapsed }) => {
       submenu: [
         { label: 'Suppliers', path: '/suppliers', id: 'suppliers' },
         { label: 'Purchase History', path: '/purchase-history', id: 'purchase-history' },
-        { label: 'Purchase Quotes', path: '/purchase-quotes', id: 'purchase-quotes' },
+        { label: 'Purchase Enquiry', path: '/purchase-quotes', id: 'purchase-quotes' },
         { label: 'Purchase Orders', path: '/purchase-orders', id: 'purchase-orders' },
         { label: 'Purchase Invoices', path: '/purchase-invoices', id: 'purchase-invoices' },
         { label: 'Goods Received Notes', path: '/goods-received-notes', id: 'goods-received-notes' },

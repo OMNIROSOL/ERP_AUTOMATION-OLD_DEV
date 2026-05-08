@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import apiService from '../services/apiService';
 import { SalesQuote, Customer } from '../types';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import {
     Printer,
     FileText,
@@ -222,31 +224,40 @@ const ViewSalesQuoteView = () => {
                         </button>
                         <button
                             onClick={async () => {
-                                if (!pdfRef.current) return;
-                                const html2canvas = (await import('html2canvas')).default;
-                                const jsPDF = (await import('jspdf')).jsPDF;
+                                try {
+                                    if (!pdfRef.current) {
+                                        alert('Error: Content to capture not found.');
+                                        return;
+                                    }
 
-                                const element = pdfRef.current;
-                                const originalStyle = element.getAttribute('style') || '';
-                                element.style.maxWidth = 'none';
-                                element.style.width = '850px';
+                                    const element = pdfRef.current;
+                                    const originalStyle = element.getAttribute('style') || '';
+                                    element.style.maxWidth = 'none';
+                                    element.style.width = '850px';
 
-                                const canvas = await html2canvas(element, {
-                                    scale: 2,
-                                    useCORS: true,
-                                    backgroundColor: '#ffffff'
-                                });
+                                    console.log('Capturing canvas...');
+                                    const canvas = await html2canvas(element, {
+                                        scale: 2,
+                                        useCORS: true,
+                                        logging: true,
+                                        backgroundColor: '#ffffff'
+                                    });
 
-                                element.setAttribute('style', originalStyle);
+                                    element.setAttribute('style', originalStyle);
 
-                                const imgData = canvas.toDataURL('image/png');
-                                const pdf = new jsPDF('p', 'mm', 'a4');
-                                const imgProps = pdf.getImageProperties(imgData);
-                                const pdfWidth = pdf.internal.pageSize.getWidth();
-                                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                                    console.log('Generating PDF...');
+                                    const imgData = canvas.toDataURL('image/png');
+                                    const pdf = new jsPDF('p', 'mm', 'a4');
+                                    const imgProps = pdf.getImageProperties(imgData);
+                                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-                                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                                pdf.save(`${quote.reference || 'Quote'}.pdf`);
+                                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                                    pdf.save(`${quote.reference || 'Quote'}.pdf`);
+                                } catch (err: any) {
+                                    console.error('PDF Generation failed:', err);
+                                    alert(`Failed to generate PDF: ${err.message || 'Unknown error'}`);
+                                }
                             }}
                             className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
                         >

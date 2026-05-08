@@ -139,7 +139,7 @@ const EditSalesQuoteView = () => {
         return `${day}.${month}.${year}`;
     };
 
-    const [issueDate, setIssueDate] = useState('');
+    const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
     const [expiryDays, setExpiryDays] = useState('30');
     const [customer, setCustomer] = useState('');
     const [currency, setCurrency] = useState('ZMW');
@@ -262,7 +262,18 @@ const EditSalesQuoteView = () => {
                     if (quote) {
                         // Use today's date for 'copyFrom' operations, otherwise use the source document's date
                         const quoteDate = copyFromId ? '' : (quote.issueDate || quote.orderDate || '');
-                        setIssueDate(quoteDate ? new Date(quoteDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+                        let parsedIssueDate = new Date().toISOString().split('T')[0];
+                        if (quoteDate) {
+                            const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                            if (dottedPattern.test(quoteDate)) {
+                                const [day, month, year] = quoteDate.split('.');
+                                parsedIssueDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                const d = new Date(quoteDate);
+                                if (!isNaN(d.getTime())) parsedIssueDate = d.toISOString().split('T')[0];
+                            }
+                        }
+                        setIssueDate(parsedIssueDate);
                         setExpiryDays(quote.expiryDays?.toString() || '30');
                         setCustomer(quote.customer?.name || quote.customer || '');
                         setCurrency(quote.currency || quote.customer?.currency?.split(' - ')[0] || 'ZMW');
@@ -647,7 +658,7 @@ const EditSalesQuoteView = () => {
                                         }
                                     }} Icon={User}>
                                         <option value="">Select Target Customer...</option>
-                                        {customers.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                        {customers.filter(c => (!c.inactive && c.status !== 'Inactive') || c.name === customer).map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                     </SelectField>
                                     <InputField label="Description" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="Overall scope of work..." Icon={Briefcase} />
                                 </div>

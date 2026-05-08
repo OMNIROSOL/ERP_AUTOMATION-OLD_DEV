@@ -18,16 +18,19 @@ const NewDebitNoteView = () => {
 
     const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
     const [dbItems, setDbItems] = useState<any[]>([]);
+    const [taxCodes, setTaxCodes] = useState<any[]>([]);
 
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [sups, itemsData] = await Promise.all([
+                const [sups, itemsData, taxCodesData] = await Promise.all([
                     apiService.getSuppliers(),
-                    apiService.getItems()
+                    apiService.getItems(),
+                    apiService.getTaxCodes()
                 ]);
                 setDbSuppliers(sups);
                 setDbItems(itemsData);
+                setTaxCodes(taxCodesData);
             } catch (err) {
                 console.error('Failed to load debit note data:', err);
             }
@@ -129,7 +132,7 @@ const NewDebitNoteView = () => {
                                     onChange={(e) => setSupplier(e.target.value)}
                                 >
                                     <option value=""></option>
-                                    {dbSuppliers.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                    {dbSuppliers.filter(s => (!s.inactive && s.status !== 'Inactive') || s.name === supplier).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                 </select>
                                 <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] pointer-events-none"></i>
                             </div>
@@ -240,7 +243,8 @@ const NewDebitNoteView = () => {
                                                     value={item.taxCode}
                                                     onChange={(e) => updateItem(item.id, 'taxCode', e.target.value)}
                                                 >
-                                                    <option value="VAT 16%">VAT (16%)</option>
+                                                    <option value="No tax">No tax</option>
+                                                    {taxCodes.map(tc => <option key={tc.id} value={tc.name}>{tc.name}</option>)}
                                                 </select>
                                                 <button className="absolute right-2 top-1/2 -translate-y-1/2 text-[#cfd8dc] hover:text-[#90a4ae]">×</button>
                                                 <i className="fas fa-caret-down absolute right-6 top-1/2 -translate-y-1/2 text-[#cfd8dc]"></i>
