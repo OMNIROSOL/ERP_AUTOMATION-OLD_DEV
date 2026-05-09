@@ -67,10 +67,16 @@ const ViewPurchaseOrderView = () => {
 
     const supplierData = useMemo(() => {
         if (!order) return null;
-        return allSuppliers.find(s => s.name === order.supplier);
+        const sName = typeof order.supplier === 'string' ? order.supplier : (order.supplier as any)?.name;
+        return allSuppliers.find(s => s.name === sName);
     }, [order, allSuppliers]);
 
-    const supplierEmail = supplierData?.email || (order ? `${order.supplier.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
+    const supplierName = useMemo(() => {
+        if (!order) return '';
+        return typeof order.supplier === 'string' ? order.supplier : (order.supplier as any)?.name || 'Unknown';
+    }, [order]);
+
+    const supplierEmail = supplierData?.email || (supplierName ? `${supplierName.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
 
     const totals = useMemo(() => {
         if (!order) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0 };
@@ -206,7 +212,7 @@ const ViewPurchaseOrderView = () => {
                         <Edit size={14} className="text-blue-600" /> Edit
                     </button>
 
-                    {(order.status === 'Draft' || order.status === 'Pending' || order.status === 'Pending Approval') && (
+                    {(order.status === 'Draft' || order.status === 'Pending' || order.status === 'Ordered' || order.status === 'Pending Approval' || order.status === 'Open') && (
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => handleStatusChange('Invoiced', true)}
@@ -395,7 +401,7 @@ const ViewPurchaseOrderView = () => {
                                 {/* Vendor */}
                                 <div>
                                     <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-50 pb-2">Vendor / Supplier</h3>
-                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{order.supplier}</p>
+                                    <p className="text-sm font-bold text-slate-900 uppercase tracking-tight mb-2">{supplierName}</p>
                                     <div className="text-gray-500 space-y-1">
                                         <p className="whitespace-pre-wrap">{supplierData?.billingAddress || order.billingAddress || '-'}</p>
                                         {supplierEmail && <p className="text-blue-600 lowercase">{supplierEmail}</p>}
@@ -445,7 +451,9 @@ const ViewPurchaseOrderView = () => {
                                     <tr key={idx}>
                                         {order.options?.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
                                         <td className="px-4 py-4">
-                                            <p className="font-semibold text-slate-900">{item.item || item.itemName || '-'}</p>
+                                            <p className="font-semibold text-slate-900">
+                                                {item.item?.itemName || item.itemName || (typeof item.item === 'string' ? item.item : '-') }
+                                            </p>
                                         </td>
                                         <td className="px-4 py-4">
                                             <p className="text-gray-500">{item.description || '-'}</p>

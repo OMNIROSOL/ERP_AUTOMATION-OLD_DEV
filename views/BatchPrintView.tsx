@@ -49,7 +49,7 @@ const BatchPrintView = () => {
                     apiService.getInvoices().catch(() => []),
                     apiService.getDeliveryNotes().catch(() => []),
                     apiService.getReceipts().catch(() => []),
-                    apiService.getPurchaseQuotes().catch(() => []),
+                    apiService.getPurchaseEnquiries().catch(() => []),
                     apiService.getPurchaseOrders().catch(() => []),
                     apiService.getFooters().catch(() => []),
                     apiService.getTaxCodes().catch(() => [])

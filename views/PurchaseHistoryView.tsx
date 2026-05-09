@@ -1,12 +1,13 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import apiService from '../services/apiService';
 import { Eye, Edit, Copy, FileText, Search, MoreVertical, ChevronDown, Filter, Trash2, X, ChevronUp, ArrowUpDown, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Calendar, Printer, ShoppingCart, Quote } from 'lucide-react';
 import { cn } from '../utils/cn';
 
 const PurchaseHistoryView = () => {
     const navigate = useNavigate();
-    const [searchQuery, setSearchQuery] = useState('');
+    const { supplierName } = useParams();
+    const [searchQuery, setSearchQuery] = useState(supplierName || '');
     const [typeFilter, setTypeFilter] = useState('All');
     const [statusFilter, setStatusFilter] = useState('All');
     const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -347,7 +348,7 @@ const PurchaseHistoryView = () => {
                                 <td className="px-6 py-4">
                                      <span className={cn(
                                         "px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border",
-                                        item.type === 'Quote' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                        item.type === 'Enquiry' ? 'bg-blue-50 text-blue-600 border-blue-100' :
                                         item.type === 'Order' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                         item.type === 'Invoice' ? 'bg-purple-50 text-purple-600 border-purple-100' :
                                         item.type === 'GRN' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :

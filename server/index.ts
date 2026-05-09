@@ -1188,6 +1188,7 @@ app.get('/api/purchase-enquiries', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
+    console.log(`[ENQUIRY GET] Fetched ${enquiries.length} enquiries`);
     res.json(enquiries);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1283,12 +1284,55 @@ app.patch('/api/purchase-enquiries/:id', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   try {
-    const result = await prisma.purchaseEnquiry.update({
-      where: { id },
-      data: { status }
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update Enquiry Status
+      const enquiry = await tx.purchaseEnquiry.update({
+        where: { id },
+        data: { status },
+        include: { items: true }
+      });
+
+      // 2. If Accepted, create a PO
+      if (status === 'Accepted') {
+        // Check if PO already exists for this enquiry to prevent duplicates
+        const existingPO = await tx.purchaseOrder.findFirst({
+          where: { sourceEnquiryId: id }
+        });
+
+        if (!existingPO) {
+          // Use the Enquiry's existing reference instead of generating a new PO reference
+          const poReference = enquiry.reference || `PO-${Date.now()}`;
+          
+          await tx.purchaseOrder.create({
+            data: {
+              reference: poReference,
+              orderDate: new Date(),
+              supplierId: enquiry.supplierId,
+              description: `Generated from Enquiry ${enquiry.reference}. ${enquiry.description || ''}`,
+              currency: enquiry.currency,
+              amount: enquiry.amount,
+              status: 'Open',
+              sourceEnquiryId: id,
+              items: {
+                create: enquiry.items.map(item => ({
+                  itemId: item.itemId,
+                  description: item.description,
+                  qty: item.qty,
+                  unitPrice: item.unitPrice,
+                  totalAmount: item.totalAmount,
+                  division: item.division
+                }))
+              }
+            }
+          });
+        }
+      }
+      return enquiry;
     });
+
     res.json(result);
   } catch (err: any) {
+    console.error('PATCH PURCHASE ENQUIRY ERROR:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1296,11 +1340,18 @@ app.patch('/api/purchase-enquiries/:id', async (req, res) => {
 app.get('/api/purchase-orders', async (req, res) => {
   try {
     const orders = await prisma.purchaseOrder.findMany({
-      include: { supplier: true, items: true },
+      include: { 
+        supplier: true, 
+        items: {
+          include: { item: true }
+        }
+      },
       orderBy: { createdAt: 'desc' }
     });
+    console.log(`[PO GET] Fetched ${orders.length} orders:`, orders.map(o => ({ ref: o.reference, status: o.status })));
     res.json(orders);
   } catch (err: any) {
+    console.error('GET PURCHASE ORDERS ERROR:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1309,7 +1360,12 @@ app.get('/api/purchase-orders/:id', async (req, res) => {
   try {
     const order = await prisma.purchaseOrder.findUnique({
       where: { id: req.params.id },
-      include: { supplier: true, items: true }
+      include: { 
+        supplier: true, 
+        items: {
+          include: { item: true }
+        }
+      }
     });
     if (!order) return res.status(404).json({ error: 'Purchase order not found' });
     res.json(order);
@@ -1333,7 +1389,7 @@ app.patch('/api/purchase-orders/:id', async (req, res) => {
 });
 
 app.post('/api/purchase-orders', async (req, res) => {
-  const { supplierId, reference, items, amount, currency, description, orderDate, status } = req.body;
+  const { supplierId, reference, items, amount, currency, description, orderDate, status, docOptions } = req.body;
   try {
     const result = await prisma.purchaseOrder.create({
       data: {
@@ -1344,6 +1400,7 @@ app.post('/api/purchase-orders', async (req, res) => {
         description,
         orderDate: orderDate ? new Date(orderDate) : undefined,
         status: status || 'Open',
+        docOptions: docOptions || {},
         items: {
           create: items.map((item: any) => ({
             itemId: item.itemId || null,

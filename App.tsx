@@ -282,6 +282,7 @@ const App = () => {
 
           {/* Purchase History Routes */}
           <Route path="/purchase-history" element={<PurchaseHistoryView />} />
+          <Route path="/purchase-history/supplier/:supplierName" element={<PurchaseHistoryView />} />
 
           {/* Purchase Quotes Routes */}
           <Route path="/purchase-quotes" element={<PurchaseQuotesView />} />

@@ -114,13 +114,27 @@ const PurchaseOrdersView = () => {
             setIsLoading(true);
             try {
                 const data = await apiService.getPurchaseOrders();
-                const mapped = data.map((o: any) => ({
-                    ...o,
-                    supplier: o.supplier?.name || o.supplier || 'Unknown',
-                    currency: o.currency || o.supplier?.currency?.split(' - ')[0] || 'ZMW',
-                    orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
-                    amount: parseFloat(o.amount) || 0
-                }));
+                const mapped = data.map((o: any) => {
+                    // Extremely robust mapping to prevent object-rendering crashes
+                    let supplierName = 'Unknown';
+                    if (o.supplier) {
+                        supplierName = typeof o.supplier === 'object' ? (o.supplier.name || 'Unknown') : o.supplier;
+                    }
+
+                    let statusStr = (o.status || 'Open').toString();
+                    if (typeof o.status === 'object') statusStr = 'Open';
+
+                    return {
+                        ...o,
+                        supplier: supplierName,
+                        status: statusStr,
+                        currency: o.currency || (typeof o.supplier === 'object' ? o.supplier?.currency?.split(' - ')[0] : null) || 'ZMW',
+                        orderDate: o.orderDate ? new Date(o.orderDate).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                        amount: parseFloat(o.amount) || 0,
+                        timestamp: o.createdAt
+                    };
+                });
+                console.log('Mapped Purchase Orders:', mapped);
                 setPurchaseOrders(mapped);
             } catch (err) {
                 console.error('Failed to fetch purchase orders:', err);
@@ -143,18 +157,21 @@ const PurchaseOrdersView = () => {
     };
 
     const filteredData = useMemo(() => {
-        let result = [...purchaseOrders].filter(o => (o as any).status !== 'Invoiced' && (o as any).status !== 'Rejected');
+        let result = [...purchaseOrders].filter(o => {
+            const status = (o.status || '').toString().toLowerCase();
+            return status !== 'invoiced' && status !== 'rejected';
+        });
 
         if (supplierName) {
             result = result.filter(o => (o.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
         }
 
-        const query = searchQuery.toLowerCase();
+        const query = searchQuery.trim().toLowerCase();
         if (query) {
             result = result.filter(o =>
-                o.supplier.toLowerCase().includes(query) ||
-                o.reference.toLowerCase().includes(query) ||
-                o.description?.toLowerCase().includes(query)
+                o.supplier.toString().toLowerCase().includes(query) ||
+                o.reference.toString().toLowerCase().includes(query) ||
+                o.description?.toString().toLowerCase().includes(query)
             );
         }
 
@@ -180,7 +197,7 @@ const PurchaseOrdersView = () => {
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
         });
-    }, [searchQuery, supplierName, refreshTrigger, sortColumn, sortDirection]);
+    }, [purchaseOrders, searchQuery, supplierName, refreshTrigger, sortColumn, sortDirection]);
 
     const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
     const displayData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -248,7 +265,7 @@ const PurchaseOrdersView = () => {
             header: 'Approval',
             accessor: (o: any) => (
                 <div className="flex items-center gap-1.5 justify-center">
-                    {(o.status === 'Draft' || o.status === 'Pending' || o.status === 'Ordered' || o.status === 'Pending Approval') ? (
+                    {(o.status === 'Draft' || o.status === 'Pending' || o.status === 'Ordered' || o.status === 'Pending Approval' || o.status === 'Open') ? (
                         <>
                             <button
                                 onClick={() => handleStatusChange(o.id, 'Ordered', true)}
@@ -341,6 +358,22 @@ const PurchaseOrdersView = () => {
                             <div className="flex flex-col items-center justify-center py-20 space-y-4">
                                 <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
                                 <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching purchase orders...</p>
+                            </div>
+                        ) : searchQuery.trim() ? (
+                            <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                                <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300">
+                                    <Search size={24} />
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-slate-900 font-bold">No matching records found</p>
+                                    <p className="text-slate-400 text-xs mt-1">Try adjusting your search or filters</p>
+                                </div>
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="text-indigo-600 text-[11px] font-bold uppercase tracking-widest hover:text-indigo-700 transition-colors"
+                                >
+                                    Clear Search
+                                </button>
                             </div>
                         ) : undefined
                     }

@@ -341,6 +341,7 @@ model PurchaseEnquiry {
   docOptions  Json?                 @default("{}") @map("doc_options")
   createdAt   DateTime?             @default(now()) @map("created_at") @db.Timestamptz(6)
   items       PurchaseEnquiryItem[]
+  purchaseOrders PurchaseOrder[]
   supplier    suppliers             @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("purchase_enquiries")
@@ -373,10 +374,13 @@ model PurchaseOrder {
   description String?
   currency    String?             @default("ZMW")
   amount      Decimal?            @default(0) @db.Decimal(15, 2)
-  status      String?             @default("Open")
-  createdAt   DateTime?           @default(now()) @map("created_at") @db.Timestamptz(6)
+  status      String?              @default("Open")
+  sourceEnquiryId String?          @map("source_enquiry_id") @db.Uuid
+  createdAt   DateTime?            @default(now()) @map("created_at") @db.Timestamptz(6)
+  docOptions  Json?                @default("{}") @map("doc_options")
   items       PurchaseOrderItem[]
-  supplier    suppliers           @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  sourceEnquiry PurchaseEnquiry?   @relation(fields: [sourceEnquiryId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  supplier    suppliers            @relation(fields: [supplierId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("purchase_orders")
   @@schema("purchase")

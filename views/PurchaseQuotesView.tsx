@@ -161,6 +161,9 @@ const PurchaseQuotesView = () => {
         try {
             await apiService.updatePurchaseEnquiryStatus(id, newStatus);
             setRefreshTrigger(prev => prev + 1);
+            if (newStatus === 'Accepted') {
+                navigate('/purchase-orders');
+            }
         } catch (err) {
             console.error('Failed to update status:', err);
             alert('Failed to update status. Please try again.');
