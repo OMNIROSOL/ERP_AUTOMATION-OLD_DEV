@@ -417,94 +417,6 @@ const NewPurchaseOrderView = () => {
                             </div>
                         </div>
 
-                        <div className="space-y-6 pt-0 border-t border-slate-50">
-                            <div className="flex items-center space-x-4">
-                                <div className="w-10 h-10 bg-rose-50 rounded-xl flex items-center justify-center text-rose-500">
-                                    <ImageIcon size={20} />
-                                </div>
-                                <h2 className="text-lg font-black text-slate-800 tracking-tight">Attachments & Documents</h2>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-4">
-                                    <div className="relative group">
-                                        <input
-                                            type="file"
-                                            multiple
-                                            onChange={async (e) => {
-                                                const files = Array.from(e.target.files || []);
-                                                const newAttachments = await Promise.all(files.map(file => {
-                                                    return new Promise((resolve) => {
-                                                        const reader = new FileReader();
-                                                        reader.onloadend = () => {
-                                                            resolve({
-                                                                name: file.name,
-                                                                type: file.type,
-                                                                size: file.size,
-                                                                data: reader.result
-                                                            });
-                                                        };
-                                                        reader.readAsDataURL(file);
-                                                    });
-                                                }));
-                                                setOptions(prev => ({
-                                                    ...prev,
-                                                    attachments: [...(prev.attachments || []), ...newAttachments]
-                                                }));
-                                            }}
-                                            className="hidden"
-                                            id="file-upload"
-                                        />
-                                        <label
-                                            htmlFor="file-upload"
-                                            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-200 rounded-[32px] bg-slate-50 hover:bg-slate-100 hover:border-indigo-300 transition-all cursor-pointer group"
-                                        >
-                                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                                <div className="p-3 bg-white rounded-2xl shadow-sm mb-3 group-hover:scale-110 transition-transform">
-                                                    <Plus size={20} className="text-indigo-600" />
-                                                </div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Click to upload documents</p>
-                                                <p className="text-[9px] text-slate-300 mt-1">PDF, PNG, JPG (Max 5MB)</p>
-                                            </div>
-                                        </label>
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Attached Files ({(options.attachments || []).length})</label>
-                                    <div className="space-y-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
-                                        {(options.attachments || []).map((file: any, idx: number) => (
-                                            <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-indigo-100 transition-all">
-                                                <div className="flex items-center space-x-3">
-                                                    <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
-                                                        <FileText size={14} />
-                                                    </div>
-                                                    <div className="max-w-[200px]">
-                                                        <p className="text-[11px] font-bold text-slate-700 truncate">{file.name}</p>
-                                                        <p className="text-[9px] text-slate-400 font-medium uppercase tracking-tighter">{(file.size / 1024).toFixed(1)} KB</p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={() => {
-                                                        setOptions(prev => ({
-                                                            ...prev,
-                                                            attachments: prev.attachments.filter((_: any, i: number) => i !== idx)
-                                                        }));
-                                                    }}
-                                                    className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {(options.attachments || []).length === 0 && (
-                                            <div className="flex flex-col items-center justify-center py-8 opacity-40">
-                                                <Clock size={24} className="text-slate-300 mb-2" />
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No files attached</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
                         <div className="space-y-6 pt-0 border-t border-slate-50">
                             <div className="flex items-center justify-between">
@@ -705,6 +617,7 @@ const NewPurchaseOrderView = () => {
                             </div>
                         </div>
 
+
                         {/* Options Area */}
                         <div className="space-y-6 pt-6 border-t border-slate-50 text-left">
                             <div
@@ -809,6 +722,88 @@ const NewPurchaseOrderView = () => {
                                                     </select>
                                                 </div>
                                             )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="space-y-6 pt-6 border-t border-slate-50">
+                            <div className="flex items-center space-x-4">
+                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400">
+                                    <ImageIcon size={20} />
+                                </div>
+                                <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Supporting Documentation</h2>
+                            </div>
+                            <div className="relative group">
+                                <input
+                                    type="file"
+                                    multiple
+                                    onChange={async (e) => {
+                                        const files = Array.from(e.target.files || []);
+                                        const newAttachments = await Promise.all(files.map(file => {
+                                            return new Promise((resolve) => {
+                                                const reader = new FileReader();
+                                                reader.onloadend = () => {
+                                                    resolve({
+                                                        name: file.name,
+                                                        type: file.type,
+                                                        size: file.size,
+                                                        data: reader.result
+                                                    });
+                                                };
+                                                reader.readAsDataURL(file);
+                                            });
+                                        }));
+                                        setOptions(prev => ({
+                                            ...prev,
+                                            attachments: [...(prev.attachments || []), ...newAttachments]
+                                        }));
+                                    }}
+                                    className="hidden"
+                                    id="file-upload"
+                                />
+                                <label
+                                    htmlFor="file-upload"
+                                    className="flex items-center w-full p-6 border-2 border-dashed border-slate-200 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 hover:border-indigo-300 transition-all cursor-pointer group"
+                                >
+                                    <div className="flex items-center space-x-6">
+                                        <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center group-hover:scale-110 transition-transform">
+                                            <Plus size={24} className="text-indigo-600" />
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="text-sm font-black text-slate-800">Attach Documents</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Specs, Plans or References</p>
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            {/* File List */}
+                            {(options.attachments || []).length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                                    {(options.attachments || []).map((file: any, idx: number) => (
+                                        <div key={idx} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-indigo-100 transition-all">
+                                            <div className="flex items-center space-x-3">
+                                                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
+                                                    <FileText size={16} />
+                                                </div>
+                                                <div className="max-w-[150px]">
+                                                    <p className="text-[11px] font-bold text-slate-700 truncate">{file.name}</p>
+                                                    <p className="text-[9px] text-slate-400 font-medium uppercase tracking-tighter">{(file.size / 1024).toFixed(1)} KB</p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setOptions(prev => ({
+                                                        ...prev,
+                                                        attachments: prev.attachments.filter((_: any, i: number) => i !== idx)
+                                                    }));
+                                                }}
+                                                className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
