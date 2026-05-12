@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, X, Package, Trash2, ArrowLeft, HelpCircle } from 'lucide-react';
+import { Save, X, Package, Trash2, ArrowLeft, HelpCircle, Plus } from 'lucide-react';
 import { InventoryItem, Division } from '../types';
 import apiService from '../services/apiService';
 
@@ -76,7 +76,8 @@ const NewInventoryItemView = () => {
         unitName: formData.unitName,
         sellingPrice: parseFloat(formData.sellingPrice as any || 0),
         purchasePrice: parseFloat(formData.purchasePrice as any || 0),
-        qtyOnHand: parseFloat(formData.qtyOnHand as any || 0)
+        qtyOnHand: parseFloat(formData.qtyOnHand as any || 0),
+        imageUrl: formData.imageUrl
       };
 
       if (isEdit) {
@@ -145,43 +146,96 @@ const NewInventoryItemView = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Item Code</label>
-              <input
-                type="text"
-                name="itemCode"
-                value={formData.itemCode}
-                onChange={handleChange}
-                placeholder="e.g. MI-001"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
-                required
-              />
+          <div className="flex flex-col md:flex-row gap-8">
+            {/* Image Upload Section */}
+            <div className="w-full md:w-1/3 space-y-4">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block text-center md:text-left">Product Image</label>
+              <div className="relative group mx-auto md:mx-0">
+                <div className="w-full aspect-square bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl flex flex-items-center justify-center overflow-hidden transition-all group-hover:border-blue-300 group-hover:bg-blue-50/30">
+                  {formData.imageUrl ? (
+                    <img src={formData.imageUrl} alt="Product preview" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-6 text-center">
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-3 group-hover:text-blue-500 group-hover:bg-white transition-all shadow-sm">
+                        <Plus size={24} />
+                      </div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-blue-600">Select Image</p>
+                      <p className="text-[9px] text-gray-300 mt-1 font-bold">PNG, JPG up to 2MB</p>
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 2 * 1024 * 1024) {
+                        alert('Image size must be less than 2MB');
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                />
+                {formData.imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, imageUrl: '' }))}
+                    className="absolute -top-2 -right-2 bg-rose-500 text-white p-1.5 rounded-full shadow-lg hover:bg-rose-600 transition-all z-20"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Item Name</label>
-              <input
-                type="text"
-                name="itemName"
-                value={formData.itemName}
-                onChange={handleChange}
-                placeholder="e.g. Engine Oil 20L"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
-                required
-              />
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Description</label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows={3}
-              placeholder="Full product specification..."
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
-            />
+            {/* Identification Fields */}
+            <div className="flex-1 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Item Code</label>
+                  <input
+                    type="text"
+                    name="itemCode"
+                    value={formData.itemCode}
+                    onChange={handleChange}
+                    placeholder="e.g. MI-001"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Item Name</label>
+                  <input
+                    type="text"
+                    name="itemName"
+                    value={formData.itemName}
+                    onChange={handleChange}
+                    placeholder="e.g. Engine Oil 20L"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Description</label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows={4}
+                  placeholder="Full product specification..."
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all font-medium"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

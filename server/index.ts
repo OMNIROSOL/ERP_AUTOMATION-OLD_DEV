@@ -155,6 +155,8 @@ const generateNextReference = async (type: string, tx: any = prisma) => {
     case 'purchase-invoice': count = await getNextNum(tx.invoices, 'PINV-'); prefix = 'PINV'; break;
     case 'customer': count = await getNextCodeNum(tx.customer, 'CUST-'); prefix = 'CUST'; break;
     case 'supplier': count = await getNextCodeNum(tx.suppliers, 'SUP-'); prefix = 'SUP'; break;
+    case 'inventory-transfer': count = await getNextNum(tx.inventoryTransfer, 'TR-'); prefix = 'TR'; break;
+    case 'inventory-write-off': count = await getNextNum(tx.inventoryWriteOff, 'WO-'); prefix = 'WO'; break;
     case 'debit-note': prefix = 'DN'; count = Math.floor(Math.random() * 1000); break;
     case 'credit-note': prefix = 'CN'; count = Math.floor(Math.random() * 1000); break;
     default: throw new Error('Invalid document type');
@@ -321,10 +323,10 @@ app.get('/api/items/:id', async (req, res) => {
 });
 
 app.post('/api/items', async (req, res) => {
-  const { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description } = req.body;
+  const { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description, imageUrl } = req.body;
   try {
     const result = await prisma.item.create({
-      data: { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description }
+      data: { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description, imageUrl }
     });
     res.json(result);
   } catch (err) {
@@ -334,11 +336,11 @@ app.post('/api/items', async (req, res) => {
 
 app.put('/api/items/:id', async (req, res) => {
   const { id } = req.params;
-  const { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description } = req.body;
+  const { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description, imageUrl } = req.body;
   try {
     const result = await prisma.item.update({
       where: { id },
-      data: { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description }
+      data: { itemCode, itemName, unitName, sellingPrice, purchasePrice, qtyOnHand, description, imageUrl }
     });
     res.json(result);
   } catch (err) {
@@ -1171,8 +1173,158 @@ app.get('/api/locations', async (req, res) => {
   }
 });
 
-app.get('/api/inventory-transfers', (req, res) => res.json([]));
-app.get('/api/inventory-write-offs', (req, res) => res.json([]));
+app.get('/api/inventory-transfers', async (req, res) => {
+  try {
+    const transfers = await prisma.inventoryTransfer.findMany({
+      include: { items: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(transfers);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/inventory-transfers/:id', async (req, res) => {
+  try {
+    const transfer = await prisma.inventoryTransfer.findUnique({
+      where: { id: req.params.id },
+      include: { items: true }
+    });
+    if (!transfer) return res.status(404).json({ error: 'Transfer not found' });
+    res.json(transfer);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/inventory-transfers', async (req, res) => {
+  const { reference, date, fromLocation, toLocation, description, status, items } = req.body;
+  try {
+    const result = await prisma.inventoryTransfer.create({
+      data: {
+        reference,
+        date: parseDate(date),
+        fromLocation,
+        toLocation,
+        description,
+        status: status || 'Draft',
+        items: {
+          create: items.map((item: any) => ({
+            inventoryItem: item.inventoryItem,
+            qty: Number(item.qty)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('CREATE TRANSFER ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/inventory-transfers/:id', async (req, res) => {
+  const { id } = req.params;
+  const { reference, date, fromLocation, toLocation, description, status, items } = req.body;
+  try {
+    await prisma.inventoryTransferItem.deleteMany({ where: { inventoryTransferId: id } });
+    const result = await prisma.inventoryTransfer.update({
+      where: { id },
+      data: {
+        reference,
+        date: parseDate(date),
+        fromLocation,
+        toLocation,
+        description,
+        status: status || 'Draft',
+        items: {
+          create: items.map((item: any) => ({
+            inventoryItem: item.inventoryItem,
+            qty: Number(item.qty)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/inventory-write-offs', async (req, res) => {
+  try {
+    const writeOffs = await prisma.inventoryWriteOff.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(writeOffs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/inventory-write-offs/:id', async (req, res) => {
+  try {
+    const wo = await prisma.inventoryWriteOff.findUnique({
+      where: { id: req.params.id }
+    });
+    if (!wo) return res.status(404).json({ error: 'Write-off not found' });
+    res.json(wo);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/inventory-write-offs', async (req, res) => {
+  const { reference, date, inventoryItem, qty, account, allocation, taxCode, division, description, amount, status } = req.body;
+  try {
+    const result = await prisma.inventoryWriteOff.create({
+      data: {
+        reference,
+        date: parseDate(date),
+        inventoryItem,
+        qty: Number(qty),
+        account,
+        allocation,
+        taxCode,
+        division,
+        description,
+        amount: amount ? Number(amount) : undefined,
+        status: status || 'Draft'
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/inventory-write-offs/:id', async (req, res) => {
+  const { id } = req.params;
+  const { reference, date, inventoryItem, qty, account, allocation, taxCode, division, description, amount, status } = req.body;
+  try {
+    const result = await prisma.inventoryWriteOff.update({
+      where: { id },
+      data: {
+        reference,
+        date: parseDate(date),
+        inventoryItem,
+        qty: Number(qty),
+        account,
+        allocation,
+        taxCode,
+        division,
+        description,
+        amount: amount ? Number(amount) : undefined,
+        status: status || 'Draft'
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/debit-notes', (req, res) => res.json([]));
 app.get('/api/credit-notes', (req, res) => res.json([]));
 

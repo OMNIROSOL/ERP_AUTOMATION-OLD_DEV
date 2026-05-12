@@ -43,6 +43,7 @@ const InventoryItemsView = () => {
   }, []);
 
   const defaultColumns = [
+    { id: 'imageUrl', label: 'Image', visible: true },
     { id: 'itemCode', label: 'Item Code', visible: true },
     { id: 'itemName', label: 'Item Name', visible: true },
     { id: 'description', label: 'Description', visible: true },
@@ -97,7 +98,7 @@ const InventoryItemsView = () => {
       });
     }
     return result;
-  }, [searchQuery, sortConfig]);
+  }, [searchQuery, sortConfig, inventoryItems]);
 
   const totalPages = Math.ceil(filteredItems.length / pageSize) || 1;
   const currentSlice = filteredItems.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -258,12 +259,22 @@ const InventoryItemsView = () => {
                     const val = (item as any)[col.id];
                     return (
                       <td key={col.id} className="px-6 py-4">
-                        <span className={`text-[12px] font-medium ${['qtyOnHand', 'avgCost', 'totalValue'].includes(col.id) ? 'text-gray-900 font-bold' : 'text-gray-600'
-                          }`}>
-                          {['avgCost', 'totalValue'].includes(col.id)
-                            ? `ZMW ${(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                            : (val || '—')}
-                        </span>
+                        {col.id === 'imageUrl' ? (
+                          <div className="w-10 h-10 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center">
+                            {val ? (
+                              <img src={val} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Package size={14} className="text-gray-300" />
+                            )}
+                          </div>
+                        ) : (
+                          <span className={`text-[12px] font-medium ${['qtyOnHand', 'avgCost', 'totalValue'].includes(col.id) ? 'text-gray-900 font-bold' : 'text-gray-600'
+                            }`}>
+                            {['avgCost', 'totalValue'].includes(col.id)
+                              ? `ZMW ${(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                              : (val || '—')}
+                          </span>
+                        )}
                       </td>
                     );
                   })}

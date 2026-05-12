@@ -254,6 +254,7 @@ export interface InventoryItem {
   autoFillTaxCode?: boolean;
   hideItemName?: boolean;
   inactive?: boolean;
+  imageUrl?: string;
 }
 
 export interface InventoryTransfer {

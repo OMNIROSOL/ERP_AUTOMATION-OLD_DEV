@@ -48,6 +48,7 @@ model Item {
   purchasePrice      Decimal?            @default(0) @map("purchase_price") @db.Decimal(15, 2)
   sellingPrice       Decimal?            @default(0) @map("selling_price") @db.Decimal(15, 2)
   qtyOnHand          Decimal?            @default(0) @map("qty_on_hand") @db.Decimal(15, 2)
+  imageUrl           String?             @map("image_url")
   stockLedger        StockLedger[]
   deliveryItems      DeliveryNoteItem[]
   invoiceItems       InvoiceItem[]
@@ -232,6 +233,51 @@ model StockLedger {
 
   @@index([itemId, locationId], map: "idx_stock_master")
   @@map("stock_ledger")
+  @@schema("inventory")
+}
+
+model InventoryTransfer {
+  id           String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date         DateTime                @default(dbgenerated("CURRENT_DATE")) @db.Date
+  reference    String                  @unique
+  fromLocation String                  @map("from_location")
+  toLocation   String                  @map("to_location")
+  description  String?
+  status       String?                 @default("Draft")
+  createdAt    DateTime?               @default(now()) @map("created_at") @db.Timestamptz(6)
+  items        InventoryTransferItem[]
+
+  @@map("inventory_transfers")
+  @@schema("inventory")
+}
+
+model InventoryTransferItem {
+  id                  String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inventoryTransferId String            @map("inventory_transfer_id") @db.Uuid
+  inventoryItem       String            @map("inventory_item")
+  qty                 Decimal           @db.Decimal(12, 4)
+  transfer            InventoryTransfer @relation(fields: [inventoryTransferId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("inventory_transfer_items")
+  @@schema("inventory")
+}
+
+model InventoryWriteOff {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date          DateTime  @default(dbgenerated("CURRENT_DATE")) @db.Date
+  reference     String    @unique
+  inventoryItem String    @map("inventory_item")
+  qty           Decimal   @db.Decimal(12, 4)
+  account       String
+  allocation    String?
+  taxCode       String?   @map("tax_code")
+  division      String?
+  description   String?
+  amount        Decimal?  @db.Decimal(15, 2)
+  status        String?   @default("Draft")
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("inventory_write_offs")
   @@schema("inventory")
 }
 
