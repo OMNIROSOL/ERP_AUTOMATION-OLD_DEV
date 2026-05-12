@@ -66,7 +66,7 @@ const InventoryTransfersView = () => {
       });
     }
     return result;
-  }, [searchQuery, sortConfig]);
+  }, [searchQuery, sortConfig, transfers]);
 
   const totalPages = Math.ceil(filteredTransfers.length / pageSize) || 1;
   const currentSlice = filteredTransfers.slice((currentPage - 1) * pageSize, currentPage * pageSize);

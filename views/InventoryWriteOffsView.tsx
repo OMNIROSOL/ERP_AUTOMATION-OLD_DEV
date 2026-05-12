@@ -72,7 +72,7 @@ const InventoryWriteOffsView = () => {
       });
     }
     return result;
-  }, [searchQuery, sortConfig]);
+  }, [searchQuery, sortConfig, writeOffs]);
 
   const totalPages = Math.ceil(filteredWriteOffs.length / pageSize) || 1;
   const currentSlice = filteredWriteOffs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
