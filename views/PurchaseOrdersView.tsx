@@ -33,9 +33,11 @@ const PurchaseOrdersView = () => {
             'Order Date': true,
             'Reference': true,
             'Supplier': true,
+            'Qty on Deliver': true,
             'Description': true,
             'Amount': true,
             'Status': true,
+            'Approval': true,
             'Timestamp': true
         };
         const saved = localStorage.getItem('purchase_order_column_settings');
@@ -47,9 +49,11 @@ const PurchaseOrdersView = () => {
                     'orderdate': 'Order Date',
                     'reference': 'Reference',
                     'supplier': 'Supplier',
+                    'qtyondeliver': 'Qty on Deliver',
                     'description': 'Description',
                     'amount': 'Amount',
                     'status': 'Status',
+                    'approval': 'Approval',
                     'timestamp': 'Timestamp'
                 };
                 const normalizedId = mapping[col.id.toLowerCase()] || col.id;
@@ -71,9 +75,11 @@ const PurchaseOrdersView = () => {
                         'orderdate': 'Order Date',
                         'reference': 'Reference',
                         'supplier': 'Supplier',
+                        'qtyondeliver': 'Qty on Deliver',
                         'description': 'Description',
                         'amount': 'Amount',
                         'status': 'Status',
+                        'approval': 'Approval',
                         'timestamp': 'Timestamp'
                     };
                     const normalizedId = mapping[col.id.toLowerCase()] || col.id;
@@ -245,6 +251,12 @@ const PurchaseOrdersView = () => {
             accessor: (o: any) => <span className="font-medium text-slate-600 truncate max-w-[150px]" title={o.supplier}>{o.supplier}</span>
         },
         {
+            id: 'Qty on Deliver',
+            header: 'Qty on Deliver',
+            className: 'text-right',
+            accessor: (o: any) => <span className="font-bold text-slate-700">{o.qtyOnDeliver || 0}</span>
+        },
+        {
             id: 'Description',
             header: 'Description',
             accessor: (o: any) => <span className="text-xs text-slate-500 truncate max-w-[200px]" title={o.description}>{o.description || '—'}</span>
@@ -259,6 +271,18 @@ const PurchaseOrdersView = () => {
                     {o.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
             )
+        },
+        {
+            id: 'Timestamp',
+            header: <div onClick={() => handleSort('Timestamp')} className="cursor-pointer hover:text-indigo-600 transition-colors flex items-center gap-1">Timestamp <ArrowUpDown size={10} /></div>,
+            accessor: (o: any) => {
+                if (!o.timestamp) return <span className="text-[10px] text-slate-300">—</span>;
+                const d = new Date(o.timestamp);
+                const display = !isNaN(d.getTime())
+                    ? d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase()
+                    : o.timestamp;
+                return <span className="text-[10px] text-slate-400 font-medium font-sans whitespace-nowrap">{display}</span>;
+            }
         },
         {
             id: 'Approval',
@@ -289,20 +313,9 @@ const PurchaseOrdersView = () => {
                     )}
                 </div>
             )
-        },
-        {
-            id: 'Timestamp',
-            header: <div onClick={() => handleSort('Timestamp')} className="cursor-pointer hover:text-indigo-600 transition-colors flex items-center gap-1">Timestamp <ArrowUpDown size={10} /></div>,
-            accessor: (o: any) => {
-                if (!o.timestamp) return <span className="text-[10px] text-slate-300">—</span>;
-                const d = new Date(o.timestamp);
-                const display = !isNaN(d.getTime())
-                    ? d.toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase()
-                    : o.timestamp;
-                return <span className="text-[10px] text-slate-400 font-medium font-sans whitespace-nowrap">{display}</span>;
-            }
         }
     ];
+
 
     return (
         <div className="p-8 space-y-6 animate-in fade-in duration-500">
@@ -346,11 +359,11 @@ const PurchaseOrdersView = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <div className="mb-8 bg-white rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 overflow-x-auto custom-scrollbar">
                 <DataTable
                     data={isLoading ? [] : displayData}
                     columns={columns.filter(c => visibleColumns[c.id]) as any}
-                    tableClassName="min-w-[1000px]"
+                    tableClassName="min-w-[1440px]"
                     hideDefaultPagination={true}
                     disableInternalScroll={true}
                     emptyState={
@@ -380,6 +393,14 @@ const PurchaseOrdersView = () => {
                     tableFooter={
                         <tr className="bg-slate-50/50 font-black">
                             {columns.filter(c => visibleColumns[c.id]).map(col => {
+                                if (col.id === 'Qty on Deliver') {
+                                    const totalQty = filteredData.reduce((sum, o) => sum + (o.qtyOnDeliver || 0), 0);
+                                    return (
+                                        <td key={col.id} className="px-6 py-4 text-right">
+                                            <span className="text-[12px] underline decoration-slate-200 underline-offset-4">{totalQty.toLocaleString()}</span>
+                                        </td>
+                                    );
+                                }
                                 if (col.id === 'Amount') {
                                     const totalsByCurrency: Record<string, number> = {};
                                     filteredData.forEach(o => {

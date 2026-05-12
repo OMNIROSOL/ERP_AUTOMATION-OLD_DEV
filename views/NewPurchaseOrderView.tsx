@@ -728,86 +728,89 @@ const NewPurchaseOrderView = () => {
                             )}
                         </div>
 
-                        <div className="space-y-6 pt-6 border-t border-slate-50">
-                            <div className="flex items-center space-x-4">
-                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400">
-                                    <ImageIcon size={20} />
+                        {/* Attachment Area */}
+                        <div className="mt-6 pt-4 border-t border-slate-50 text-left">
+                            <div className="space-y-3 max-w-md">
+                                <div className="flex items-center space-x-2.5 mb-1 opacity-60">
+                                    <ImageIcon size={14} className="text-slate-400" />
+                                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Procurement Documentation</h3>
                                 </div>
-                                <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">Supporting Documentation</h2>
-                            </div>
-                            <div className="relative group">
-                                <input
-                                    type="file"
-                                    multiple
-                                    onChange={async (e) => {
-                                        const files = Array.from(e.target.files || []);
-                                        const newAttachments = await Promise.all(files.map(file => {
-                                            return new Promise((resolve) => {
-                                                const reader = new FileReader();
-                                                reader.onloadend = () => {
-                                                    resolve({
-                                                        name: file.name,
-                                                        type: file.type,
-                                                        size: file.size,
-                                                        data: reader.result
-                                                    });
-                                                };
-                                                reader.readAsDataURL(file);
-                                            });
-                                        }));
-                                        setOptions(prev => ({
-                                            ...prev,
-                                            attachments: [...(prev.attachments || []), ...newAttachments]
-                                        }));
-                                    }}
-                                    className="hidden"
-                                    id="file-upload"
-                                />
-                                <label
-                                    htmlFor="file-upload"
-                                    className="flex items-center w-full p-6 border-2 border-dashed border-slate-200 rounded-[32px] bg-slate-50/50 hover:bg-slate-50 hover:border-indigo-300 transition-all cursor-pointer group"
-                                >
-                                    <div className="flex items-center space-x-6">
-                                        <div className="w-14 h-14 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                            <Plus size={24} className="text-indigo-600" />
+                                <div className="relative group">
+                                    <input
+                                        type="file"
+                                        multiple
+                                        onChange={async (e) => {
+                                            const files = Array.from(e.target.files || []);
+                                            const newAttachments = await Promise.all(files.map(file => {
+                                                return new Promise((resolve) => {
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => {
+                                                        resolve({
+                                                            name: file.name,
+                                                            type: file.type,
+                                                            size: file.size,
+                                                            data: reader.result
+                                                        });
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                });
+                                            }));
+                                            setOptions(prev => ({
+                                                ...prev,
+                                                attachments: [...(prev.attachments || []), ...newAttachments]
+                                            }));
+                                        }}
+                                        className="hidden"
+                                        id="file-upload"
+                                    />
+                                    <label
+                                        htmlFor="file-upload"
+                                        className="group relative flex items-center bg-slate-50 border border-slate-200 border-dashed rounded-xl px-4 py-2 cursor-pointer hover:bg-white hover:border-indigo-300 transition-all duration-300 w-full"
+                                    >
+                                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-slate-400 mr-3 group-hover:text-indigo-500 transition-colors shadow-sm">
+                                            <Plus size={16} className={cn("transition-transform duration-300", (options.attachments || []).length > 0 ? "rotate-45" : "")} />
                                         </div>
-                                        <div className="text-left">
-                                            <p className="text-sm font-black text-slate-800">Attach Documents</p>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Specs, Plans or References</p>
+                                        <div className="flex-1 min-w-0 text-left">
+                                            <p className="text-[12px] font-bold text-slate-700 truncate leading-tight">
+                                                {(options.attachments || []).length === 0 ? 'Attach Technical Specs' : `${(options.attachments || []).length} Files Attached`}
+                                            </p>
+                                            <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider leading-tight">
+                                                Specs, plans or references
+                                            </p>
                                         </div>
-                                    </div>
-                                </label>
-                            </div>
+                                    </label>
+                                </div>
 
-                            {/* File List */}
-                            {(options.attachments || []).length > 0 && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4 animate-in fade-in slide-in-from-top-4 duration-500">
-                                    {(options.attachments || []).map((file: any, idx: number) => (
-                                        <div key={idx} className="flex items-center justify-between p-4 bg-white border border-slate-100 rounded-2xl shadow-sm group hover:border-indigo-100 transition-all">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-                                                    <FileText size={16} />
+                                {/* File List */}
+                                {(options.attachments || []).length > 0 && (
+                                    <div className="space-y-2 mt-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                                        {(options.attachments || []).map((file: any, idx: number) => (
+                                            <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm group hover:border-indigo-100 transition-all">
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                                        <FileText size={14} />
+                                                    </div>
+                                                    <div className="max-w-[200px]">
+                                                        <p className="text-[11px] font-bold text-slate-700 truncate">{file.name}</p>
+                                                        <p className="text-[9px] text-slate-400 font-medium uppercase tracking-tighter">{(file.size / 1024).toFixed(1)} KB</p>
+                                                    </div>
                                                 </div>
-                                                <div className="max-w-[150px]">
-                                                    <p className="text-[11px] font-bold text-slate-700 truncate">{file.name}</p>
-                                                    <p className="text-[9px] text-slate-400 font-medium uppercase tracking-tighter">{(file.size / 1024).toFixed(1)} KB</p>
-                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        setOptions(prev => ({
+                                                            ...prev,
+                                                            attachments: prev.attachments.filter((_: any, i: number) => i !== idx)
+                                                        }));
+                                                    }}
+                                                    className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
                                             </div>
-                                            <button
-                                                onClick={() => {
-                                                    setOptions(prev => ({
-                                                        ...prev,
-                                                        attachments: prev.attachments.filter((_: any, i: number) => i !== idx)
-                                                    }));
-                                                }}
-                                                className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         <div className="flex justify-end space-x-4 pt-8">

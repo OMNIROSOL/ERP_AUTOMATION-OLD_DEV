@@ -1348,8 +1348,12 @@ app.get('/api/purchase-orders', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    console.log(`[PO GET] Fetched ${orders.length} orders:`, orders.map(o => ({ ref: o.reference, status: o.status })));
-    res.json(orders);
+    const ordersWithQty = orders.map(o => ({
+      ...o,
+      qtyOnDeliver: o.items.reduce((sum, item) => sum + Number(item.qty), 0)
+    }));
+    console.log(`[PO GET] Fetched ${orders.length} orders:`, ordersWithQty.map(o => ({ ref: o.reference, status: o.status, qty: o.qtyOnDeliver })));
+    res.json(ordersWithQty);
   } catch (err: any) {
     console.error('GET PURCHASE ORDERS ERROR:', err);
     res.status(500).json({ error: err.message });
