@@ -20,7 +20,7 @@ async function check() {
     const columns: any = await prisma.$queryRaw`
       SELECT column_name, data_type 
       FROM information_schema.columns 
-      WHERE table_schema = 'sales' AND table_name = 'quote_items'
+      WHERE table_schema = 'purchase' AND table_name = 'purchase_order_items'
     `;
 
     console.log('Columns in sales.quote_items:');

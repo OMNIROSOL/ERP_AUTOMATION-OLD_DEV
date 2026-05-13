@@ -33,33 +33,41 @@ const PurchaseOrdersView = () => {
             'Order Date': true,
             'Reference': true,
             'Supplier': true,
-            'Qty on Deliver': true,
+            'Qty on Order': true,
             'Description': true,
             'Amount': true,
-            'Status': true,
-            'Approval': true,
-            'Timestamp': true
+            'Timestamp': true,
+            'Approval': true
         };
         const saved = localStorage.getItem('purchase_order_column_settings');
         if (saved) {
             const parsed = JSON.parse(saved);
             const record: Record<string, boolean> = { 'Actions': true };
+            const validIds = ['Order Date', 'Reference', 'Supplier', 'Qty on Order', 'Description', 'Amount', 'Timestamp', 'Approval'];
+            
             parsed.forEach((col: any) => {
                 const mapping: Record<string, string> = {
                     'orderdate': 'Order Date',
                     'reference': 'Reference',
                     'supplier': 'Supplier',
-                    'qtyondeliver': 'Qty on Deliver',
+                    'qtyondeliver': 'Qty on Order',
                     'description': 'Description',
                     'amount': 'Amount',
-                    'status': 'Status',
                     'approval': 'Approval',
                     'timestamp': 'Timestamp'
                 };
-                const normalizedId = mapping[col.id.toLowerCase()] || col.id;
-                record[normalizedId] = col.visible;
+                const id = mapping[col.id.toLowerCase().replace(/\s/g, '')] || col.id;
+                if (validIds.includes(id)) {
+                    record[id] = col.visible;
+                }
             });
-            return { ...defaultVisible, ...record };
+            
+            // Ensure all valid columns have a value
+            validIds.forEach(id => {
+                if (record[id] === undefined) record[id] = true;
+            });
+            
+            return record;
         }
         return defaultVisible;
     });
@@ -75,10 +83,9 @@ const PurchaseOrdersView = () => {
                         'orderdate': 'Order Date',
                         'reference': 'Reference',
                         'supplier': 'Supplier',
-                        'qtyondeliver': 'Qty on Deliver',
+                        'qtyondeliver': 'Qty on Order',
                         'description': 'Description',
                         'amount': 'Amount',
-                        'status': 'Status',
                         'approval': 'Approval',
                         'timestamp': 'Timestamp'
                     };
@@ -231,7 +238,16 @@ const PurchaseOrdersView = () => {
         {
             id: 'Order Date',
             header: 'Order Date',
-            accessor: (o: any) => <span className="font-medium text-[13px] text-slate-800 whitespace-nowrap">{o.orderDate}</span>
+            accessor: (o: any) => {
+                if (!o.orderDate) return '—';
+                try {
+                    const d = new Date(o.orderDate);
+                    if (isNaN(d.getTime())) return o.orderDate;
+                    return d.toLocaleDateString('en-GB').replace(/\//g, '.');
+                } catch {
+                    return o.orderDate;
+                }
+            }
         },
         {
             id: 'Reference',
@@ -251,8 +267,8 @@ const PurchaseOrdersView = () => {
             accessor: (o: any) => <span className="font-medium text-slate-600 truncate max-w-[150px]" title={o.supplier}>{o.supplier}</span>
         },
         {
-            id: 'Qty on Deliver',
-            header: 'Qty on Deliver',
+            id: 'Qty on Order',
+            header: 'Qty on Order',
             className: 'text-right',
             accessor: (o: any) => <span className="font-bold text-slate-700">{o.qtyOnDeliver || 0}</span>
         },
@@ -318,7 +334,7 @@ const PurchaseOrdersView = () => {
 
 
     return (
-        <div className="p-8 space-y-6 animate-in fade-in duration-500">
+        <div className="p-8 space-y-6 animate-in fade-in duration-500 min-w-[1500px] font-sans">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">
@@ -359,7 +375,7 @@ const PurchaseOrdersView = () => {
                 </div>
             </div>
 
-            <div className="mb-8 bg-white rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50 overflow-x-auto custom-scrollbar">
+            <div className="mb-8 bg-white rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50">
                 <DataTable
                     data={isLoading ? [] : displayData}
                     columns={columns.filter(c => visibleColumns[c.id]) as any}
@@ -393,11 +409,11 @@ const PurchaseOrdersView = () => {
                     tableFooter={
                         <tr className="bg-slate-50/50 font-black">
                             {columns.filter(c => visibleColumns[c.id]).map(col => {
-                                if (col.id === 'Qty on Deliver') {
+                                if (col.id === 'Qty on Order') {
                                     const totalQty = filteredData.reduce((sum, o) => sum + (o.qtyOnDeliver || 0), 0);
                                     return (
                                         <td key={col.id} className="px-6 py-4 text-right">
-                                            <span className="text-[12px] underline decoration-slate-200 underline-offset-4">{totalQty.toLocaleString()}</span>
+                                            <span className="text-[12px] font-black tracking-tight">{totalQty.toLocaleString()}</span>
                                         </td>
                                     );
                                 }
@@ -414,10 +430,17 @@ const PurchaseOrdersView = () => {
                                                 {activeCurs.map(cur => (
                                                     <div key={cur} className="flex items-center justify-end gap-1.5">
                                                         <span className="text-[9px] text-slate-400 uppercase tracking-tight">{cur}</span>
-                                                        <span className="text-[12px] underline decoration-slate-200 underline-offset-4">{totalsByCurrency[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                        <span className="text-[12px] font-black tracking-tight">{totalsByCurrency[cur].toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                     </div>
                                                 ))}
                                             </div>
+                                        </td>
+                                    );
+                                }
+                                if (col.id === 'Supplier') {
+                                    return (
+                                        <td key={col.id} className="px-6 py-4">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">GRAND TOTALS:</p>
                                         </td>
                                     );
                                 }
@@ -428,7 +451,7 @@ const PurchaseOrdersView = () => {
                 />
             </div>
 
-            <div className="flex flex-col md:flex-row items-center justify-between bg-white px-8 py-6 rounded-[32px] border border-slate-100 shadow-sm gap-8 mt-8">
+            <div className="flex flex-col md:flex-row items-center justify-between bg-white px-6 py-4 rounded-[24px] border border-slate-100 shadow-sm gap-8 mt-4">
                 <div className="flex flex-col items-start gap-1">
                     <div className="flex items-center gap-2 text-slate-400">
                         <button
@@ -461,7 +484,7 @@ const PurchaseOrdersView = () => {
                             <ChevronsRight size={18} strokeWidth={1.5} />
                         </button>
                     </div>
-                    <div className="flex items-center gap-6 mt-1">
+                    <div className="flex items-center gap-4 mt-0.5">
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">SHOW PER PAGE:</span>
                         <div className="flex items-center gap-4">
                             {[50, 100, 250, 500].map(size => (

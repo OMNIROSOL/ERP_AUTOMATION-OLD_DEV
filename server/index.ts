@@ -1385,7 +1385,9 @@ app.post('/api/purchase-enquiries', async (req, res) => {
             unitPrice: Number(item.unitPrice),
             taxCode: item.taxCode || 'VAT 16%',
             unit: item.unit || '',
-            totalAmount: Number(item.totalAmount)
+            totalAmount: Number(item.totalAmount),
+            discount: item.discount || '',
+            division: item.division || 'General'
           }))
         }
       }
@@ -1421,7 +1423,9 @@ app.put('/api/purchase-enquiries/:id', async (req, res) => {
             unitPrice: Number(item.unitPrice),
             taxCode: item.taxCode || 'VAT 16%',
             unit: item.unit || '',
-            totalAmount: Number(item.totalAmount)
+            totalAmount: Number(item.totalAmount),
+            discount: item.discount || '',
+            division: item.division || 'General'
           }))
         }
       }
@@ -1454,7 +1458,7 @@ app.patch('/api/purchase-enquiries/:id', async (req, res) => {
         if (!existingPO) {
           // Use the Enquiry's existing reference instead of generating a new PO reference
           const poReference = enquiry.reference || `PO-${Date.now()}`;
-          
+
           await tx.purchaseOrder.create({
             data: {
               reference: poReference,
@@ -1492,8 +1496,8 @@ app.patch('/api/purchase-enquiries/:id', async (req, res) => {
 app.get('/api/purchase-orders', async (req, res) => {
   try {
     const orders = await prisma.purchaseOrder.findMany({
-      include: { 
-        supplier: true, 
+      include: {
+        supplier: true,
         items: {
           include: { item: true }
         }
@@ -1516,8 +1520,8 @@ app.get('/api/purchase-orders/:id', async (req, res) => {
   try {
     const order = await prisma.purchaseOrder.findUnique({
       where: { id: req.params.id },
-      include: { 
-        supplier: true, 
+      include: {
+        supplier: true,
         items: {
           include: { item: true }
         }
@@ -1545,31 +1549,81 @@ app.patch('/api/purchase-orders/:id', async (req, res) => {
 });
 
 app.post('/api/purchase-orders', async (req, res) => {
+  console.log('>>> [PURCHASE ORDER POST] RECEIVED REQUEST');
+  console.log('[PO CREATE BODY]:', JSON.stringify(req.body, null, 2));
   const { supplierId, reference, items, amount, currency, description, orderDate, status, docOptions } = req.body;
   try {
+    const existing = await prisma.purchaseOrder.findUnique({
+      where: { reference }
+    });
+    if (existing) {
+      return res.status(400).json({ error: `A purchase order with reference ${reference} already exists.` });
+    }
     const result = await prisma.purchaseOrder.create({
       data: {
         supplierId,
         reference,
-        amount: Number(amount),
-        currency,
-        description,
-        orderDate: orderDate ? new Date(orderDate) : undefined,
+        amount: Number(amount) || 0,
+        currency: currency || 'ZMW',
+        description: description || '',
+        orderDate: orderDate ? parseDate(orderDate) : undefined,
         status: status || 'Open',
         docOptions: docOptions || {},
         items: {
-          create: items.map((item: any) => ({
-            itemId: item.itemId || null,
-            description: item.description,
-            qty: Number(item.qty),
-            unitPrice: Number(item.unitPrice),
-            totalAmount: Number(item.totalAmount)
+          create: (items || []).map((item: any) => ({
+            itemId: item.itemId || undefined,
+            description: item.description || '',
+            qty: Number(item.qty) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+            totalAmount: Number(item.totalAmount) || 0,
+            taxCode: item.taxCode || 'VAT 16%',
+            discount: item.discount || '',
+            division: item.division || 'General'
           }))
         }
       }
     });
     res.json(result);
   } catch (err: any) {
+    console.error('[PURCHASE ORDER CREATE ERROR]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/purchase-orders/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log(`>>> [PURCHASE ORDER PUT] UPDATING ID: ${id}`);
+  const { supplierId, reference, items, amount, currency, description, orderDate, status, docOptions } = req.body;
+  try {
+    const result = await prisma.purchaseOrder.update({
+      where: { id },
+      data: {
+        supplierId,
+        reference,
+        amount: Number(amount) || 0,
+        currency: currency || 'ZMW',
+        description: description || '',
+        orderDate: orderDate ? parseDate(orderDate) : undefined,
+        status: status || 'Open',
+        docOptions: docOptions || {},
+        items: {
+          deleteMany: {}, // Atomically delete all existing items for this PO
+          create: (items || []).map((item: any) => ({
+            itemId: item.itemId || undefined,
+            description: item.description || '',
+            qty: Number(item.qty) || 0,
+            unitPrice: Number(item.unitPrice) || 0,
+            totalAmount: Number(item.totalAmount) || 0,
+            taxCode: item.taxCode || 'VAT 16%',
+            discount: item.discount || '',
+            division: item.division || 'General'
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[PURCHASE ORDER UPDATE ERROR]:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -24,11 +24,21 @@ const PurchaseInvoicesView = () => {
     const [columnVisibility, setColumnVisibility] = useState({
         'Actions': true,
         'Issue date': true,
+        'Due date': true,
         'Reference': true,
+        'Purchase Order': true,
         'Supplier': true,
-        'Amount': true,
+        'Description': true,
+        'Project': false,
+        'Closed invoice': true,
+        'Withholding tax': false,
+        'Discount': false,
+        'Invoice Amount': true,
         'Balance due': true,
-        'Status': true
+        'Days to Due Date': false,
+        'Days overdue': false,
+        'Status': true,
+        'Timestamp': false
     });
 
     useEffect(() => {

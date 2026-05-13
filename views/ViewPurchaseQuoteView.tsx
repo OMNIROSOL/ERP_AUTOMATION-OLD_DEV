@@ -77,55 +77,60 @@ const ViewPurchaseQuoteView = () => {
     const supplierEmail = supplierData?.email || (quote?.supplier && typeof quote.supplier === 'string' ? `${quote.supplier.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
 
     const totals = useMemo(() => {
-        if (!quote) return { subtotal: 0, tax: 0, total: 0 };
-        const quoteAmount = parseFloat(quote.quoteAmount as any) || 0;
-        const isTaxInclusive = quote.options?.amountsAreTaxInclusive || false;
-
-        if (!quote.items || quote.items.length === 0) {
-            const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
-            const taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
-            const tax = isTaxInclusive ? quoteAmount * taxRate / (1 + taxRate) : quoteAmount * taxRate;
-            return { subtotal: isTaxInclusive ? quoteAmount - tax : quoteAmount, tax, total: quoteAmount };
-        }
+        if (!quote) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0 };
+        const dOptions = quote.docOptions || quote.options || {};
+        const isTaxInclusive = dOptions.amountsAreTaxInclusive || false;
 
         let subtotal = 0;
         let tax = 0;
-        quote.items.forEach(item => {
+        const lineCalcs = (quote.items || []).map(item => {
             const qty = parseFloat(item.qty as any) || 0;
             const price = parseFloat(item.unitPrice as any) || 0;
-            const lineTotal = qty * price;
-            
-            let taxRate = 0;
+            const discountValue = parseFloat(item.discount as any) || 0;
+
+            let netTotal = qty * price;
+            if (dOptions.columnDiscount) {
+                if (dOptions.columnDiscountType === 'Percentage') netTotal *= (1 - (discountValue / 100));
+                else netTotal = Math.max(0, netTotal - discountValue);
+            }
+
+            let taxAmount = 0;
             const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
-            const selectedTax = taxCodes.find(tc => 
-                tc.id === item.taxCode || 
-                tc.name.toLowerCase() === itemTaxCode ||
-                (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
-                (itemTaxCode === 'exempt' && tc.name === 'Exempt')
+            const selectedTax = taxCodes.find(tc =>
+                tc.id === item.taxCode ||
+                tc.name.toLowerCase() === itemTaxCode
             );
-            
-            if (selectedTax) {
-                taxRate = parseFloat(selectedTax.rate) / 100;
-            } else {
-                // Fallback for historical data - check if it looks like it should be 16%
-                if (itemTaxCode.includes('16') || itemTaxCode.includes('vat') || !itemTaxCode) {
-                    const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
-                    taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
+            const taxRate = selectedTax ? (parseFloat(selectedTax.rate) / 100) : 0;
+
+            if (taxRate > 0) {
+                if (isTaxInclusive) {
+                    taxAmount = netTotal - (netTotal / (1 + taxRate));
+                    netTotal -= taxAmount;
                 } else {
-                    taxRate = 0; // Default to 0 for unknown non-empty tax codes
+                    taxAmount = netTotal * taxRate;
                 }
             }
 
-            if (isTaxInclusive) {
-                const lineTax = lineTotal - (lineTotal / (1 + taxRate));
-                tax += lineTax;
-                subtotal += (lineTotal - lineTax);
-            } else {
-                subtotal += lineTotal;
-                tax += lineTotal * taxRate;
-            }
+            subtotal += netTotal;
+            tax += taxAmount;
+            return { taxAmount, netTotal, grossTotal: netTotal + taxAmount };
         });
-        return { subtotal, tax, total: quoteAmount || (subtotal + tax) };
+
+        let grandTotal = subtotal + tax;
+        if (dOptions.rounding) {
+            if (dOptions.roundingType === 'Round to nearest') grandTotal = Math.round(grandTotal);
+            else if (dOptions.roundingType === 'Round down') grandTotal = Math.floor(grandTotal);
+        }
+
+        let whtAmount = 0;
+        if (dOptions.withholdingTax) {
+            const whtVal = parseFloat(dOptions.withholdingTaxValue) || 0;
+            if (dOptions.withholdingTaxType === 'Rate') whtAmount = subtotal * (whtVal / 100);
+            else whtAmount = whtVal;
+            grandTotal -= whtAmount;
+        }
+
+        return { subtotal, tax, total: grandTotal, whtAmount, lineCalcs };
     }, [quote, taxCodes]);
 
     useEffect(() => {
@@ -432,57 +437,41 @@ const ViewPurchaseQuoteView = () => {
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unit Price</th>
+                                    {(quote.docOptions || quote.options)?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Discount</th>}
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {quote.items && quote.items.length > 0 ? quote.items.map((item: any, idx: number) => (
-                                    <tr key={idx}>
-                                        <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>
-                                        <td className="px-4 py-4">
-                                            <p className="font-semibold text-slate-900">
-                                                {item.itemName || (typeof item.item === 'object' ? item.item?.itemName : item.item) || inventoryItems.find(i => i.id === item.itemId)?.itemName || '-'}
-                                            </p>
-                                        </td>
-                                        <td className="px-4 py-4">
-                                            <p className="text-gray-500">{item.description || '-'}</p>
-                                        </td>
-                                        <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
-                                        <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                        <td className="px-4 py-4 text-right font-medium text-slate-400">
-                                            {(() => {
-                                                const qty = parseFloat(item.qty as any) || 0;
-                                                const price = parseFloat(item.unitPrice as any) || 0;
-                                                const lineTotal = qty * price;
-                                                const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
-                                                const selectedTax = taxCodes.find(tc => 
-                                                    tc.id === item.taxCode || 
-                                                    tc.name.toLowerCase() === itemTaxCode
-                                                );
-                                                const rate = selectedTax ? parseFloat(selectedTax.rate) / 100 : 0.16;
-                                                const tax = quote.options?.amountsAreTaxInclusive ? (lineTotal * rate) / (1 + rate) : lineTotal * rate;
-                                                return tax.toLocaleString(undefined, { minimumFractionDigits: 2 });
-                                            })()}
-                                        </td>
-                                        <td className="px-4 py-4 text-right font-semibold">
-                                            {(() => {
-                                                const qty = parseFloat(item.qty as any) || 0;
-                                                const price = parseFloat(item.unitPrice as any) || 0;
-                                                const lineTotal = qty * price;
-                                                const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
-                                                const selectedTax = taxCodes.find(tc => 
-                                                    tc.id === item.taxCode || 
-                                                    tc.name.toLowerCase() === itemTaxCode
-                                                );
-                                                const rate = selectedTax ? parseFloat(selectedTax.rate) / 100 : 0.16;
-                                                const tax = quote.options?.amountsAreTaxInclusive ? (lineTotal * rate) / (1 + rate) : lineTotal * rate;
-                                                const total = quote.options?.amountsAreTaxInclusive ? lineTotal : lineTotal + tax;
-                                                return total.toLocaleString(undefined, { minimumFractionDigits: 2 });
-                                            })()}
-                                        </td>
-                                    </tr>
-                                )) : (
+                                {quote.items && quote.items.length > 0 ? quote.items.map((item: any, idx: number) => {
+                                    const calc = totals.lineCalcs[idx];
+                                    return (
+                                        <tr key={idx}>
+                                            <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>
+                                            <td className="px-4 py-4">
+                                                <p className="font-semibold text-slate-900">
+                                                    {item.itemName || (typeof item.item === 'object' ? item.item?.itemName : item.item) || inventoryItems.find(i => i.id === item.itemId)?.itemName || '-'}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                <p className="text-gray-500">{item.description || '-'}</p>
+                                            </td>
+                                            <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
+                                            <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                            {(quote.docOptions || quote.options)?.columnDiscount && (
+                                                <td className="px-4 py-4 text-right font-medium text-slate-400">
+                                                    {item.discount || '0.00'}
+                                                </td>
+                                            )}
+                                            <td className="px-4 py-4 text-right font-medium text-slate-400">
+                                                {calc.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="px-4 py-4 text-right font-semibold">
+                                                {calc.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </td>
+                                        </tr>
+                                    );
+                                }) : (
                                     <tr>
                                         <td className="px-4 py-5 text-slate-400 font-medium text-[12px]">1</td>
                                         <td className="px-4 py-5 font-semibold text-slate-900">General Item</td>
@@ -501,19 +490,25 @@ const ViewPurchaseQuoteView = () => {
                         {/* Summary Section */}
                         <div className="w-80 space-y-3">
                             <div className="flex justify-between items-center text-gray-500">
-                                <span className="text-[11px] font-bold uppercase tracking-widest">{quote.options?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">{(quote.docOptions || quote.options)?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
                                 <span className="font-semibold tabular-nums">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center text-gray-500 pb-2 border-b border-gray-50">
                                 <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Tax Amount</span>
                                 <span className="font-semibold tabular-nums">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
+                            {(quote.docOptions || quote.options)?.withholdingTax && (
+                                <div className="flex justify-between items-center text-rose-500">
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">Withholding Tax</span>
+                                    <span className="font-semibold tabular-nums">-{totals.whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 mt-4 print-bg-slate-50">
                                 <span className="text-[12px] font-black uppercase tracking-[0.3em] text-indigo-400">Total</span>
                                 <div className="text-right">
                                     <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">{quote.currency?.split(' ')[0] || 'ZMW'}</p>
                                     <p className="text-2xl font-bold text-slate-900 tracking-tighter tabular-nums">
-                                        {(parseFloat((quote as any).amount || quote.quoteAmount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        {totals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </p>
                                 </div>
                             </div>

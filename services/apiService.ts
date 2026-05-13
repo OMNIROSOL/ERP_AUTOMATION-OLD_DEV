@@ -127,6 +127,7 @@ export const apiService = {
   getPurchaseOrder: (id: string) => api.get(`/purchase-orders/${id}`).then(res => res.data),
   createPurchaseOrder: (data: any) => api.post('/purchase-orders', data).then(res => res.data),
   updatePurchaseOrder: (id: string, data: any) => api.put(`/purchase-orders/${id}`, data).then(res => res.data),
+  updatePurchaseOrder: (id: string, data: any) => api.put(`/purchase-orders/${id}`, data).then(res => res.data),
   updatePurchaseOrderStatus: (id: string, status: string) => api.patch(`/purchase-orders/${id}`, { status }).then(res => res.data),
 
   getPurchaseInvoices: () => api.get('/purchase-invoices').then(res => res.data),

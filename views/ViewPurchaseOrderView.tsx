@@ -79,74 +79,61 @@ const ViewPurchaseOrderView = () => {
     const supplierEmail = supplierData?.email || (supplierName ? `${supplierName.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
 
     const totals = useMemo(() => {
-        if (!order) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0 };
-        const isTaxInclusive = order.options?.amountsAreTaxInclusive || false;
+        if (!order) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0, lineCalcs: [] };
+        const opts = order.docOptions || order.options || {};
+        const isTaxInclusive = opts.amountsAreTaxInclusive || false;
         let subtotal = 0;
         let tax = 0;
 
-        if (order.items && order.items.length > 0) {
-            order.items.forEach((item: any) => {
-                const qty = parseFloat(item.qty as any) || 0;
-                const price = parseFloat(item.unitPrice as any) || 0;
-                const discountValue = parseFloat(item.discount || '0') || 0;
+        const lineCalcs = (order.items || []).map((item: any) => {
+            const qty = parseFloat(item.qty as any) || 0;
+            const price = parseFloat(item.unitPrice as any) || 0;
+            const discountValue = parseFloat(item.discount || '0') || 0;
 
-                let lineTotal = qty * price;
-                if (order.options?.columnDiscount) {
-                    if (order.options?.columnDiscountType === 'Percentage') lineTotal *= (1 - (discountValue / 100));
-                    else lineTotal = Math.max(0, lineTotal - discountValue);
-                }
-
-                let taxRate = 0;
-                const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
-                const selectedTax = taxCodes.find(tc => 
-                    tc.id === item.taxCode || 
-                    tc.name.toLowerCase() === itemTaxCode ||
-                    (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
-                    (itemTaxCode === 'exempt' && tc.name === 'Exempt')
-                );
-                
-                if (selectedTax) {
-                    taxRate = parseFloat(selectedTax.rate) / 100;
-                } else {
-                    // Fallback for historical data - check if it looks like it should be 16%
-                    if (itemTaxCode.includes('16') || itemTaxCode.includes('vat') || !itemTaxCode) {
-                        const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
-                        taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
-                    } else {
-                        taxRate = 0; // Default to 0 for unknown non-empty tax codes
-                    }
-                }
-
-                if (isTaxInclusive) {
-                    const lineTax = lineTotal - (lineTotal / (1 + taxRate));
-                    tax += lineTax;
-                    subtotal += (lineTotal - lineTax);
-                } else {
-                    subtotal += lineTotal;
-                    tax += lineTotal * taxRate;
-                }
-            });
-        } else {
-            const grandTotal = parseFloat(order.amount as any) || 0;
-            const defaultTax = taxCodes.find(tc => tc.name === 'VAT 16%') || { rate: 16 };
-            const taxRate = (parseFloat(defaultTax.rate) || 16) / 100;
-            if (isTaxInclusive) {
-                tax = grandTotal - (grandTotal / (1 + taxRate));
-                subtotal = grandTotal - tax;
-            } else {
-                subtotal = grandTotal;
-                tax = grandTotal * taxRate;
+            let netTotal = qty * price;
+            if (opts.columnDiscount) {
+                if (opts.columnDiscountType === 'Percentage') netTotal *= (1 - (discountValue / 100));
+                else netTotal = Math.max(0, netTotal - discountValue);
             }
+
+            let taxAmount = 0;
+            const itemTaxCode = (item.taxCode || '').toString().toLowerCase().trim();
+            const selectedTax = taxCodes.find(tc => 
+                tc.id === item.taxCode || 
+                tc.name.toLowerCase() === itemTaxCode ||
+                (itemTaxCode === 'zero rated' && tc.name === 'Zero Rated') ||
+                (itemTaxCode === 'exempt' && tc.name === 'Exempt')
+            );
+            
+            const taxRate = selectedTax ? (parseFloat(selectedTax.rate) / 100) : 0;
+
+            if (isTaxInclusive) {
+                taxAmount = netTotal - (netTotal / (1 + taxRate));
+                netTotal = netTotal - taxAmount;
+            } else {
+                taxAmount = netTotal * taxRate;
+            }
+
+            subtotal += netTotal;
+            tax += taxAmount;
+            return { taxAmount, grossTotal: netTotal + taxAmount, netTotal };
+        });
+
+        let grandTotal = subtotal + tax;
+        if (opts.rounding) {
+            if (opts.roundingType === 'Round to nearest') grandTotal = Math.round(grandTotal);
+            else if (opts.roundingType === 'Round down') grandTotal = Math.floor(grandTotal);
         }
 
         let whtAmount = 0;
-        if (order.options?.withholdingTax) {
-            const whtVal = parseFloat(order.options.withholdingTaxValue) || 0;
-            if (order.options.withholdingTaxType === 'Rate') whtAmount = subtotal * (whtVal / 100);
+        if (opts.withholdingTax) {
+            const whtVal = parseFloat(opts.withholdingTaxValue) || 0;
+            if (opts.withholdingTaxType === 'Rate') whtAmount = subtotal * (whtVal / 100);
             else whtAmount = whtVal;
+            grandTotal -= whtAmount;
         }
 
-        return { subtotal, tax, total: subtotal + tax - whtAmount, whtAmount };
+        return { subtotal, tax, total: grandTotal, whtAmount, lineCalcs };
     }, [order, taxCodes]);
 
     const handleStatusChange = async (newStatus: string, shouldInvoice: boolean = false) => {
@@ -212,22 +199,6 @@ const ViewPurchaseOrderView = () => {
                         <Edit size={14} className="text-blue-600" /> Edit
                     </button>
 
-                    {(order.status === 'Draft' || order.status === 'Pending' || order.status === 'Ordered' || order.status === 'Pending Approval' || order.status === 'Open') && (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => handleStatusChange('Invoiced', true)}
-                                className="bg-emerald-600 text-white border border-emerald-700 px-4 py-1.5 text-[12px] font-bold rounded shadow-sm hover:bg-emerald-700 flex items-center gap-2 transition-all"
-                            >
-                                <CheckCircle2 size={14} /> Approve & Invoice
-                            </button>
-                            <button
-                                onClick={() => handleStatusChange('Rejected')}
-                                className="bg-white border border-rose-200 px-4 py-1.5 text-[12px] font-bold text-rose-600 rounded shadow-sm hover:bg-rose-50 flex items-center gap-2"
-                            >
-                                <XCircle size={14} /> Reject
-                            </button>
-                        </div>
-                    )}
 
                     <div className="relative" ref={dropdownRef}>
                         <button
@@ -414,7 +385,18 @@ const ViewPurchaseOrderView = () => {
                                     <div className="space-y-3">
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Order Date:</span>
-                                            <span className="font-semibold">{order.orderDate}</span>
+                                            <span className="font-semibold">
+                                                {(() => {
+                                                    if (!order.orderDate) return '—';
+                                                    try {
+                                                        const d = new Date(order.orderDate);
+                                                        if (isNaN(d.getTime())) return order.orderDate;
+                                                        return d.toLocaleDateString('en-GB').replace(/\//g, '.');
+                                                    } catch {
+                                                        return order.orderDate;
+                                                    }
+                                                })()}
+                                            </span>
                                         </div>
                                         <div className="flex">
                                             <span className="w-32 text-gray-500">Currency:</span>
@@ -441,40 +423,45 @@ const ViewPurchaseOrderView = () => {
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unit Price</th>
-                                    {order.options?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc</th>}
-                                    {!order.options?.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>}
+                                    {order.docOptions?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Disc</th>}
+                                    {!order.docOptions?.amountsAreTaxInclusive && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>}
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {order.items && order.items.length > 0 ? order.items.map((item: any, idx: number) => (
-                                    <tr key={idx}>
-                                        {order.options?.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
-                                        <td className="px-4 py-4">
-                                            <p className="font-semibold text-slate-900">
-                                                {item.item?.itemName || item.itemName || (typeof item.item === 'string' ? item.item : '-') }
-                                            </p>
-                                        </td>
-                                        <td className="px-4 py-4">
-                                            <p className="text-gray-500">{item.description || '-'}</p>
-                                        </td>
-                                        <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
-                                        <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                        {order.options?.columnDiscount && (
-                                            <td className="px-4 py-4 text-right">
-                                                <span className="text-xs font-bold text-rose-500">
-                                                    {item.discount ? (order.options.columnDiscountType === 'Percentage' ? `${item.discount}%` : parseFloat(item.discount).toLocaleString()) : '-'}
-                                                </span>
+                                {order.items && order.items.length > 0 ? order.items.map((item: any, idx: number) => {
+                                    const calc = totals.lineCalcs[idx];
+                                    return (
+                                        <tr key={idx}>
+                                            {order.docOptions?.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
+                                            <td className="px-4 py-4">
+                                                <p className="font-semibold text-slate-900">
+                                                    {item.item?.itemName || item.itemName || (typeof item.item === 'string' ? item.item : '-') }
+                                                </p>
                                             </td>
-                                        )}
-                                        {!order.options?.amountsAreTaxInclusive && (
-                                            <td className="px-4 py-4 text-right font-medium text-slate-400">
-                                                {(((parseFloat(item.qty || '0') * parseFloat(item.unitPrice || '0')) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0') / 100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0)) * (item.taxCode === 'VAT 16%' ? 0.16 : 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            <td className="px-4 py-4">
+                                                <p className="text-gray-500">{item.description || '-'}</p>
                                             </td>
-                                        )}
-                                        <td className="px-4 py-4 text-right font-semibold">{(((parseFloat(item.qty as any) || 0) * (parseFloat(item.unitPrice as any) || 0) * (order.options?.columnDiscount ? (order.options.columnDiscountType === 'Percentage' ? (1 - parseFloat(item.discount || '0') / 100) : 1) : 1) - (order.options?.columnDiscount && order.options.columnDiscountType === 'Amount' ? parseFloat(item.discount || '0') : 0)) * (item.taxCode === 'VAT 16%' ? (order.options?.amountsAreTaxInclusive ? 1 : 1.16) : 1)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                    </tr>
-                                )) : (
+                                            <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
+                                            <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                            {order.docOptions?.columnDiscount && (
+                                                <td className="px-4 py-4 text-right">
+                                                    <span className="text-xs font-bold text-rose-500">
+                                                        {item.discount ? (order.docOptions.columnDiscountType === 'Percentage' ? `${item.discount}%` : parseFloat(item.discount).toLocaleString()) : '-'}
+                                                    </span>
+                                                </td>
+                                            )}
+                                            {!order.docOptions?.amountsAreTaxInclusive && (
+                                                <td className="px-4 py-4 text-right font-medium text-slate-400">
+                                                    {calc?.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </td>
+                                            )}
+                                            <td className="px-4 py-4 text-right font-semibold">
+                                                {calc?.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </td>
+                                        </tr>
+                                    );
+                                }) : (
                                     <tr>
                                         {order.options?.columnLineNumber !== false && <td className="px-4 py-5 text-slate-400 font-medium text-[12px]">1</td>}
                                         <td className="px-4 py-5 font-semibold text-slate-900">General Item</td>
@@ -491,14 +478,14 @@ const ViewPurchaseOrderView = () => {
                     <div className="flex justify-end items-start gap-12 mt-8 mb-12">
                         <div className="w-80 space-y-3">
                             <div className="flex justify-between items-center text-gray-500">
-                                <span className="text-[11px] font-bold uppercase tracking-widest">{order.options?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">{(order.docOptions || order.options)?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
                                 <span className="font-semibold">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center text-gray-500 pb-2 border-b border-gray-50">
                                 <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Tax Component</span>
                                 <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
-                            {order.options?.withholdingTax && (
+                            {(order.docOptions || order.options)?.withholdingTax && (
                                 <div className="flex justify-between items-center text-rose-500">
                                     <span className="text-[11px] font-bold uppercase tracking-widest">Withholding Tax</span>
                                     <span className="font-semibold">-{totals.whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
@@ -526,10 +513,10 @@ const ViewPurchaseOrderView = () => {
                         </div>
                     </div>
 
-                    {order.options?.footers && order.options?.footerValue && (
+                    {(order.docOptions || order.options)?.footers && (order.docOptions || order.options)?.footerValue && (
                         <div className="mt-12 pt-8 border-t border-gray-100">
                             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Terms & Conditions</p>
-                            <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">{order.options.footerValue}</p>
+                            <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">{(order.docOptions || order.options).footerValue}</p>
                         </div>
                     )}
                 </div>

@@ -175,8 +175,9 @@ const EditPurchaseQuoteView = () => {
                             discount: i.discount || '',
                             taxCode: i.taxCode || 'VAT 16%'
                         })) || []);
-                        if (enquiry.options) {
-                            setOptions(prev => ({ ...prev, ...enquiry.options }));
+                        const dOptions = enquiry.docOptions || enquiry.options;
+                        if (dOptions) {
+                            setOptions(prev => ({ ...prev, ...dOptions }));
                         }
                     }
                 } else {
@@ -272,7 +273,9 @@ const EditPurchaseQuoteView = () => {
             amount: calculations.grandTotal,
             status: status,
             billingAddress: address,
-            items: validItems.map(i => {
+            items: items.filter(i => i.item && i.item !== 'Select Item').map((i) => {
+                const itemIdx = items.indexOf(i);
+                const calc = calculations.lineCalcs[itemIdx];
                 const invItem = inventoryItems.find(it => it.itemName === i.item);
                 const qty = parseFloat(i.qty) || 0;
                 const unitPrice = parseFloat(i.unitPrice) || 0;
@@ -284,10 +287,11 @@ const EditPurchaseQuoteView = () => {
                     unitPrice: unitPrice,
                     taxCode: i.taxCode,
                     unit: i.unit,
-                    totalAmount: qty * unitPrice
+                    discount: i.discount || '',
+                    totalAmount: calc.grossTotal
                 };
             }),
-            options: options
+            docOptions: options
         };
 
         try {

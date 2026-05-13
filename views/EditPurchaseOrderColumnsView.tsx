@@ -9,19 +9,23 @@ const EditPurchaseOrderColumnsView = () => {
     const [columns, setColumns] = useState(() => {
         const saved = localStorage.getItem('purchase_order_column_settings');
         const defaultCols = [
-            { id: 'Order Date', label: 'Order date', visible: true },
+            { id: 'Order Date', label: 'Order Date', visible: true },
             { id: 'Reference', label: 'Reference', visible: true },
             { id: 'Supplier', label: 'Supplier', visible: true },
-            { id: 'Qty on Deliver', label: 'Qty on deliver', visible: true },
+            { id: 'Qty on Order', label: 'Qty on Order', visible: true },
             { id: 'Description', label: 'Description', visible: true },
             { id: 'Amount', label: 'Amount', visible: true },
-            { id: 'Status', label: 'Status', visible: true },
             { id: 'Timestamp', label: 'Timestamp', visible: true },
             { id: 'Approval', label: 'Approval', visible: true },
         ];
 
         if (saved) {
-            return JSON.parse(saved);
+            const parsed = JSON.parse(saved);
+            const validIds = defaultCols.map(c => c.id);
+            // Filter out old columns and merge with defaults for any missing new columns
+            const filtered = parsed.filter((c: any) => validIds.includes(c.id));
+            const missing = defaultCols.filter(dc => !filtered.find((fc: any) => fc.id === dc.id));
+            return [...filtered, ...missing];
         }
         return defaultCols;
     });

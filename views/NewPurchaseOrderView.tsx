@@ -110,6 +110,13 @@ const NewPurchaseOrderView = () => {
     const [options, setOptions] = useState({
         amountsAreTaxInclusive: false,
         columnLineNumber: true,
+        columnDiscount: false,
+        columnDiscountType: 'Percentage',
+        withholdingTax: false,
+        withholdingTaxType: 'Rate',
+        withholdingTaxValue: '0',
+        rounding: false,
+        roundingType: 'Round to nearest',
         customTitle: false,
         customTitleValue: 'Purchase Order',
         footers: false,
@@ -178,6 +185,10 @@ const NewPurchaseOrderView = () => {
                         setUseManualRef(true);
                         setDescription(order.description || '');
                         setCurrency(order.currency || 'ZMW');
+                        setBillingAddress(order.supplier?.billingAddress || '');
+                        if (order.docOptions) {
+                            setOptions(prev => ({ ...prev, ...order.docOptions }));
+                        }
                         if (order.items) {
                             setItems(order.items.map((i: any) => ({
                                 id: i.id || (Date.now() + Math.random()),
@@ -223,6 +234,10 @@ const NewPurchaseOrderView = () => {
                     if (sourceDoc) {
                         setCurrency(sourceDoc.currency || sourceDoc.customer?.currency?.split(' - ')[0] || 'ZMW');
                         setDescription(`Purchase for ${sourceDoc.reference}`);
+                        setBillingAddress(sourceDoc.customer?.billingAddress || '');
+                        if (sourceDoc.docOptions || sourceDoc.options) {
+                            setOptions(prev => ({ ...prev, ...(sourceDoc.docOptions || sourceDoc.options) }));
+                        }
                         if (sourceDoc.items) {
                             setItems(sourceDoc.items.map((i: any) => ({
                                 id: Date.now() + Math.random(),
@@ -274,6 +289,10 @@ const NewPurchaseOrderView = () => {
         });
 
         let grandTotal = subtotal + totalTax;
+        if (options.rounding) {
+            if (options.roundingType === 'Round to nearest') grandTotal = Math.round(grandTotal);
+            else if (options.roundingType === 'Round down') grandTotal = Math.floor(grandTotal);
+        }
         let whtAmount = 0;
         if (options.withholdingTax) {
             const whtVal = parseFloat(options.withholdingTaxValue) || 0;
@@ -310,29 +329,33 @@ const NewPurchaseOrderView = () => {
             amount: calculations.grandTotal,
             description: description,
             currency: currency,
-            items: validItems.map(i => {
+            items: validItems.map((i, index) => {
                 const dbItem = dbItems.find(it => it.itemName === i.item);
+                const calc = calculations.lineCalcs[index];
                 return {
                     itemId: dbItem?.id,
                     description: i.description,
-                    qty: parseFloat(i.qty),
-                    unitPrice: parseFloat(i.unitPrice),
-                    totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
+                    qty: parseFloat(i.qty) || 0,
+                    unitPrice: parseFloat(i.unitPrice) || 0,
+                    totalAmount: calc.grossTotal, // This is the final line total including discount and tax
+                    taxCode: i.taxCode,
+                    discount: i.discount
                 };
             }),
             docOptions: options
         };
 
         try {
-            if (isEditing) {
-                alert('Update not yet implemented in backend.');
+            if (isEditing && id) {
+                await apiService.updatePurchaseOrder(id, quoteData);
             } else {
                 await apiService.createPurchaseOrder(quoteData);
             }
             navigate('/purchase-orders');
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to save purchase order:', err);
-            alert('Failed to save purchase order to database.');
+            const errMsg = err.response?.data?.error || err.message || 'Unknown error';
+            alert(`Failed to save purchase order to database: ${errMsg}`);
         }
     };
 
@@ -645,6 +668,7 @@ const NewPurchaseOrderView = () => {
                                         ['Line Numbers', 'columnLineNumber'],
                                         ['Discount', 'columnDiscount'],
                                         ['Withholding Tax', 'withholdingTax'],
+                                        ['Rounding', 'rounding'],
                                         ['Custom Title', 'customTitle'],
                                         ['Footers', 'footers']
                                     ] as const).map(([label, key]) => (
@@ -695,6 +719,21 @@ const NewPurchaseOrderView = () => {
                                                         placeholder="Value..."
                                                         className="w-full bg-rose-50 border border-rose-100 rounded-xl px-3 py-1.5 text-[11px] font-bold text-rose-600 focus:outline-none placeholder:text-rose-300"
                                                     />
+                                                </div>
+                                            )}
+                                            {key === 'rounding' && options.rounding && (
+                                                <div className="flex items-center space-x-2 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                    <div className="relative flex-1">
+                                                        <select
+                                                            value={options.roundingType}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, roundingType: e.target.value }))}
+                                                            className="w-full appearance-none bg-indigo-50/50 border border-indigo-100/50 rounded-xl px-3 py-1.5 text-[10px] font-black text-indigo-600 uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-indigo-500/10 cursor-pointer"
+                                                        >
+                                                            <option value="Round to nearest">Round to nearest</option>
+                                                            <option value="Round down">Round down</option>
+                                                        </select>
+                                                        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-400 pointer-events-none" />
+                                                    </div>
                                                 </div>
                                             )}
                                             {key === 'customTitle' && options.customTitle && (
