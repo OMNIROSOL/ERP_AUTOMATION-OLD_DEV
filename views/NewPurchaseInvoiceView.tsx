@@ -115,6 +115,14 @@ const NewPurchaseInvoiceView = () => {
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
+        if (issueDate) {
+            const date = new Date(issueDate);
+            date.setDate(date.getDate() + 30);
+            setDueDate(date.toISOString().split('T')[0]);
+        }
+    }, [issueDate]);
+
+    useEffect(() => {
         const loadData = async () => {
             setIsLoading(true);
             try {

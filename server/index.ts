@@ -38,6 +38,25 @@ const formatDate = (date: Date | null | undefined) => {
   return `${day}.${month}.${year}`;
 };
 
+const formatDateTime = (date: Date | null | undefined) => {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // the hour '0' should be '12'
+  const strTime = String(hours).padStart(2, '0') + ':' + minutes + ':' + seconds + ' ' + ampm;
+  
+  return `${day}.${month}.${year} ${strTime}`;
+};
+
 const parseDate = (d: any) => {
   if (!d) return undefined;
   if (typeof d === 'string' && d.includes('.')) {
@@ -70,6 +89,75 @@ app.get('/api/users', (req, res) => res.json([]));
 
 app.get('/api/test-patch-route', (req, res) => {
   res.json({ message: 'PATCH test route is reachable' });
+});
+
+app.get('/api/ping', (req, res) => res.json({ pong: true }));
+
+// --- PURCHASE INVOICES ---
+app.get('/api/purchase-invoices', async (req, res) => {
+  try {
+    const invs = await prisma.invoices.findMany({
+      include: { suppliers: true },
+      orderBy: { created_at: 'desc' }
+    });
+    // Map snake_case database fields to camelCase for the frontend
+    const mapped = invs.map(inv => ({
+      ...inv,
+      dueDate: inv.due_date ? formatDate(inv.due_date) : null,
+      timestamp: inv.created_at ? formatDateTime(inv.created_at) : null,
+      invoiceAmount: Number(inv.grand_total) || 0,
+      balanceDue: Number(inv.grand_total) || 0,
+      supplier: inv.suppliers?.name || 'Unknown'
+    }));
+    res.json(mapped);
+  } catch (err: any) {
+    console.error('Fetch purchase invoices error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/purchase-invoices/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const inv = await prisma.invoices.findUnique({
+      where: { id },
+      include: { suppliers: true }
+    });
+    if (!inv) return res.status(404).json({ error: 'Purchase invoice not found' });
+    
+    // Map for frontend
+    const mapped = {
+      ...inv,
+      dueDate: inv.due_date ? formatDate(inv.due_date) : null,
+      issueDate: inv.created_at ? inv.created_at.toISOString().split('T')[0] : null,
+      grandTotal: Number(inv.grand_total) || 0,
+      supplier: inv.suppliers?.name || 'Unknown'
+    };
+    res.json(mapped);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/purchase-invoices', async (req, res) => {
+  const { supplierId, reference, grandTotal, dueDate, issueDate, status } = req.body;
+  console.log('>>> [PURCHASE INVOICE POST] PAYLOAD:', req.body);
+  try {
+    const result = await prisma.invoices.create({
+      data: {
+        supplier_id: supplierId,
+        reference: reference || `PI-${Date.now()}`,
+        grand_total: Number(grandTotal) || 0,
+        status: status || 'Unpaid',
+        due_date: dueDate ? parseDate(dueDate) : undefined,
+        created_at: issueDate ? parseDate(issueDate) : undefined,
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[PURCHASE INVOICE CREATE ERROR]:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.patch('/api/delivery-notes/:id', async (req, res) => {
@@ -999,10 +1087,12 @@ app.get('/api/suppliers/:id', async (req, res) => {
       ...supplier,
       status: supplier.inactive ? 'Inactive' : supplier.status
     });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
+
+// Purchase invoice routes moved earlier
 
 app.post('/api/suppliers', async (req, res) => {
   const { code, name, email, currency, billingAddress, status, division, tpin, controlAccount } = req.body;
@@ -1538,12 +1628,115 @@ app.patch('/api/purchase-orders/:id', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
   try {
+    if (status === 'Approved' || status === 'Ordered') {
+      // Use a transaction: create invoice from PO data, then mark PO as Invoiced
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. Fetch the full PO with items
+        const order = await tx.purchaseOrder.findUnique({
+          where: { id },
+          include: { items: true, supplier: true }
+        });
+        if (!order) throw new Error('Purchase order not found');
+
+        // 2. Create Purchase Invoice
+        const baseDate = order.orderDate || new Date();
+        const dueDate = new Date(baseDate);
+        dueDate.setDate(dueDate.getDate() + 30);
+
+        await tx.invoices.create({
+          data: {
+            reference: order.reference,
+            supplier_id: order.supplierId,
+            grand_total: order.amount || 0,
+            status: 'Unpaid',
+            due_date: dueDate,
+          }
+        });
+
+        // 3. Mark PO as Invoiced (hides from PO list)
+        const updated = await tx.purchaseOrder.update({
+          where: { id },
+          data: { status: 'Invoiced' }
+        });
+
+        return updated;
+      });
+      return res.json(result);
+    }
+
+    // For all other status changes (Rejected, etc.)
     const result = await prisma.purchaseOrder.update({
       where: { id },
       data: { status }
     });
     res.json(result);
   } catch (err: any) {
+    console.error('PATCH PURCHASE ORDER ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- PURCHASE INVOICES ---
+app.get('/api/purchase-invoices', async (req, res) => {
+  try {
+    const invs = await prisma.invoices.findMany({
+      include: { suppliers: true },
+      orderBy: { created_at: 'desc' }
+    });
+    // Map snake_case database fields to camelCase for the frontend
+    const mapped = invs.map(inv => ({
+      ...inv,
+      dueDate: inv.due_date ? formatDate(inv.due_date) : null,
+      timestamp: inv.created_at ? formatDate(inv.created_at) : null,
+      invoiceAmount: Number(inv.grand_total) || 0,
+      balanceDue: Number(inv.grand_total) || 0 // Defaulting to grand total for new invoices
+    }));
+    res.json(mapped);
+  } catch (err: any) {
+    console.error('Fetch purchase invoices error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/purchase-invoices/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const inv = await prisma.invoices.findUnique({
+      where: { id },
+      include: { suppliers: true }
+    });
+    if (!inv) return res.status(404).json({ error: 'Purchase invoice not found' });
+    
+    // Map for frontend
+    const mapped = {
+      ...inv,
+      dueDate: inv.due_date ? formatDate(inv.due_date) : null,
+      issueDate: inv.created_at ? inv.created_at.toISOString().split('T')[0] : null,
+      grandTotal: Number(inv.grand_total) || 0
+    };
+    res.json(mapped);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/purchase-invoices', async (req, res) => {
+  const { supplierId, reference, grandTotal, dueDate, issueDate, status } = req.body;
+  console.log('>>> [PURCHASE INVOICE POST] PAYLOAD:', req.body);
+  try {
+    const result = await prisma.invoices.create({
+      data: {
+        supplier_id: supplierId,
+        reference: reference || `PI-${Date.now()}`,
+        grand_total: Number(grandTotal) || 0,
+        status: status || 'Unpaid',
+        due_date: dueDate ? parseDate(dueDate) : undefined,
+        created_at: issueDate ? parseDate(issueDate) : undefined,
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[PURCHASE INVOICE CREATE ERROR]:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1628,17 +1821,7 @@ app.put('/api/purchase-orders/:id', async (req, res) => {
   }
 });
 
-app.get('/api/purchase-invoices', async (req, res) => {
-  try {
-    const invs = await prisma.invoices.findMany({
-      include: { suppliers: true },
-      orderBy: { created_at: 'desc' }
-    });
-    res.json(invs);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Routes moved to earlier in the file to ensure registration and proper mapping
 
 // --- FOOTERS ---
 app.get('/api/footers', async (req, res) => {
@@ -1693,6 +1876,30 @@ app.use((req, res) => {
   });
 });
 
+app.put('/api/purchase-invoices/:id', async (req, res) => {
+  const { id } = req.params;
+  const { supplierId, reference, grandTotal, dueDate, issueDate, status } = req.body;
+  console.log(`>>> [PURCHASE INVOICE PUT] ID: ${id}, PAYLOAD:`, req.body);
+  try {
+    const result = await prisma.invoices.update({
+      where: { id },
+      data: {
+        supplier_id: supplierId,
+        reference: reference,
+        grand_total: Number(grandTotal) || 0,
+        status: status,
+        due_date: dueDate ? parseDate(dueDate) : undefined,
+        created_at: issueDate ? parseDate(issueDate) : undefined,
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[PURCHASE INVOICE UPDATE ERROR]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 ERP Backend running at http://localhost:${PORT}`);
 });
+

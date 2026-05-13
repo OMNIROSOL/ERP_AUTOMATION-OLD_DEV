@@ -13,7 +13,7 @@ const PurchaseInvoicesView = () => {
     const { supplierName } = useParams();
     const [searchQuery, setSearchQuery] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [sortColumn, setSortColumn] = useState<string>('Issue date');
+    const [sortColumn, setSortColumn] = useState<string>('issueDate');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
     const [pageSize, setPageSize] = useState(50);
     const [currentPage, setCurrentPage] = useState(1);
@@ -26,24 +26,27 @@ const PurchaseInvoicesView = () => {
         'Issue date': true,
         'Due date': true,
         'Reference': true,
-        'Purchase Order': true,
         'Supplier': true,
         'Description': true,
-        'Project': false,
-        'Closed invoice': true,
-        'Withholding tax': false,
-        'Discount': false,
+        'Withholding tax': true,
+        'Discount': true,
         'Invoice Amount': true,
         'Balance due': true,
-        'Days to Due Date': false,
-        'Days overdue': false,
+        'Days to Due Date': true,
+        'Days overdue': true,
         'Status': true,
-        'Timestamp': false
+        'Timestamp': true
     });
 
     useEffect(() => {
         const saved = localStorage.getItem('purchase_invoice_column_visibility');
-        if (saved) setColumnVisibility(JSON.parse(saved));
+        if (saved) {
+            try {
+                setColumnVisibility(JSON.parse(saved));
+            } catch (e) {
+                console.error('Failed to parse saved column visibility:', e);
+            }
+        }
 
         const handleStorage = () => {
             const updated = localStorage.getItem('purchase_invoice_column_visibility');
@@ -72,15 +75,20 @@ const PurchaseInvoicesView = () => {
             setIsLoading(true);
             try {
                 const data = await apiService.getPurchaseInvoices();
-                const mapped = data.map((inv: any) => ({
-                    ...inv,
-                    supplier: inv.suppliers?.name || inv.suppliers || 'Unknown',
-                    issueDate: inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
-                    currency: inv.currency || inv.suppliers?.currency?.split(' - ')[0] || 'ZMW',
-                    invoiceAmount: parseFloat(inv.grand_total) || 0,
-                    balanceDue: parseFloat(inv.grand_total) || 0, // Placeholder
-                    timestamp: inv.created_at ? new Date(inv.created_at).toLocaleString() : ''
-                }));
+                const mapped = data.map((inv: any) => {
+                    // Defensive mapping to ensure all required fields exist
+                    const supplierName = inv.suppliers?.name || inv.supplier || 'Unknown';
+                    return {
+                        ...inv,
+                        supplier: String(supplierName),
+                        issueDate: inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                        dueDate: inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                        currency: inv.currency || inv.suppliers?.currency?.split(' - ')[0] || 'ZMW',
+                        invoiceAmount: parseFloat(inv.grand_total) || 0,
+                        balanceDue: parseFloat(inv.grand_total) || 0, // Placeholder
+                        timestamp: inv.created_at ? new Date(inv.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase() : ''
+                    };
+                });
                 setPurchaseInvoices(mapped);
             } catch (err) {
                 console.error('Failed to fetch purchase invoices:', err);
@@ -98,12 +106,13 @@ const PurchaseInvoicesView = () => {
             result = result.filter(inv => (inv.supplier || '').trim().toLowerCase() === supplierName.trim().toLowerCase());
         }
 
-        const query = searchQuery.toLowerCase();
-        result = result.filter(inv =>
-            inv.supplier.toLowerCase().includes(query) ||
-            inv.reference.toLowerCase().includes(query) ||
-            (inv.status && inv.status.toLowerCase().includes(query))
-        );
+        const query = searchQuery.toLowerCase().trim();
+        result = result.filter(inv => {
+            const s = (inv.supplier || '').toLowerCase();
+            const r = (inv.reference || '').toLowerCase();
+            const st = (inv.status || '').toLowerCase();
+            return s.includes(query) || r.includes(query) || st.includes(query);
+        });
 
         return result.sort((a, b) => {
             let valA: any = (a as any)[sortColumn] || '';
@@ -164,11 +173,6 @@ const PurchaseInvoicesView = () => {
             )
         },
         {
-            id: 'Purchase Order',
-            header: 'Purchase Order',
-            accessor: (inv: any) => <span className="font-medium text-slate-600 whitespace-nowrap">{inv.purchaseOrder || '—'}</span>
-        },
-        {
             id: 'Supplier',
             header: 'Supplier',
             accessor: (inv: any) => <span className="font-medium text-slate-600 truncate max-w-[150px]" title={inv.supplier}>{inv.supplier}</span>
@@ -177,20 +181,6 @@ const PurchaseInvoicesView = () => {
             id: 'Description',
             header: 'Description',
             accessor: (inv: any) => <span className="text-xs text-slate-400 truncate max-w-[200px]" title={inv.description}>{inv.description || '—'}</span>
-        },
-        {
-            id: 'Project',
-            header: 'Project',
-            accessor: (inv: any) => <span className="text-xs text-slate-500">{inv.project || '—'}</span>
-        },
-        {
-            id: 'Closed invoice',
-            header: (inv: any) => <div className="text-center">Closed invoice</div>,
-            accessor: (inv: any) => (
-                <div className="flex justify-center">
-                    {inv.balanceDue === 0 ? <Check size={14} className="text-emerald-500" strokeWidth={3} /> : <X size={14} className="text-slate-200" />}
-                </div>
-            )
         },
         {
             id: 'Withholding tax',
@@ -258,7 +248,7 @@ const PurchaseInvoicesView = () => {
     ].filter(col => (columnVisibility as any)[col.id] !== false);
 
     return (
-        <div className="p-8 space-y-6 animate-in fade-in duration-500">
+        <div className="p-8 space-y-6 animate-in fade-in duration-500 min-w-fit">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <div className="flex items-center space-x-2 text-[10px] font-bold text-indigo-600 uppercase tracking-widest mb-1">
@@ -270,6 +260,12 @@ const PurchaseInvoicesView = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setRefreshTrigger(prev => prev + 1)}
+                        className="bg-white text-slate-700 px-4 py-2 border border-slate-200 rounded-md text-sm font-bold hover:bg-slate-50 transition-all flex items-center"
+                    >
+                        <Clock size={16} className="mr-2" /> REFRESH
+                    </button>
                     <button
                         onClick={() => navigate('/purchase-invoices/new')}
                         className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 flex items-center"
@@ -299,22 +295,35 @@ const PurchaseInvoicesView = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm no-print">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm no-print overflow-hidden">
                 <DataTable
                     data={displayData}
                     columns={columns as any}
-                    tableClassName="min-w-[1440px]"
+                    tableClassName="w-full min-w-[1800px]"
+                    className="border-none shadow-none rounded-none"
                     hideDefaultPagination={true}
+                    emptyMessage={
+                        <div className="flex flex-col items-center">
+                            <p>No purchase invoices found.</p>
+                            <p className="text-xs mt-2 text-slate-400 font-normal">Check if the backend is connected and data exists in the database.</p>
+                        </div>
+                    }
                     disableInternalScroll={true}
                     tableFooter={
                         <tr className="bg-slate-50/50 font-black">
                             {columns.map(col => {
-                                if (col.id === 'Invoice Amount' || col.id === 'Balance due') {
-                                    const field = col.id === 'Invoice Amount' ? 'invoiceAmount' : 'balanceDue';
+                                if (col.id === 'Invoice Amount' || col.id === 'Balance due' || col.id === 'Withholding tax' || col.id === 'Discount') {
+                                    const fieldMap: Record<string, string> = {
+                                        'Invoice Amount': 'invoiceAmount',
+                                        'Balance due': 'balanceDue',
+                                        'Withholding tax': 'withholdingTax',
+                                        'Discount': 'discount'
+                                    };
+                                    const field = fieldMap[col.id];
                                     const totalsByCurrency: Record<string, number> = {};
                                     filteredData.forEach(o => {
                                         const cur = o.currency || 'ZMW';
-                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (o[field] || 0);
+                                        totalsByCurrency[cur] = (totalsByCurrency[cur] || 0) + (parseFloat(o[field]) || 0);
                                     });
                                     const activeCurs = Object.keys(totalsByCurrency);
                                     return (

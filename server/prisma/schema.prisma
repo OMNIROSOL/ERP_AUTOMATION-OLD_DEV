@@ -457,6 +457,7 @@ model invoices {
   supplier_id String    @db.Uuid
   grand_total Decimal?  @default(0) @db.Decimal(15, 2)
   status      String?   @default("Unpaid")
+  due_date    DateTime? @map("due_date") @db.Date
   created_at  DateTime? @default(now()) @db.Timestamptz(6)
   suppliers   suppliers @relation(fields: [supplier_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 

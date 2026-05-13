@@ -46,8 +46,18 @@ const ViewPurchaseInvoiceView = () => {
                     apiService.getSuppliers(),
                     apiService.getTaxCodes().catch(() => [])
                 ]);
-                setInvoice(inv);
-                setAllInvoices(invs);
+                setInvoice(inv ? {
+                    ...inv,
+                    supplier: inv.suppliers?.name || inv.supplier || 'Unknown',
+                    issueDate: inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
+                    dueDate: inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
+                    currency: inv.currency || inv.suppliers?.currency?.split(' - ')[0] || 'ZMW',
+                    invoiceAmount: parseFloat(inv.grand_total) || 0
+                } : null);
+                setAllInvoices(invs.map((i: any) => ({
+                    ...i,
+                    dueDate: i.due_date ? new Date(i.due_date).toLocaleDateString('en-GB').replace(/\//g, '.') : '—'
+                })));
                 setAllSuppliers(supps);
                 setTaxCodes(codes);
             } catch (err) {
