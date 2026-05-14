@@ -368,7 +368,7 @@ const SalesHistoryView = () => {
                                                             { label: 'Sales Invoice', path: '/sales-invoices/new' },
                                                             { label: 'Delivery Note', path: '/delivery-notes/new' },
                                                             { label: 'Credit Note', path: '/credit-notes/new' },
-                                                            { label: 'Purchase Quote', path: '/purchase-quotes/new' },
+                                                            { label: 'Purchase Enquiry', path: '/purchase-quotes/new' },
                                                             { label: 'Purchase Order', path: '/purchase-orders/new' },
                                                             { label: 'Purchase Invoice', path: '/purchase-invoices/new' },
                                                             { label: 'Goods Receipt', path: '/goods-receipts/new' },

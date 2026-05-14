@@ -42,7 +42,38 @@ const NewDebitNoteView = () => {
         const params = new URLSearchParams(location.search);
         const copyFromId = params.get('copyFrom');
         if (copyFromId) {
-            // Placeholder: logic for copying if needed
+            const fetchSource = async () => {
+                try {
+                    let sourceDoc: any = null;
+                    try {
+                        sourceDoc = await apiService.getPurchaseInvoice(copyFromId);
+                    } catch (e) {
+                        try {
+                            sourceDoc = await apiService.getPurchaseOrder(copyFromId);
+                        } catch (e2) {
+                            sourceDoc = await apiService.getInvoice(copyFromId);
+                        }
+                    }
+
+                    if (sourceDoc) {
+                        setSupplier(sourceDoc.supplier?.name || sourceDoc.supplierName || sourceDoc.supplier || '');
+                        setDescription(`Debit note for ${sourceDoc.reference}`);
+                        if (sourceDoc.items) {
+                            setItems(sourceDoc.items.map((i: any) => ({
+                                id: Date.now() + Math.random(),
+                                item: i.item?.itemName || i.itemName || i.item || '',
+                                account: i.account || 'Inventory on hand',
+                                qty: (i.qty || '1').toString(),
+                                unitPrice: (i.unitPrice || '0').toString(),
+                                taxCode: i.taxCode || 'VAT 16%'
+                            })));
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load source for debit note:', err);
+                }
+            };
+            fetchSource();
         }
     }, [location.search]);
 

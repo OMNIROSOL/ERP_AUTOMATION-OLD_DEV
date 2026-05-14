@@ -17,7 +17,7 @@ const EditSupplierColumnsView = () => {
             { id: 'address', label: 'Address', visible: false },
             { id: 'receipts', label: 'Receipts', visible: false },
             { id: 'payments', label: 'Payments', visible: false },
-            { id: 'purchaseQuotes', label: 'Purchase Quotes', visible: false },
+            { id: 'purchaseEnquiries', label: 'Purchase Enquiry', visible: false },
             { id: 'purchaseOrders', label: 'Purchase Orders', visible: true },
             { id: 'purchaseInvoices', label: 'Purchase Invoices', visible: true },
             { id: 'debitNotes', label: 'Debit Notes', visible: false },

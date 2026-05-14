@@ -302,9 +302,9 @@ const EditPurchaseQuoteView = () => {
             }
             navigate('/purchase-quotes');
         } catch (err: any) {
-            console.error('Failed to save purchase quote:', err);
+            console.error('Failed to save purchase enquiry:', err);
             const errMsg = err.response?.data?.error || err.message || 'Unknown error';
-            alert(`Failed to save purchase quote: ${errMsg}`);
+            alert(`Failed to save purchase enquiry: ${errMsg}`);
         }
     };
 
@@ -314,7 +314,7 @@ const EditPurchaseQuoteView = () => {
         return (
             <div className="flex flex-col items-center justify-center py-40 space-y-4">
                 <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
-                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading quote details...</p>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Loading enquiry details...</p>
             </div>
         );
     }

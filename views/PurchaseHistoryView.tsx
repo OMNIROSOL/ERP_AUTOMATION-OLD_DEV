@@ -214,7 +214,7 @@ const PurchaseHistoryView = () => {
                         <span className="text-gray-400">Procurement Operations</span>
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">Purchase History</h1>
-                    <p className="text-gray-500 text-sm">Unified lifecycle tracking for purchase quotes, orders, and invoices</p>
+                    <p className="text-gray-500 text-sm">Unified lifecycle tracking for purchase enquiries, orders, and invoices</p>
                 </div>
             </div>
 

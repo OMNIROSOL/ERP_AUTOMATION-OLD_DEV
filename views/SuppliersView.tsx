@@ -87,10 +87,10 @@ const SuppliersView = () => {
         { id: 'controlAccount', label: 'Control account', visible: false },
         { id: 'receipts', label: 'Receipts', visible: false },
         { id: 'payments', label: 'Payments', visible: false },
-        { id: 'purchaseQuotes', label: 'Purchase Quotes', visible: false },
+        { id: 'purchaseEnquiries', label: 'Purchase Enquiry', visible: true },
         { id: 'purchaseOrders', label: 'Purchase Orders', visible: true },
         { id: 'purchaseInvoices', label: 'Purchase Invoices', visible: true },
-        { id: 'debitNotes', label: 'Debit Notes', visible: false },
+        { id: 'debitNotes', label: 'Debit Notes', visible: true },
         { id: 'goodsReceipts', label: 'Goods Receipts', visible: true },
         { id: 'qtyToReceive', label: 'Qty to receive', visible: true },
         { id: 'status', label: 'Status', visible: true },
@@ -458,11 +458,11 @@ const SuppliersView = () => {
                                             );
                                         }
 
-                                        if (['purchaseOrders', 'purchaseInvoices', 'goodsReceipts', 'purchaseQuotes', 'debitNotes', 'receipts', 'payments'].includes(col.id)) {
+                                        if (['purchaseOrders', 'purchaseInvoices', 'goodsReceipts', 'purchaseEnquiries', 'debitNotes', 'receipts', 'payments'].includes(col.id)) {
                                             const count = Number(val) || 0;
                                             const getRoute = (id: string) => {
                                                 const mapping: Record<string, string> = {
-                                                    'purchaseQuotes': '/purchase-quotes',
+                                                    'purchaseEnquiries': '/purchase-quotes',
                                                     'purchaseOrders': '/purchase-orders',
                                                     'purchaseInvoices': '/purchase-invoices',
                                                     'debitNotes': '/debit-notes',

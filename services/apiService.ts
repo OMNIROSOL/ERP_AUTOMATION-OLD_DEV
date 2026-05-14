@@ -134,6 +134,11 @@ export const apiService = {
   getPurchaseInvoice: (id: string) => api.get(`/purchase-invoices/${id}`).then(res => res.data),
   createPurchaseInvoice: (data: any) => api.post('/purchase-invoices', data).then(res => res.data),
   updatePurchaseInvoice: (id: string, data: any) => api.put(`/purchase-invoices/${id}`, data).then(res => res.data),
+
+  // Goods Received Notes
+  getGoodsReceivedNotes: () => api.get('/goods-received-notes').then(res => res.data),
+  getGoodsReceivedNote: (id: string) => api.get(`/goods-received-notes/${id}`).then(res => res.data),
+  createGoodsReceivedNote: (data: any) => api.post('/goods-received-notes', data).then(res => res.data),
   getFooters: () => api.get('/footers').then(res => res.data),
   createFooter: (data: any) => api.post('/footers', data).then(res => res.data),
   updateFooter: (id: string, data: any) => api.put(`/footers/${id}`, data).then(res => res.data),
@@ -141,7 +146,7 @@ export const apiService = {
 
   // Reference Generation
   getLocations: () => api.get('/locations').then(res => res.data),
-  getNextReference: (type: 'invoice' | 'quote' | 'order' | 'delivery' | 'customer' | 'supplier' | 'purchase-quote' | 'purchase-enquiry' | 'purchase-order' | 'receipt' | 'purchase-invoice' | 'debit-note' | 'credit-note') =>
+  getNextReference: (type: 'invoice' | 'quote' | 'order' | 'delivery' | 'customer' | 'supplier' | 'purchase-quote' | 'purchase-enquiry' | 'purchase-order' | 'receipt' | 'purchase-invoice' | 'debit-note' | 'credit-note' | 'goods-received-note') =>
     api.get(`/reference/next/${type}`).then(res => res.data.nextRef),
 
   // Accounts
@@ -163,7 +168,7 @@ export const apiService = {
     { id: 'inventory-transfers', name: 'Inventory Transfers' },
     { id: 'inventory-write-offs', name: 'Inventory Write-offs' },
     { id: 'bank-accounts', name: 'Bank Accounts' },
-    { id: 'purchase-quotes', name: 'Purchase Quotes' },
+    { id: 'purchase-quotes', name: 'Purchase Enquiry' },
     { id: 'purchase-orders', name: 'Purchase Orders' },
     { id: 'purchase-invoices', name: 'Purchase Invoices' },
     { id: 'receipts', name: 'Receipts' },

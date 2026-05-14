@@ -159,22 +159,88 @@ const ViewCreditNoteView = () => {
                                 element.style.maxWidth = 'none';
                                 element.style.width = '850px';
 
-                                const canvas = await html2canvas(element, {
-                                    scale: 2,
-                                    useCORS: true,
-                                    backgroundColor: '#ffffff'
-                                });
+                                try {
+                                    const canvas = await html2canvas(element, {
+                                        scale: 2,
+                                        useCORS: true,
+                                        logging: true,
+                                        backgroundColor: '#ffffff',
+                                        onclone: (clonedDoc) => {
+                                            const style = clonedDoc.createElement('style');
+                                            style.innerHTML = `
+                                                * {
+                                                    --color-slate-50: #f8fafc !important;
+                                                    --color-slate-100: #f1f5f9 !important;
+                                                    --color-slate-200: #e2e8f0 !important;
+                                                    --color-slate-300: #cbd5e1 !important;
+                                                    --color-slate-400: #94a3b8 !important;
+                                                    --color-slate-500: #64748b !important;
+                                                    --color-slate-600: #475569 !important;
+                                                    --color-slate-700: #334155 !important;
+                                                    --color-slate-800: #1e293b !important;
+                                                    --color-slate-900: #0f172a !important;
+                                                    --color-indigo-50: #eef2ff !important;
+                                                    --color-indigo-100: #e0e7ff !important;
+                                                    --color-indigo-200: #c7d2fe !important;
+                                                    --color-indigo-300: #a5b4fc !important;
+                                                    --color-indigo-400: #818cf8 !important;
+                                                    --color-indigo-500: #6366f1 !important;
+                                                    --color-indigo-600: #4f46e5 !important;
+                                                    --color-indigo-700: #4338ca !important;
+                                                    --color-indigo-800: #3730a3 !important;
+                                                    --color-indigo-900: #312e81 !important;
+                                                    --color-rose-50: #fff1f2 !important;
+                                                    --color-rose-100: #ffe4e6 !important;
+                                                    --color-rose-200: #fecdd3 !important;
+                                                    --color-rose-300: #fda4af !important;
+                                                    --color-rose-400: #fb7185 !important;
+                                                    --color-rose-500: #f43f5e !important;
+                                                    --color-rose-600: #e11d48 !important;
+                                                    --color-blue-50: #eff6ff !important;
+                                                    --color-blue-100: #dbeafe !important;
+                                                    --color-blue-200: #bfdbfe !important;
+                                                    --color-blue-300: #93c5fd !important;
+                                                    --color-blue-400: #60a5fa !important;
+                                                    --color-blue-500: #3b82f6 !important;
+                                                    --color-blue-600: #2563eb !important;
+                                                    --color-gray-50: #f9fafb !important;
+                                                    --color-gray-100: #f3f4f6 !important;
+                                                    --color-gray-200: #e5e7eb !important;
+                                                    --color-gray-300: #d1d5db !important;
+                                                    --color-gray-400: #9ca3af !important;
+                                                    --color-gray-500: #6b7280 !important;
+                                                    --color-gray-600: #4b5563 !important;
+                                                    --color-gray-700: #374151 !important;
+                                                    --color-gray-800: #1f2937 !important;
+                                                    --color-gray-900: #111827 !important;
+                                                    --color-emerald-50: #ecfdf5 !important;
+                                                    --color-emerald-100: #d1fae5 !important;
+                                                    --color-emerald-500: #10b981 !important;
+                                                    --color-emerald-600: #059669 !important;
+                                                    --color-amber-50: #fffbeb !important;
+                                                    --color-amber-100: #fef3c7 !important;
+                                                    --color-amber-500: #f59e0b !important;
+                                                    --color-amber-600: #d97706 !important;
+                                                }
+                                            `;
+                                            clonedDoc.head.appendChild(style);
+                                        }
+                                    });
 
-                                element.setAttribute('style', originalStyle);
+                                    element.setAttribute('style', originalStyle);
 
-                                const imgData = canvas.toDataURL('image/png');
-                                const pdf = new jsPDF('p', 'mm', 'a4');
-                                const imgProps = pdf.getImageProperties(imgData);
-                                const pdfWidth = pdf.internal.pageSize.getWidth();
-                                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                                    const imgData = canvas.toDataURL('image/png');
+                                    const pdf = new jsPDF('p', 'mm', 'a4');
+                                    const imgProps = pdf.getImageProperties(imgData);
+                                    const pdfWidth = pdf.internal.pageSize.getWidth();
+                                    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
 
-                                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-                                pdf.save(`${creditNote.reference || 'CreditNote'}.pdf`);
+                                    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                                    pdf.save(`${creditNote.reference || 'CreditNote'}.pdf`);
+                                } catch (err: any) {
+                                    console.error('PDF Generation failed:', err);
+                                    alert(`Failed to generate PDF: ${err.message || 'Unknown error'}`);
+                                }
                             }}
                             className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2"
                         >
@@ -222,6 +288,39 @@ const ViewCreditNoteView = () => {
 
             <div className="flex-1 p-6 flex justify-start overflow-auto print:p-0">
                 <div className="print-container bg-white shadow-xl p-12 w-[850px] max-w-full text-[13px] text-gray-800 relative" ref={pdfRef}>
+                    <style>{`
+                        @media print {
+                            @page { margin: 10mm; size: auto; }
+                            html, body, #root, #root > div, main { 
+                                background: white !important; 
+                                padding: 0 !important; 
+                                -webkit-print-color-adjust: exact !important; 
+                                print-color-adjust: exact !important;
+                                font-family: sans-serif !important; 
+                                height: auto !important; 
+                                min-height: none !important; 
+                                overflow: visible !important; 
+                                display: block !important; 
+                            }
+                            .no-print, nav, aside, header, .nav-bar, .side-bar, button, .breadcrumb-bar { display: none !important; }
+                            .print-container { 
+                                border: none !important; 
+                                box-shadow: none !important; 
+                                max-width: none !important; 
+                                width: 100% !important; 
+                                position: static !important;
+                                padding: 48px !important;
+                                background: white !important;
+                                margin: 0 !important;
+                            }
+                            .print-bg-slate-50 {
+                                background-color: #f8fafc !important;
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                            }
+                        }
+                    `}</style>
+
                     <div className="flex justify-between items-start gap-12 mb-10 pb-10 border-b border-gray-100">
                         <div className="flex-1">
                             {/* Header Section */}
@@ -279,7 +378,7 @@ const ViewCreditNoteView = () => {
                     {/* Items Table */}
                     <div className="mb-14">
                         <table className="w-full text-left">
-                            <thead className="bg-[#f8fafc] border-y border-gray-200 overflow-hidden text-right">
+                            <thead className="bg-[#f8fafc] border-y border-gray-200 overflow-hidden text-right print-bg-slate-50">
                                 <tr>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Item</th>
@@ -319,7 +418,7 @@ const ViewCreditNoteView = () => {
                                 <span className="text-[11px] font-bold uppercase tracking-widest">Tax Component</span>
                                 <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
-                            <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2">
+                            <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2 print-bg-slate-50">
                                 <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-900">Credit Total</span>
                                 <div className="text-right">
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{creditNote.currency}</p>

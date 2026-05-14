@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { PurchaseEnquiry, Supplier } from '../types';
 import apiService from '../services/apiService';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import {
     Printer,
     FileText,
@@ -56,7 +54,7 @@ const ViewPurchaseQuoteView = () => {
                 setTaxCodes(codes);
                 setInventoryItems(items);
             } catch (err) {
-                console.error('Failed to fetch purchase quote data:', err);
+                console.error('Failed to fetch purchase enquiry data:', err);
             } finally {
                 setIsLoading(false);
             }
@@ -77,7 +75,7 @@ const ViewPurchaseQuoteView = () => {
     const supplierEmail = supplierData?.email || (quote?.supplier && typeof quote.supplier === 'string' ? `${quote.supplier.toLowerCase().replace(/\s+/g, '.')}@example.com` : '');
 
     const totals = useMemo(() => {
-        if (!quote) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0 };
+        if (!quote) return { subtotal: 0, tax: 0, total: 0, whtAmount: 0, lineCalcs: [] };
         const dOptions = quote.docOptions || quote.options || {};
         const isTaxInclusive = dOptions.amountsAreTaxInclusive || false;
 
@@ -170,6 +168,8 @@ const ViewPurchaseQuoteView = () => {
         );
     }
 
+    const dOptions = (quote.docOptions || (quote as any).options || {}) as any;
+
     return (
         <div className="min-h-screen bg-[#f3f4f6]/50 flex flex-col font-sans">
             {/* Compact Action Toolbar */}
@@ -230,23 +230,83 @@ const ViewPurchaseQuoteView = () => {
                                         alert('Error: Content to capture not found.');
                                         return;
                                     }
+                                    const html2canvas = (await import('html2canvas')).default;
+                                    const jsPDF = (await import('jspdf')).jsPDF;
 
                                     const element = pdfRef.current;
                                     const originalStyle = element.getAttribute('style') || '';
                                     element.style.maxWidth = 'none';
                                     element.style.width = '850px';
 
-                                    console.log('Capturing canvas...');
                                     const canvas = await html2canvas(element, {
                                         scale: 2,
                                         useCORS: true,
                                         logging: true,
-                                        backgroundColor: '#ffffff'
+                                        backgroundColor: '#ffffff',
+                                        onclone: (clonedDoc) => {
+                                            const style = clonedDoc.createElement('style');
+                                            style.innerHTML = `
+                                                * {
+                                                    --color-slate-50: #f8fafc !important;
+                                                    --color-slate-100: #f1f5f9 !important;
+                                                    --color-slate-200: #e2e8f0 !important;
+                                                    --color-slate-300: #cbd5e1 !important;
+                                                    --color-slate-400: #94a3b8 !important;
+                                                    --color-slate-500: #64748b !important;
+                                                    --color-slate-600: #475569 !important;
+                                                    --color-slate-700: #334155 !important;
+                                                    --color-slate-800: #1e293b !important;
+                                                    --color-slate-900: #0f172a !important;
+                                                    --color-indigo-50: #eef2ff !important;
+                                                    --color-indigo-100: #e0e7ff !important;
+                                                    --color-indigo-200: #c7d2fe !important;
+                                                    --color-indigo-300: #a5b4fc !important;
+                                                    --color-indigo-400: #818cf8 !important;
+                                                    --color-indigo-500: #6366f1 !important;
+                                                    --color-indigo-600: #4f46e5 !important;
+                                                    --color-indigo-700: #4338ca !important;
+                                                    --color-indigo-800: #3730a3 !important;
+                                                    --color-indigo-900: #312e81 !important;
+                                                    --color-rose-50: #fff1f2 !important;
+                                                    --color-rose-100: #ffe4e6 !important;
+                                                    --color-rose-200: #fecdd3 !important;
+                                                    --color-rose-300: #fda4af !important;
+                                                    --color-rose-400: #fb7185 !important;
+                                                    --color-rose-500: #f43f5e !important;
+                                                    --color-rose-600: #e11d48 !important;
+                                                    --color-blue-50: #eff6ff !important;
+                                                    --color-blue-100: #dbeafe !important;
+                                                    --color-blue-200: #bfdbfe !important;
+                                                    --color-blue-300: #93c5fd !important;
+                                                    --color-blue-400: #60a5fa !important;
+                                                    --color-blue-500: #3b82f6 !important;
+                                                    --color-blue-600: #2563eb !important;
+                                                    --color-gray-50: #f9fafb !important;
+                                                    --color-gray-100: #f3f4f6 !important;
+                                                    --color-gray-200: #e5e7eb !important;
+                                                    --color-gray-300: #d1d5db !important;
+                                                    --color-gray-400: #9ca3af !important;
+                                                    --color-gray-500: #6b7280 !important;
+                                                    --color-gray-600: #4b5563 !important;
+                                                    --color-gray-700: #374151 !important;
+                                                    --color-gray-800: #1f2937 !important;
+                                                    --color-gray-900: #111827 !important;
+                                                    --color-emerald-50: #ecfdf5 !important;
+                                                    --color-emerald-100: #d1fae5 !important;
+                                                    --color-emerald-500: #10b981 !important;
+                                                    --color-emerald-600: #059669 !important;
+                                                    --color-amber-50: #fffbeb !important;
+                                                    --color-amber-100: #fef3c7 !important;
+                                                    --color-amber-500: #f59e0b !important;
+                                                    --color-amber-600: #d97706 !important;
+                                                }
+                                            `;
+                                            clonedDoc.head.appendChild(style);
+                                        }
                                     });
 
                                     element.setAttribute('style', originalStyle);
 
-                                    console.log('Generating PDF...');
                                     const imgData = canvas.toDataURL('image/png');
                                     const pdf = new jsPDF('p', 'mm', 'a4');
                                     const imgProps = pdf.getImageProperties(imgData);
@@ -354,7 +414,9 @@ const ViewPurchaseQuoteView = () => {
                             {/* Header Section */}
                             <div className="mb-6">
                                 <div className="flex justify-between items-center mb-1">
-                                    <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">{quote.customTitle || 'Purchase Enquiry'}</h1>
+                                    <h1 className="text-xl font-bold text-slate-900 tracking-tight uppercase leading-none">
+                                        {(dOptions.customTitle && dOptions.customTitleValue) ? dOptions.customTitleValue : (quote.customTitle || 'Purchase Enquiry')}
+                                    </h1>
                                 </div>
                                 <p className="text-[11px] font-bold text-slate-400 uppercase tracking-[0.2em]">Reference: {quote.reference}</p>
                             </div>
@@ -388,22 +450,22 @@ const ViewPurchaseQuoteView = () => {
                                                         if (quote.issueDate.includes('-')) {
                                                             const parts = quote.issueDate.split('T')[0].split('-');
                                                             if (parts.length === 3) {
-                                                                const [y, m, d] = parts;
-                                                                return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y}`;
+                                                                 const [y, m, d] = parts;
+                                                                 return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y}`;
                                                             }
                                                         }
                                                         // Handle DD.MM.YYYY or other dotted formats
                                                         if (quote.issueDate.includes('.')) {
                                                             const parts = quote.issueDate.split('.');
                                                             if (parts.length === 3) {
-                                                                const [d, m, y] = parts;
-                                                                return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y}`;
+                                                                 const [d, m, y] = parts;
+                                                                 return `${d.padStart(2, '0')}.${m.padStart(2, '0')}.${y}`;
                                                             }
                                                         }
                                                         // Fallback for valid date objects
                                                         const date = new Date(quote.issueDate);
                                                         if (!isNaN(date.getTime())) {
-                                                            return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+                                                            return `${date.getDate().toString().padStart(2, '0')}.${((date.getMonth() + 1)).toString().padStart(2, '0')}.${date.getFullYear()}`;
                                                         }
                                                     } catch (e) {
                                                         console.error('Date parsing failed:', e);
@@ -432,14 +494,14 @@ const ViewPurchaseQuoteView = () => {
                         <table className="w-full text-left">
                             <thead className="bg-[#f8fafc] border-y border-gray-200 overflow-hidden text-right print-bg-slate-50">
                                 <tr>
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>
+                                    {dOptions.columnLineNumber !== false && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left w-12">#</th>}
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Item</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unit Price</th>
-                                    {(quote.docOptions || quote.options)?.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Discount</th>}
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>
-                                    <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
+                                    {dOptions.columnDiscount && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Discount {dOptions.columnDiscountType === 'Percentage' ? '(%)' : ''}</th>}
+                                    {dOptions.columnTaxAmount !== false && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tax Amount</th>}
+                                    {dOptions.columnTotal !== false && <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -447,7 +509,7 @@ const ViewPurchaseQuoteView = () => {
                                     const calc = totals.lineCalcs[idx];
                                     return (
                                         <tr key={idx}>
-                                            <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>
+                                            {dOptions.columnLineNumber !== false && <td className="px-4 py-4 text-slate-400 font-medium text-[12px]">{idx + 1}</td>}
                                             <td className="px-4 py-4">
                                                 <p className="font-semibold text-slate-900">
                                                     {item.itemName || (typeof item.item === 'object' ? item.item?.itemName : item.item) || inventoryItems.find(i => i.id === item.itemId)?.itemName || '-'}
@@ -458,22 +520,30 @@ const ViewPurchaseQuoteView = () => {
                                             </td>
                                             <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
                                             <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                            {(quote.docOptions || quote.options)?.columnDiscount && (
+                                            {dOptions.columnDiscount && (
                                                 <td className="px-4 py-4 text-right font-medium text-slate-400">
-                                                    {item.discount || '0.00'}
+                                                    {item.discount && parseFloat(item.discount) !== 0 ? (
+                                                        dOptions.columnDiscountType === 'Percentage' 
+                                                            ? `${item.discount}%` 
+                                                            : (parseFloat(item.discount).toLocaleString(undefined, { minimumFractionDigits: 2 }))
+                                                    ) : '—'}
                                                 </td>
                                             )}
-                                            <td className="px-4 py-4 text-right font-medium text-slate-400">
-                                                {calc.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                            </td>
-                                            <td className="px-4 py-4 text-right font-semibold">
-                                                {calc.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                            </td>
+                                            {dOptions.columnTaxAmount !== false && (
+                                                <td className="px-4 py-4 text-right font-medium text-slate-400">
+                                                    {calc?.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </td>
+                                            )}
+                                            {dOptions.columnTotal !== false && (
+                                                <td className="px-4 py-4 text-right font-semibold">
+                                                    {calc?.grossTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </td>
+                                            )}
                                         </tr>
                                     );
                                 }) : (
                                     <tr>
-                                        <td className="px-4 py-5 text-slate-400 font-medium text-[12px]">1</td>
+                                        {dOptions.columnLineNumber !== false && <td className="px-4 py-5 text-slate-400 font-medium text-[12px]">1</td>}
                                         <td className="px-4 py-5 font-semibold text-slate-900">General Item</td>
                                         <td className="px-4 py-5 font-medium text-slate-500">{quote.description || '-'}</td>
                                         <td className="px-4 py-5 text-right font-medium">1</td>
@@ -490,36 +560,38 @@ const ViewPurchaseQuoteView = () => {
                         {/* Summary Section */}
                         <div className="w-80 space-y-3">
                             <div className="flex justify-between items-center text-gray-500">
-                                <span className="text-[11px] font-bold uppercase tracking-widest">{(quote.docOptions || quote.options)?.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
+                                <span className="text-[11px] font-bold uppercase tracking-widest">{dOptions.amountsAreTaxInclusive ? 'Subtotal (Excl. Tax)' : 'Subtotal'}</span>
                                 <span className="font-semibold tabular-nums">{totals.subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
                             <div className="flex justify-between items-center text-gray-500 pb-2 border-b border-gray-50">
                                 <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Tax Amount</span>
                                 <span className="font-semibold tabular-nums">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
-                            {(quote.docOptions || quote.options)?.withholdingTax && (
+                            {dOptions.withholdingTax && (
                                 <div className="flex justify-between items-center text-rose-500">
                                     <span className="text-[11px] font-bold uppercase tracking-widest">Withholding Tax</span>
                                     <span className="font-semibold tabular-nums">-{totals.whtAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                 </div>
                             )}
-                            <div className="flex justify-between items-center bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 mt-4 print-bg-slate-50">
-                                <span className="text-[12px] font-black uppercase tracking-[0.3em] text-indigo-400">Total</span>
-                                <div className="text-right">
-                                    <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">{quote.currency?.split(' ')[0] || 'ZMW'}</p>
-                                    <p className="text-2xl font-bold text-slate-900 tracking-tighter tabular-nums">
-                                        {totals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                    </p>
+                            {dOptions.hideTotalAmount !== true && (
+                                <div className="flex justify-between items-center bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100/50 mt-4 print-bg-slate-50">
+                                    <span className="text-[12px] font-black uppercase tracking-[0.3em] text-indigo-400">Total</span>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest mb-1">{quote.currency?.split(' ')[0] || 'ZMW'}</p>
+                                        <p className="text-2xl font-bold text-slate-900 tracking-tighter tabular-nums">
+                                            {totals.total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
 
                     {/* Footers Section */}
-                    {quote.footer && (
+                    {(dOptions.footers || dOptions.footer || quote.footer) && (dOptions.footerValue || quote.footer) && (
                         <div className="mt-12 pt-8 border-t border-gray-100">
                             <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">Notes & Terms</p>
-                            <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">{quote.footer}</p>
+                            <p className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap">{dOptions.footerValue || quote.footer}</p>
                         </div>
                     )}
                 </div>

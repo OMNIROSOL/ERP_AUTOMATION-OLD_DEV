@@ -353,7 +353,7 @@ export interface RoleDefinition {
   permissions: ScreenPermission[];
 }
 
-export interface Footer {
+export interface FooterTemplate {
   id: string;
   name: string;
   content: string;
@@ -375,6 +375,11 @@ export interface Supplier {
   withholdingTax?: number | string;
   inactive?: boolean;
   controlAccount?: string;
+  purchaseEnquiries?: number;
+  purchaseOrders?: number;
+  purchaseInvoices?: number;
+  goodsReceipts?: number;
+  debitNotes?: number;
 }
 
 export interface PurchaseOrder {
@@ -391,6 +396,7 @@ export interface PurchaseOrder {
   billingAddress?: string;
   customTitle?: string;
   options?: DocumentOptions;
+  docOptions?: DocumentOptions;
 }
 
 export interface PurchaseInvoice {
@@ -410,6 +416,7 @@ export interface PurchaseInvoice {
   billingAddress?: string;
   customTitle?: string;
   options?: DocumentOptions;
+  docOptions?: DocumentOptions;
 }
 
 export interface DebitNote {
@@ -455,7 +462,9 @@ export interface PurchaseEnquiry {
   customTitle?: string;
   footer?: string;
   options?: DocumentOptions;
+  docOptions?: DocumentOptions;
 }
+
 export interface PurchaseEnquiryItem {
   id: string;
   purchaseEnquiryId: string;
@@ -467,5 +476,5 @@ export interface PurchaseEnquiryItem {
   taxCode?: string;
   unit?: string;
   division?: string;
+  discount?: string;
 }
-

@@ -93,72 +93,9 @@ app.get('/api/test-patch-route', (req, res) => {
 
 app.get('/api/ping', (req, res) => res.json({ pong: true }));
 
-// --- PURCHASE INVOICES ---
-app.get('/api/purchase-invoices', async (req, res) => {
-  try {
-    const invs = await prisma.invoices.findMany({
-      include: { suppliers: true },
-      orderBy: { created_at: 'desc' }
-    });
-    // Map snake_case database fields to camelCase for the frontend
-    const mapped = invs.map(inv => ({
-      ...inv,
-      dueDate: inv.due_date ? formatDate(inv.due_date) : null,
-      timestamp: inv.created_at ? formatDateTime(inv.created_at) : null,
-      invoiceAmount: Number(inv.grand_total) || 0,
-      balanceDue: Number(inv.grand_total) || 0,
-      supplier: inv.suppliers?.name || 'Unknown'
-    }));
-    res.json(mapped);
-  } catch (err: any) {
-    console.error('Fetch purchase invoices error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
+// Removed duplicate purchase-invoice routes
 
-app.get('/api/purchase-invoices/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const inv = await prisma.invoices.findUnique({
-      where: { id },
-      include: { suppliers: true }
-    });
-    if (!inv) return res.status(404).json({ error: 'Purchase invoice not found' });
-    
-    // Map for frontend
-    const mapped = {
-      ...inv,
-      dueDate: inv.due_date ? formatDate(inv.due_date) : null,
-      issueDate: inv.created_at ? inv.created_at.toISOString().split('T')[0] : null,
-      grandTotal: Number(inv.grand_total) || 0,
-      supplier: inv.suppliers?.name || 'Unknown'
-    };
-    res.json(mapped);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-app.post('/api/purchase-invoices', async (req, res) => {
-  const { supplierId, reference, grandTotal, dueDate, issueDate, status } = req.body;
-  console.log('>>> [PURCHASE INVOICE POST] PAYLOAD:', req.body);
-  try {
-    const result = await prisma.invoices.create({
-      data: {
-        supplier_id: supplierId,
-        reference: reference || `PI-${Date.now()}`,
-        grand_total: Number(grandTotal) || 0,
-        status: status || 'Unpaid',
-        due_date: dueDate ? parseDate(dueDate) : undefined,
-        created_at: issueDate ? parseDate(issueDate) : undefined,
-      }
-    });
-    res.json(result);
-  } catch (err: any) {
-    console.error('[PURCHASE INVOICE CREATE ERROR]:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
 app.patch('/api/delivery-notes/:id', async (req, res) => {
   const { id } = req.params;
@@ -245,6 +182,7 @@ const generateNextReference = async (type: string, tx: any = prisma) => {
     case 'supplier': count = await getNextCodeNum(tx.suppliers, 'SUP-'); prefix = 'SUP'; break;
     case 'inventory-transfer': count = await getNextNum(tx.inventoryTransfer, 'TR-'); prefix = 'TR'; break;
     case 'inventory-write-off': count = await getNextNum(tx.inventoryWriteOff, 'WO-'); prefix = 'WO'; break;
+    case 'goods-received-note': count = await getNextNum(tx.goodsReceivedNote, 'GRN-'); prefix = 'GRN'; break;
     case 'debit-note': prefix = 'DN'; count = Math.floor(Math.random() * 1000); break;
     case 'credit-note': prefix = 'CN'; count = Math.floor(Math.random() * 1000); break;
     default: throw new Error('Invalid document type');
@@ -1061,13 +999,44 @@ app.put('/api/delivery-notes/:id', async (req, res) => {
 app.get('/api/suppliers', async (req, res) => {
   try {
     const suppliers = await prisma.suppliers.findMany({
+      include: {
+        purchaseEnquiries: {
+          select: { status: true }
+        },
+        purchaseOrders: {
+          select: { status: true }
+        },
+        invoices: {
+          select: { id: true }
+        },
+        goodsReceivedNotes: {
+          select: { id: true }
+        }
+      },
       orderBy: { created_at: 'desc' }
     });
-    const suppliersWithStatus = suppliers.map(supplier => ({
-      ...supplier,
-      status: supplier.inactive ? 'Inactive' : supplier.status
-    }));
-    res.json(suppliersWithStatus);
+    const suppliersWithCounts = suppliers.map(supplier => {
+      const activeEnquiries = (supplier.purchaseEnquiries || []).filter((q: any) => {
+        const status = (q.status || '').toLowerCase();
+        return status !== 'accepted' && status !== 'rejected';
+      }).length;
+      
+      const activeOrders = (supplier.purchaseOrders || []).filter((o: any) => {
+        const status = (o.status || '').toLowerCase();
+        return status !== 'invoiced' && status !== 'rejected' && status !== 'closed';
+      }).length;
+
+      return {
+        ...supplier,
+        purchaseEnquiries: activeEnquiries,
+        purchaseOrders: activeOrders,
+        purchaseInvoices: (supplier.invoices || []).length,
+        goodsReceipts: (supplier.goodsReceivedNotes || []).length,
+        debitNotes: 0, // Debit Notes model is currently missing from schema
+        status: supplier.inactive ? 'Inactive' : supplier.status
+      };
+    });
+    res.json(suppliersWithCounts);
   } catch (err: any) {
     console.error('Fetch suppliers error:', err);
     res.status(500).json({ error: err.message });
@@ -1538,16 +1507,51 @@ app.patch('/api/purchase-enquiries/:id', async (req, res) => {
         include: { items: true }
       });
 
-      // 2. If Accepted, create a PO
+      // 2. If Accepted, create or update a PO
       if (status === 'Accepted') {
-        // Check if PO already exists for this enquiry to prevent duplicates
+        console.log(`>>> [ENQUIRY APPROVE] Converting Enquiry ${id} (${enquiry.reference}) to PO`);
+        
+        // Check if PO already exists by Link or by Reference to prevent collisions
         const existingPO = await tx.purchaseOrder.findFirst({
-          where: { sourceEnquiryId: id }
+          where: {
+            OR: [
+              { sourceEnquiryId: id },
+              { reference: enquiry.reference }
+            ]
+          }
         });
 
-        if (!existingPO) {
-          // Use the Enquiry's existing reference instead of generating a new PO reference
+        if (existingPO) {
+          console.log(`[ENQUIRY APPROVE] PO already exists (${existingPO.reference}). Updating...`);
+          // Sync existing PO
+          await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: existingPO.id } });
+          await tx.purchaseOrder.update({
+            where: { id: existingPO.id },
+            data: {
+              sourceEnquiryId: id, // Ensure it's linked
+              supplierId: enquiry.supplierId,
+              description: `Updated from Enquiry ${enquiry.reference}. ${enquiry.description || ''}`,
+              currency: enquiry.currency,
+              amount: enquiry.amount,
+              docOptions: enquiry.docOptions || {},
+              items: {
+                create: enquiry.items.map(item => ({
+                  itemId: item.itemId,
+                  description: item.description,
+                  qty: item.qty,
+                  unitPrice: item.unitPrice,
+                  totalAmount: item.totalAmount,
+                  division: item.division,
+                  taxCode: item.taxCode,
+                  discount: item.discount
+                }))
+              }
+            }
+          });
+        } else {
+          // Create new PO with original reference format
           const poReference = enquiry.reference || `PO-${Date.now()}`;
+          console.log(`[ENQUIRY APPROVE] Creating new PO: ${poReference}`);
 
           await tx.purchaseOrder.create({
             data: {
@@ -1559,6 +1563,7 @@ app.patch('/api/purchase-enquiries/:id', async (req, res) => {
               amount: enquiry.amount,
               status: 'Open',
               sourceEnquiryId: id,
+              docOptions: enquiry.docOptions || {},
               items: {
                 create: enquiry.items.map(item => ({
                   itemId: item.itemId,
@@ -1566,12 +1571,15 @@ app.patch('/api/purchase-enquiries/:id', async (req, res) => {
                   qty: item.qty,
                   unitPrice: item.unitPrice,
                   totalAmount: item.totalAmount,
-                  division: item.division
+                  division: item.division,
+                  taxCode: item.taxCode,
+                  discount: item.discount
                 }))
               }
             }
           });
         }
+        console.log(`[ENQUIRY APPROVE] Done.`);
       }
       return enquiry;
     });
@@ -1680,16 +1688,23 @@ app.patch('/api/purchase-orders/:id', async (req, res) => {
 app.get('/api/purchase-invoices', async (req, res) => {
   try {
     const invs = await prisma.invoices.findMany({
-      include: { suppliers: true },
+      include: { 
+        suppliers: true,
+        items: {
+          include: { item: true }
+        }
+      },
       orderBy: { created_at: 'desc' }
     });
-    // Map snake_case database fields to camelCase for the frontend
     const mapped = invs.map(inv => ({
       ...inv,
+      description: inv.description || '',
       dueDate: inv.due_date ? formatDate(inv.due_date) : null,
-      timestamp: inv.created_at ? formatDate(inv.created_at) : null,
+      timestamp: inv.created_at ? formatDateTime(inv.created_at) : null,
       invoiceAmount: Number(inv.grand_total) || 0,
-      balanceDue: Number(inv.grand_total) || 0 // Defaulting to grand total for new invoices
+      balanceDue: Number(inv.grand_total) || 0,
+      supplier: inv.suppliers?.name || 'Unknown',
+      supplierId: inv.supplier_id
     }));
     res.json(mapped);
   } catch (err: any) {
@@ -1700,29 +1715,49 @@ app.get('/api/purchase-invoices', async (req, res) => {
 
 app.get('/api/purchase-invoices/:id', async (req, res) => {
   const { id } = req.params;
+  console.log(`[PI GET /:id] Fetching purchase invoice: ${id}`);
   try {
     const inv = await prisma.invoices.findUnique({
       where: { id },
-      include: { suppliers: true }
+      include: { 
+        suppliers: true,
+        items: {
+          include: { item: true }
+        }
+      }
     });
     if (!inv) return res.status(404).json({ error: 'Purchase invoice not found' });
     
-    // Map for frontend
+    console.log(`[PI GET /:id] Raw inv keys: ${Object.keys(inv)}`);
+    console.log(`[PI GET /:id] description: ${inv.description}`);
+    console.log(`[PI GET /:id] items count: ${inv.items?.length}`);
+    
     const mapped = {
       ...inv,
+      description: inv.description || '',
+      items: (inv.items || []).map((i: any) => ({
+        ...i,
+        itemName: i.item?.itemName || '',
+        qty: Number(i.qty),
+        unitPrice: Number(i.unitPrice),
+        totalAmount: Number(i.totalAmount)
+      })),
       dueDate: inv.due_date ? formatDate(inv.due_date) : null,
       issueDate: inv.created_at ? inv.created_at.toISOString().split('T')[0] : null,
-      grandTotal: Number(inv.grand_total) || 0
+      grandTotal: Number(inv.grand_total) || 0,
+      supplier: inv.suppliers?.name || 'Unknown',
+      supplierId: inv.supplier_id
     };
     res.json(mapped);
   } catch (err: any) {
+    console.error('[PI GET /:id] ERROR:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post('/api/purchase-invoices', async (req, res) => {
-  const { supplierId, reference, grandTotal, dueDate, issueDate, status } = req.body;
-  console.log('>>> [PURCHASE INVOICE POST] PAYLOAD:', req.body);
+  const { supplierId, reference, grandTotal, dueDate, issueDate, status, description, items, docOptions } = req.body;
+  console.log('>>> [PURCHASE INVOICE POST] PAYLOAD:', JSON.stringify(req.body, null, 2));
   try {
     const result = await prisma.invoices.create({
       data: {
@@ -1732,11 +1767,65 @@ app.post('/api/purchase-invoices', async (req, res) => {
         status: status || 'Unpaid',
         due_date: dueDate ? parseDate(dueDate) : undefined,
         created_at: issueDate ? parseDate(issueDate) : undefined,
+        description: description || '',
+        docOptions: docOptions || {},
+        items: {
+          create: (items || []).map((i: any) => ({
+            itemId: i.itemId,
+            description: i.description || '',
+            qty: Number(i.qty) || 0,
+            unitPrice: Number(i.unitPrice) || 0,
+            totalAmount: Number(i.totalAmount) || 0,
+            taxCode: i.taxCode || 'VAT 16%',
+            discount: i.discount || '',
+            division: i.division || 'General',
+            account: i.account || 'Inventory'
+          }))
+        }
       }
     });
     res.json(result);
   } catch (err: any) {
     console.error('[PURCHASE INVOICE CREATE ERROR]:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/purchase-invoices/:id', async (req, res) => {
+  const { id } = req.params;
+  const { supplierId, reference, grandTotal, dueDate, issueDate, status, description, items, docOptions } = req.body;
+  console.log(`>>> [PURCHASE INVOICE PUT] UPDATING ID: ${id}`, JSON.stringify(req.body, null, 2));
+  try {
+    const result = await prisma.invoices.update({
+      where: { id },
+      data: {
+        supplier_id: supplierId,
+        reference: reference,
+        grand_total: Number(grandTotal) || 0,
+        status: status || 'Unpaid',
+        due_date: dueDate ? parseDate(dueDate) : undefined,
+        created_at: issueDate ? parseDate(issueDate) : undefined,
+        description: description || '',
+        docOptions: docOptions || {},
+        items: {
+          deleteMany: {},
+          create: (items || []).map((i: any) => ({
+            itemId: i.itemId,
+            description: i.description || '',
+            qty: Number(i.qty) || 0,
+            unitPrice: Number(i.unitPrice) || 0,
+            totalAmount: Number(i.totalAmount) || 0,
+            taxCode: i.taxCode || 'VAT 16%',
+            discount: i.discount || '',
+            division: i.division || 'General',
+            account: i.account || 'Inventory'
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[PURCHASE INVOICE UPDATE ERROR]:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1823,6 +1912,81 @@ app.put('/api/purchase-orders/:id', async (req, res) => {
 
 // Routes moved to earlier in the file to ensure registration and proper mapping
 
+// --- GOODS RECEIVED NOTES ---
+app.get('/api/goods-received-notes', async (req, res) => {
+  try {
+    const grns = await prisma.goodsReceivedNote.findMany({
+      include: {
+        supplier: true,
+        purchaseOrder: true,
+        items: { include: { item: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    const mapped = grns.map(grn => ({
+      ...grn,
+      supplier: grn.supplier?.name || 'Unknown',
+      purchaseOrder: grn.purchaseOrder?.reference || '—',
+      receivedDate: formatDate(grn.receivedDate)
+    }));
+    res.json(mapped);
+  } catch (err: any) {
+    console.error('Fetch GRNs error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/goods-received-notes/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const grn = await prisma.goodsReceivedNote.findUnique({
+      where: { id },
+      include: {
+        supplier: true,
+        purchaseOrder: true,
+        items: { include: { item: true } }
+      }
+    });
+    if (!grn) return res.status(404).json({ error: 'GRN not found' });
+    res.json({
+      ...grn,
+      supplier: grn.supplier?.name || 'Unknown',
+      purchaseOrder: grn.purchaseOrder?.reference || '—',
+      receivedDate: formatDate(grn.receivedDate)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/goods-received-notes', async (req, res) => {
+  const { supplierId, reference, items, description, inventoryLocation, receivedDate, purchaseOrderId, status } = req.body;
+  try {
+    const result = await prisma.goodsReceivedNote.create({
+      data: {
+        supplierId,
+        reference,
+        description,
+        inventoryLocation,
+        receivedDate: receivedDate ? parseDate(receivedDate) : undefined,
+        purchaseOrderId,
+        status: status || 'Received',
+        items: {
+          create: (items || []).map((item: any) => ({
+            itemId: item.itemId,
+            description: item.description,
+            qty: Number(item.qty)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('CREATE GRN ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // --- FOOTERS ---
 app.get('/api/footers', async (req, res) => {
   try {
@@ -1878,9 +2042,14 @@ app.use((req, res) => {
 
 app.put('/api/purchase-invoices/:id', async (req, res) => {
   const { id } = req.params;
-  const { supplierId, reference, grandTotal, dueDate, issueDate, status } = req.body;
-  console.log(`>>> [PURCHASE INVOICE PUT] ID: ${id}, PAYLOAD:`, req.body);
+  const { supplierId, reference, grandTotal, dueDate, issueDate, status, description, items, docOptions } = req.body;
+  console.log(`>>> [PURCHASE INVOICE PUT] ID: ${id}, PAYLOAD:`, JSON.stringify(req.body, null, 2));
   try {
+    // Delete existing items first
+    await prisma.purchaseInvoiceItem.deleteMany({
+      where: { invoiceId: id }
+    });
+
     const result = await prisma.invoices.update({
       where: { id },
       data: {
@@ -1890,6 +2059,21 @@ app.put('/api/purchase-invoices/:id', async (req, res) => {
         status: status,
         due_date: dueDate ? parseDate(dueDate) : undefined,
         created_at: issueDate ? parseDate(issueDate) : undefined,
+        description: description || '',
+        docOptions: docOptions || {},
+        items: {
+          create: (items || []).map((i: any) => ({
+            itemId: i.itemId,
+            description: i.description || '',
+            qty: Number(i.qty) || 0,
+            unitPrice: Number(i.unitPrice) || 0,
+            totalAmount: Number(i.totalAmount) || 0,
+            taxCode: i.taxCode || 'VAT 16%',
+            discount: i.discount || '',
+            division: i.division || 'General',
+            account: i.account || 'Inventory'
+          }))
+        }
       }
     });
     res.json(result);

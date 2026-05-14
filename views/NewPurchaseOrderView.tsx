@@ -211,22 +211,30 @@ const NewPurchaseOrderView = () => {
                 try {
                     let sourceDoc: any = null;
                     try {
-                        sourceDoc = await apiService.getInvoice(sourceId);
+                        sourceDoc = await apiService.getPurchaseOrder(sourceId);
                     } catch (e) {
                         try {
-                            sourceDoc = await apiService.getOrder(sourceId);
+                            sourceDoc = await apiService.getPurchaseEnquiry(sourceId);
                         } catch (e2) {
                             try {
-                                sourceDoc = await apiService.getQuote(sourceId);
+                                sourceDoc = await apiService.getInvoice(sourceId);
                             } catch (e3) {
-                                const [invoices, orders, quotes] = await Promise.all([
-                                    apiService.getInvoices().catch(() => []),
-                                    apiService.getOrders().catch(() => []),
-                                    apiService.getQuotes().catch(() => [])
-                                ]);
-                                sourceDoc = invoices.find((i: any) => i.id === sourceId) ||
-                                            orders.find((o: any) => o.id === sourceId) ||
-                                            quotes.find((q: any) => q.id === sourceId);
+                                try {
+                                    sourceDoc = await apiService.getOrder(sourceId);
+                                } catch (e4) {
+                                    try {
+                                        sourceDoc = await apiService.getQuote(sourceId);
+                                    } catch (e5) {
+                                        const [invoices, orders, quotes] = await Promise.all([
+                                            apiService.getInvoices().catch(() => []),
+                                            apiService.getOrders().catch(() => []),
+                                            apiService.getQuotes().catch(() => [])
+                                        ]);
+                                        sourceDoc = invoices.find((i: any) => i.id === sourceId) ||
+                                                    orders.find((o: any) => o.id === sourceId) ||
+                                                    quotes.find((q: any) => q.id === sourceId);
+                                    }
+                                }
                             }
                         }
                     }

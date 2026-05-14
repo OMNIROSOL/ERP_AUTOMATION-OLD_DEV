@@ -545,14 +545,14 @@ const BatchPrintView = () => {
                         const hasOptions = !!item.options;
                         const documentTitle = (hasOptions && item.options.customTitle && item.options.customTitleValue)
                             ? item.options.customTitleValue
-                            : (item.customTitle || (isPurchaseQuote ? 'Purchase Quotation' : (isPurchaseOrder ? 'Purchase Order' : (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order')))))));
+                            : (item.customTitle || (isPurchaseQuote ? 'Purchase Enquiry' : (isPurchaseOrder ? 'Purchase Order' : (isQuote ? 'Quotation' : (isInvoice ? 'Sales Invoice' : (isDeliveryNote ? 'Delivery Note' : (isReceipt ? 'Official Receipt' : 'Sales Order')))))));
 
                         const subTitle = isPurchaseQuote ? 'PROCUREMENT REQUEST' : (isQuote ? 'OFFICIAL PROPOSAL' : (isInvoice ? 'TAX INVOICE' : (isDeliveryNote ? 'PROOF OF DELIVERY' : (isReceipt ? 'PAYMENT CONFIRMATION' : (isPurchaseOrder ? 'ORDER TO SUPPLIER' : 'CONFIRMED ORDER')))));
 
                         let footerValue = (item.options?.footers && item.options?.footerValue) ? item.options.footerValue : (item.footer || '');
 
                         if ((isPurchaseOrder || isPurchaseQuote) && !footerValue) {
-                            const footer = allFooters.find(f => f.name === 'Purchase Quote');
+                            const footer = allFooters.find(f => f.name === 'Purchase Enquiry');
                             if (footer) footerValue = footer.content;
                         }
 

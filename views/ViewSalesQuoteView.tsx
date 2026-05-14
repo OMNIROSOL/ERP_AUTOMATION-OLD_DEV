@@ -194,7 +194,7 @@ const ViewSalesQuoteView = () => {
                             <div className="absolute top-full left-0 mt-1 w-56 bg-white border border-gray-200 shadow-xl rounded py-1 z-[100]">
                                 {[
                                     { label: 'Sales Quote', path: '/sales-quotes/new' },
-                                    { label: 'Purchase Quote', path: '/purchase-quotes/new' },
+                                    { label: 'Purchase Enquiry', path: '/purchase-quotes/new' },
                                     { label: 'Sales Order', path: '/sales-orders/new' },
                                     { label: 'Sales Invoice', path: '/sales-invoices/new' },
                                     { label: 'Delivery Note', path: '/delivery-notes/new' },
@@ -240,7 +240,67 @@ const ViewSalesQuoteView = () => {
                                         scale: 2,
                                         useCORS: true,
                                         logging: true,
-                                        backgroundColor: '#ffffff'
+                                        backgroundColor: '#ffffff',
+                                        onclone: (clonedDoc) => {
+                                            const style = clonedDoc.createElement('style');
+                                            style.innerHTML = `
+                                                * {
+                                                    --color-slate-50: #f8fafc !important;
+                                                    --color-slate-100: #f1f5f9 !important;
+                                                    --color-slate-200: #e2e8f0 !important;
+                                                    --color-slate-300: #cbd5e1 !important;
+                                                    --color-slate-400: #94a3b8 !important;
+                                                    --color-slate-500: #64748b !important;
+                                                    --color-slate-600: #475569 !important;
+                                                    --color-slate-700: #334155 !important;
+                                                    --color-slate-800: #1e293b !important;
+                                                    --color-slate-900: #0f172a !important;
+                                                    --color-indigo-50: #eef2ff !important;
+                                                    --color-indigo-100: #e0e7ff !important;
+                                                    --color-indigo-200: #c7d2fe !important;
+                                                    --color-indigo-300: #a5b4fc !important;
+                                                    --color-indigo-400: #818cf8 !important;
+                                                    --color-indigo-500: #6366f1 !important;
+                                                    --color-indigo-600: #4f46e5 !important;
+                                                    --color-indigo-700: #4338ca !important;
+                                                    --color-indigo-800: #3730a3 !important;
+                                                    --color-indigo-900: #312e81 !important;
+                                                    --color-rose-50: #fff1f2 !important;
+                                                    --color-rose-100: #ffe4e6 !important;
+                                                    --color-rose-200: #fecdd3 !important;
+                                                    --color-rose-300: #fda4af !important;
+                                                    --color-rose-400: #fb7185 !important;
+                                                    --color-rose-500: #f43f5e !important;
+                                                    --color-rose-600: #e11d48 !important;
+                                                    --color-blue-50: #eff6ff !important;
+                                                    --color-blue-100: #dbeafe !important;
+                                                    --color-blue-200: #bfdbfe !important;
+                                                    --color-blue-300: #93c5fd !important;
+                                                    --color-blue-400: #60a5fa !important;
+                                                    --color-blue-500: #3b82f6 !important;
+                                                    --color-blue-600: #2563eb !important;
+                                                    --color-gray-50: #f9fafb !important;
+                                                    --color-gray-100: #f3f4f6 !important;
+                                                    --color-gray-200: #e5e7eb !important;
+                                                    --color-gray-300: #d1d5db !important;
+                                                    --color-gray-400: #9ca3af !important;
+                                                    --color-gray-500: #6b7280 !important;
+                                                    --color-gray-600: #4b5563 !important;
+                                                    --color-gray-700: #374151 !important;
+                                                    --color-gray-800: #1f2937 !important;
+                                                    --color-gray-900: #111827 !important;
+                                                    --color-emerald-50: #ecfdf5 !important;
+                                                    --color-emerald-100: #d1fae5 !important;
+                                                    --color-emerald-500: #10b981 !important;
+                                                    --color-emerald-600: #059669 !important;
+                                                    --color-amber-50: #fffbeb !important;
+                                                    --color-amber-100: #fef3c7 !important;
+                                                    --color-amber-500: #f59e0b !important;
+                                                    --color-amber-600: #d97706 !important;
+                                                }
+                                            `;
+                                            clonedDoc.head.appendChild(style);
+                                        }
                                     });
 
                                     element.setAttribute('style', originalStyle);

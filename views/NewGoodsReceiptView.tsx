@@ -29,12 +29,14 @@ const NewGoodsReceiptView = () => {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [sups, itemsData] = await Promise.all([
+                const [sups, itemsData, nextRef] = await Promise.all([
                     apiService.getSuppliers(),
-                    apiService.getItems()
+                    apiService.getItems(),
+                    apiService.getNextReference('goods-received-note')
                 ]);
                 setDbSuppliers(sups);
                 setDbItems(itemsData);
+                setReference(nextRef);
             } catch (err) {
                 console.error('Failed to load goods receipt data:', err);
             }
@@ -47,7 +49,40 @@ const NewGoodsReceiptView = () => {
         const copyFromId = searchParams.get('copyFrom');
 
         if (copyFromId) {
-            // Placeholder: logic for copying from other documents if needed
+            const fetchSource = async () => {
+                try {
+                    let sourceDoc: any = null;
+                    try {
+                        sourceDoc = await apiService.getPurchaseOrder(copyFromId);
+                    } catch (e) {
+                        try {
+                            sourceDoc = await apiService.getPurchaseEnquiry(copyFromId);
+                        } catch (e2) {
+                            try {
+                                sourceDoc = await apiService.getOrder(copyFromId);
+                            } catch (e3) {
+                                sourceDoc = await apiService.getPurchaseInvoice(copyFromId);
+                            }
+                        }
+                    }
+
+                    if (sourceDoc) {
+                        setSupplier(sourceDoc.supplier?.name || sourceDoc.supplierName || sourceDoc.supplier || '');
+                        setDescription(`Received items for ${sourceDoc.reference}`);
+                        if (sourceDoc.items) {
+                            setItems(sourceDoc.items.map((i: any) => ({
+                                id: Date.now() + Math.random(),
+                                item: i.item?.itemName || i.itemName || i.item || '',
+                                description: i.description || '',
+                                qty: (i.qty || '1').toString()
+                            })));
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load source for goods receipt:', err);
+                }
+            };
+            fetchSource();
         }
     }, [location.search]);
 
@@ -73,6 +108,54 @@ const NewGoodsReceiptView = () => {
     };
 
     const triggerFileSelect = () => fileInputRef.current?.click();
+
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const handleSubmit = async () => {
+        if (!supplier) {
+            alert('Please select a supplier');
+            return;
+        }
+
+        const selectedSupplier = dbSuppliers.find(s => s.name === supplier);
+        if (!selectedSupplier) {
+            alert('Invalid supplier');
+            return;
+        }
+
+        const grnItems = items.filter(i => i.item).map(i => {
+            const dbItem = dbItems.find(di => di.itemName === i.item);
+            return {
+                itemId: dbItem?.id,
+                description: i.description || i.item,
+                qty: parseFloat(i.qty) || 0
+            };
+        });
+
+        if (grnItems.length === 0) {
+            alert('Please add at least one item');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            await apiService.createGoodsReceivedNote({
+                supplierId: selectedSupplier.id,
+                reference: reference,
+                receivedDate: date,
+                description: description,
+                inventoryLocation: inventoryLocation,
+                items: grnItems,
+                status: 'Received'
+            });
+            window.dispatchEvent(new Event('grn_updated'));
+            navigate('/goods-received-notes');
+        } catch (err: any) {
+            console.error('Failed to create GRN:', err);
+            alert('Error: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <div className="bg-[#f9fafb] min-h-full pb-20">
@@ -291,15 +374,15 @@ const NewGoodsReceiptView = () => {
                         </div>
                     </div>
 
-                    <div className="mt-16 pt-10 border-t border-[#f0f0f0] flex items-center space-x-4">
+                    <div className="mt-16 pt-10 border-t border-[#f0f0f0]">
                         <div className="flex items-center space-x-4">
                             <button
-                                disabled
-                                className="bg-blue-600 opacity-50 text-white px-6 py-2 rounded-[4px] text-[14px] font-medium cursor-not-allowed shadow-md"
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className={`bg-blue-600 text-white px-6 py-2 rounded-[4px] text-[14px] font-medium shadow-md transition-all ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700 active:scale-95'}`}
                             >
-                                Create
+                                {isSubmitting ? 'Creating...' : 'Create'}
                             </button>
-                            <span className="text-[14px] text-[#455a64]">Administrator has disabled "Create" button</span>
                         </div>
                     </div>
                 </div>

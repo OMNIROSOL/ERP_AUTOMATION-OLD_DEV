@@ -149,7 +149,7 @@ const PurchaseQuotesView = () => {
                 }));
                 setPurchaseQuotes(mapped);
             } catch (err) {
-                console.error('Failed to fetch purchase quotes:', err);
+                console.error('Failed to fetch purchase enquiries:', err);
             } finally {
                 setIsLoading(false);
             }
@@ -305,7 +305,7 @@ const PurchaseQuotesView = () => {
                         <button
                             onClick={() => navigate(`/purchase-quotes/edit/${o.id}`)}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all font-bold"
-                            title="Edit Quote"
+                            title="Edit Enquiry"
                         >
                             <Edit size={14} />
                         </button>
@@ -387,14 +387,14 @@ const PurchaseQuotesView = () => {
                                 <button
                                     onClick={() => handleStatusChange(o.id, 'Accepted')}
                                     className="w-7 h-7 flex items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50 hover:border-emerald-500 transition-all shadow-sm"
-                                    title="Accept Quote"
+                                    title="Accept Enquiry"
                                 >
                                     <Check size={13} strokeWidth={3} />
                                 </button>
                                 <button
                                     onClick={() => handleStatusChange(o.id, 'Rejected')}
                                     className="w-7 h-7 flex items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 hover:border-rose-500 transition-all shadow-sm"
-                                    title="Reject Quote"
+                                    title="Reject Enquiry"
                                 >
                                     <X size={13} strokeWidth={3} />
                                 </button>
@@ -473,7 +473,7 @@ const PurchaseQuotesView = () => {
                                 disabled={selectedIds.length === 0}
                                 className="text-white/90 hover:text-white flex items-center space-x-2 text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-40"
                             >
-                                <Printer size={14} /> <span>Print Quotes</span>
+                                <Printer size={14} /> <span>Print Enquiries</span>
                             </button>
                             <button
                                 onClick={handleBatchCopy}
@@ -501,7 +501,7 @@ const PurchaseQuotesView = () => {
                         isLoading ? (
                             <div className="flex flex-col items-center justify-center py-20 space-y-4">
                                 <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-600 rounded-full animate-spin"></div>
-                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching purchase quotes...</p>
+                                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Fetching purchase enquiries...</p>
                             </div>
                         ) : undefined
                     }

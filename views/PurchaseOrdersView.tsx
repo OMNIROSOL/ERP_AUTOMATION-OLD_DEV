@@ -172,7 +172,7 @@ const PurchaseOrdersView = () => {
     const filteredData = useMemo(() => {
         let result = [...purchaseOrders].filter(o => {
             const status = (o.status || '').toString().toLowerCase();
-            return status !== 'invoiced' && status !== 'rejected';
+            return status !== 'invoiced' && status !== 'rejected' && status !== 'closed';
         });
 
         if (supplierName) {

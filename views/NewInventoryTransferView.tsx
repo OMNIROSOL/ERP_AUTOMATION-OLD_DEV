@@ -132,7 +132,7 @@ const NewInventoryTransferView = () => {
             <option value="Sales Invoice">Sales Invoice</option>
             <option value="Delivery Note">Delivery Note</option>
             <option value="Credit Note">Credit Note</option>
-            <option value="Purchase Quote">Purchase Quote</option>
+            <option value="Purchase Enquiry">Purchase Enquiry</option>
             <option value="Purchase Order">Purchase Order</option>
             <option value="Good Receipt">Good Receipt</option>
             <option value="Debit Note">Debit Note</option>

@@ -149,17 +149,43 @@ const NewPurchaseInvoiceView = () => {
                             sourceDoc = await apiService.getPurchaseInvoice(targetId);
                         } catch (e) {
                             try {
-                                sourceDoc = await apiService.getInvoice(targetId);
+                                sourceDoc = await apiService.getPurchaseOrder(targetId);
                             } catch (e2) {
                                 try {
-                                    sourceDoc = await apiService.getOrder(targetId);
-                                } catch (e3) {
-                                    sourceDoc = await apiService.getQuote(targetId);
+                                    sourceDoc = await apiService.getGoodsReceivedNote(targetId);
+                                } catch (e_gr) {
+                                    try {
+                                        sourceDoc = await apiService.getPurchaseEnquiry(targetId);
+                                    } catch (e3) {
+                                        try {
+                                            sourceDoc = await apiService.getInvoice(targetId);
+                                        } catch (e4) {
+                                            try {
+                                                sourceDoc = await apiService.getOrder(targetId);
+                                            } catch (e5) {
+                                                sourceDoc = await apiService.getQuote(targetId);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
 
                         if (sourceDoc) {
+                            console.log('[PI COPY] sourceDoc loaded:', {
+                                description: sourceDoc.description,
+                                itemsCount: sourceDoc.items?.length,
+                                items: sourceDoc.items?.map((i: any) => ({ desc: i.description, item: i.item?.itemName, qty: i.qty, price: i.unitPrice })),
+                                supplier: sourceDoc.supplier?.name || sourceDoc.supplier,
+                                supplierId: sourceDoc.supplierId || sourceDoc.supplier_id,
+                                reference: sourceDoc.reference
+                            });
+                            
+                            // Replicate Document Options
+                            if (sourceDoc.docOptions || sourceDoc.options) {
+                                setOptions(prev => ({ ...prev, ...(sourceDoc.docOptions || sourceDoc.options) }));
+                            }
+
                             const docDate = copyFromId ? '' : (sourceDoc.issueDate || sourceDoc.orderDate || '');
                             let parsedIssueDate = new Date().toISOString().split('T')[0];
                             if (docDate) {
@@ -187,7 +213,7 @@ const NewPurchaseInvoiceView = () => {
                             }
                             setDueDate(parsedDueDate);
                             
-                            const sup = sups.find((s: any) => s.id === sourceDoc.supplierId || s.name === (sourceDoc.supplier?.name || sourceDoc.supplier));
+                            const sup = sups.find((s: any) => s.id === sourceDoc.supplierId || s.id === sourceDoc.supplier_id || s.name === (sourceDoc.supplier?.name || sourceDoc.supplier));
                             if (sup) {
                                 setSupplier(sup.name);
                                 setCurrency(sup.currency?.split(' - ')[0] || 'ZMW');
@@ -208,18 +234,23 @@ const NewPurchaseInvoiceView = () => {
                             }
 
                             setDescription(sourceDoc.description || '');
+                            console.log('[PI COPY] setDescription called with:', sourceDoc.description || '(empty)');
                             
-                            if (sourceDoc.items) {
-                                setItems(sourceDoc.items.map((i: any) => ({
+                            if (sourceDoc.items && sourceDoc.items.length > 0) {
+                                const mappedItems = sourceDoc.items.map((i: any) => ({
                                     id: Date.now() + Math.random(),
                                     item: i.item?.itemName || i.itemName || i.item || 'Select Item',
                                     account: i.account || 'Inventory',
                                     description: i.description || '',
                                     qty: (i.qty || '1').toString(),
-                                    unitPrice: (i.unitPrice || '0').toString(),
+                                    unitPrice: (i.unitPrice || i.unit_price || '0').toString(),
                                     discount: (i.discount || '').toString(),
-                                    taxCode: i.taxCode || 'No tax'
-                                })));
+                                    taxCode: i.taxCode || i.tax_code || 'VAT 16%'
+                                }));
+                                console.log('[PI COPY] setItems called with:', mappedItems);
+                                setItems(mappedItems);
+                            } else {
+                                console.log('[PI COPY] No items to copy, keeping defaults');
                             }
                         }
                     } catch (err) {
@@ -312,15 +343,17 @@ const NewPurchaseInvoiceView = () => {
                     description: i.description,
                     qty: parseFloat(i.qty),
                     unitPrice: parseFloat(i.unitPrice),
-                    totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice)
+                    totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice),
+                    taxCode: i.taxCode || 'VAT 16%',
+                    discount: i.discount || '',
+                    account: i.account || 'Inventory'
                 };
             })
         };
 
         try {
             if (isEditing) {
-                // await apiService.updatePurchaseInvoice(id!, invoiceData);
-                alert('Update not yet implemented in backend.');
+                await apiService.updatePurchaseInvoice(id!, invoiceData);
             } else {
                 await apiService.createPurchaseInvoice(invoiceData);
             }
