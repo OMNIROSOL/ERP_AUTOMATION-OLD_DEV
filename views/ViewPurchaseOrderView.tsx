@@ -144,7 +144,7 @@ const ViewPurchaseOrderView = () => {
 
             if (shouldInvoice) {
                 const invoiceData = {
-                    reference: `PINV-${Date.now()}`,
+                    reference: order.reference ? `INV-${order.reference.replace('PO-', '')}` : `PINV-${Date.now()}`,
                     supplierId: order.supplierId,
                     grand_total: totals.total,
                     grandTotal: totals.total,
@@ -154,12 +154,13 @@ const ViewPurchaseOrderView = () => {
                     status: 'Unpaid',
                     items: order.items?.map((i: any) => ({
                         itemId: i.itemId,
-                        description: i.description || '',
-                        qty: Number(i.qty) || 0,
-                        unitPrice: Number(i.unitPrice) || 0,
-                        totalAmount: Number(i.totalAmount) || 0,
+                        description: i.description || i.item?.itemName || i.itemName || i.item_name || '',
+                        qty: Number(i.qty || i.quantity) || 0,
+                        unitPrice: Number(i.unitPrice || i.unit_price) || 0,
+                        totalAmount: Number(i.totalAmount) || (Number(i.qty) * Number(i.unitPrice)) || 0,
                         taxCode: i.taxCode || 'VAT 16%',
                         discount: i.discount || '',
+                        division: i.division || 'General',
                         account: i.account || 'Inventory'
                     })) || []
                 };

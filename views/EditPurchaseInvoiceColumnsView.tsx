@@ -20,6 +20,7 @@ const EditPurchaseInvoiceColumnsView = () => {
         { id: 'Days overdue', label: 'Days overdue', visible: true },
         { id: 'Status', label: 'Status', visible: true },
         { id: 'Timestamp', label: 'Timestamp', visible: true },
+        { id: 'Create GRN', label: 'Create GRN', visible: true },
     ]);
 
     useEffect(() => {

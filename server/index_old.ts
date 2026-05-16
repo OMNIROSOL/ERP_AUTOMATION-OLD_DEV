@@ -1726,12 +1726,7 @@ app.get('/api/purchase-invoices', async (req, res) => {
         const itemTotal = Number(item.totalAmount) || 0;
         return sum + itemTotal;
       }, 0);
-      const totalDiscount = (inv.items || []).reduce((sum, item) => {
-        const lineExTax = (Number(item.qty) * Number(item.unitPrice)) || 0;
-        const discountVal = parseFloat(item.discount as string) || 0;
-        const discountAmount = lineExTax * (discountVal / 100);
-        return sum + discountAmount;
-      }, 0);
+      const totalDiscount = (inv.items || []).reduce((sum, item) => sum + (parseFloat(item.discount as string) || 0), 0);
       return {
         ...inv,
         description: inv.description || '',

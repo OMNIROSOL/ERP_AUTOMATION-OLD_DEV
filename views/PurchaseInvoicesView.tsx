@@ -35,7 +35,8 @@ const PurchaseInvoicesView = () => {
         'Days to Due Date': true,
         'Days overdue': true,
         'Status': true,
-        'Timestamp': true
+        'Timestamp': true,
+        'Create GRN': true
     });
 
     useEffect(() => {
@@ -68,14 +69,19 @@ const PurchaseInvoicesView = () => {
     }, []);
 
     const [purchaseInvoices, setPurchaseInvoices] = useState<any[]>([]);
+    const [goodsReceivedNotes, setGoodsReceivedNotes] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const fetchInvoices = async () => {
             setIsLoading(true);
             try {
-                const data = await apiService.getPurchaseInvoices();
-                const mapped = data.map((inv: any) => {
+                const [invData, grnData] = await Promise.all([
+                    apiService.getPurchaseInvoices(),
+                    apiService.getGoodsReceivedNotes()
+                ]);
+
+                const mappedInvoices = invData.map((inv: any) => {
                     // Defensive mapping to ensure all required fields exist
                     const supplierName = inv.suppliers?.name || inv.supplier || 'Unknown';
                     return {
@@ -84,14 +90,15 @@ const PurchaseInvoicesView = () => {
                         issueDate: inv.created_at ? new Date(inv.created_at).toLocaleDateString('en-GB').replace(/\//g, '.') : '',
                         dueDate: inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-GB').replace(/\//g, '.') : '—',
                         currency: inv.currency || inv.suppliers?.currency?.split(' - ')[0] || 'ZMW',
-                        invoiceAmount: parseFloat(inv.grand_total) || 0,
-                        balanceDue: parseFloat(inv.grand_total) || 0, // Placeholder
+                        invoiceAmount: inv.invoiceAmount || parseFloat(inv.grand_total) || 0,
+                        balanceDue: inv.balanceDue || parseFloat(inv.grand_total) || 0,
                         timestamp: inv.created_at ? new Date(inv.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).replace(/\//g, '.').replace(',', '').toUpperCase() : ''
                     };
                 });
-                setPurchaseInvoices(mapped);
+                setPurchaseInvoices(mappedInvoices);
+                setGoodsReceivedNotes(grnData);
             } catch (err) {
-                console.error('Failed to fetch purchase invoices:', err);
+                console.error('Failed to fetch data:', err);
             } finally {
                 setIsLoading(false);
             }
@@ -139,14 +146,51 @@ const PurchaseInvoicesView = () => {
         };
     };
 
+    const handleCreateGRN = async (inv: any) => {
+        try {
+            // 1. Fetch full invoice details to get items
+            const fullInv = await apiService.getPurchaseInvoice(inv.id);
+            
+            if (!fullInv || !fullInv.items) {
+                alert('Could not retrieve invoice items.');
+                return;
+            }
+
+            // 2. Prepare GRN data
+            const grnData = {
+                supplierId: fullInv.supplierId,
+                reference: fullInv.reference,
+                description: `Received items for ${fullInv.reference}`,
+                inventoryLocation: 'Default Inventory Location',
+                receivedDate: new Date().toISOString().split('T')[0],
+                status: 'Received',
+                items: fullInv.items.map((item: any) => ({
+                    itemId: item.itemId,
+                    description: item.description || '',
+                    qty: Number(item.qty) || 0
+                }))
+            };
+
+            // 3. Create GRN
+            await apiService.createGoodsReceivedNote(grnData);
+
+            // 4. Navigate and refresh
+            setRefreshTrigger(prev => prev + 1);
+            navigate('/goods-received-notes');
+        } catch (err: any) {
+            console.error('Failed to create GRN:', err);
+            alert('Error creating GRN: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
     const columns = [
         {
             id: 'Actions',
             header: 'Actions',
             accessor: (inv: any) => (
                 <div className="flex items-center gap-2">
-                    <button onClick={() => navigate(`/purchase-invoices/view/${inv.id}`)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Eye size={14} /></button>
-                    <button onClick={() => navigate(`/purchase-invoices/edit/${inv.id}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                    <button onClick={() => navigate(`/purchase-invoices/view/${inv.id}`)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg" title="View"><Eye size={14} /></button>
+                    <button onClick={() => navigate(`/purchase-invoices/edit/${inv.id}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit"><Edit size={14} /></button>
                 </div>
             )
         },
@@ -192,7 +236,12 @@ const PurchaseInvoicesView = () => {
             id: 'Discount',
             header: 'Discount',
             className: 'text-right',
-            accessor: (inv: any) => <span className="text-xs text-slate-400">{(inv.discount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            accessor: (inv: any) => (
+                <div className="text-right font-medium text-slate-600 whitespace-nowrap">
+                    <span className="text-[10px] text-slate-400 mr-1">{inv.currency || 'ZMW'}</span>
+                    {(inv.discount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+            )
         },
         {
             id: 'Invoice Amount',
@@ -211,6 +260,7 @@ const PurchaseInvoicesView = () => {
             className: 'text-right',
             accessor: (inv: any) => (
                 <div className="text-right font-black text-indigo-600 whitespace-nowrap">
+                    <span className="text-[10px] text-indigo-400/60 mr-1">{inv.currency || 'ZMW'}</span>
                     {inv.balanceDue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
             )
@@ -244,6 +294,28 @@ const PurchaseInvoicesView = () => {
             id: 'Timestamp',
             header: 'Timestamp',
             accessor: (inv: any) => <span className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{inv.timestamp || '—'}</span>
+        },
+        {
+            id: 'Create GRN',
+            header: 'Create GRN',
+            accessor: (inv: any) => {
+                const isLinked = goodsReceivedNotes.some((grn: any) => grn.reference === inv.reference);
+                return (
+                    <button
+                        onClick={() => !isLinked && handleCreateGRN(inv)}
+                        className={cn(
+                            "p-2 rounded-lg transition-all shadow-sm border",
+                            isLinked
+                                ? "bg-emerald-50 text-emerald-600 border-emerald-100 cursor-not-allowed"
+                                : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-200"
+                        )}
+                        title={isLinked ? "Goods Received Note already exists" : "Generate Goods Received Note"}
+                        disabled={isLinked}
+                    >
+                        {isLinked ? <Check size={16} strokeWidth={3} /> : <Package size={16} />}
+                    </button>
+                );
+            }
         }
     ].filter(col => (columnVisibility as any)[col.id] !== false);
 

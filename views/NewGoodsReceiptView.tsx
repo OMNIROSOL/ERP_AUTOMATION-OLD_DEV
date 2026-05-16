@@ -69,6 +69,10 @@ const NewGoodsReceiptView = () => {
                     if (sourceDoc) {
                         setSupplier(sourceDoc.supplier?.name || sourceDoc.supplierName || sourceDoc.supplier || '');
                         setDescription(`Received items for ${sourceDoc.reference}`);
+                        if (sourceDoc.reference) {
+                            setReference(sourceDoc.reference);
+                            setUseManualRef(true);
+                        }
                         if (sourceDoc.items) {
                             setItems(sourceDoc.items.map((i: any) => ({
                                 id: Date.now() + Math.random(),

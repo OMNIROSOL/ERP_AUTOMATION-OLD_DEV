@@ -239,13 +239,14 @@ const NewPurchaseInvoiceView = () => {
                             if (sourceDoc.items && sourceDoc.items.length > 0) {
                                 const mappedItems = sourceDoc.items.map((i: any) => ({
                                     id: Date.now() + Math.random(),
-                                    item: i.item?.itemName || i.itemName || i.item || 'Select Item',
+                                    item: i.item?.itemName || i.itemName || i.item_name || (typeof i.item === 'string' ? i.item : (i.item?.name || 'Select Item')),
                                     account: i.account || 'Inventory',
-                                    description: i.description || '',
-                                    qty: (i.qty || '1').toString(),
-                                    unitPrice: (i.unitPrice || i.unit_price || '0').toString(),
+                                    description: i.description || i.item?.itemName || i.itemName || i.item_name || '',
+                                    qty: (i.qty || i.quantity || '1').toString(),
+                                    unitPrice: (i.unitPrice || i.unit_price || i.price || '0').toString(),
                                     discount: (i.discount || '').toString(),
-                                    taxCode: i.taxCode || i.tax_code || 'VAT 16%'
+                                    taxCode: i.taxCode || i.tax_code || 'VAT 16%',
+                                    division: i.division || 'General'
                                 }));
                                 console.log('[PI COPY] setItems called with:', mappedItems);
                                 setItems(mappedItems);
