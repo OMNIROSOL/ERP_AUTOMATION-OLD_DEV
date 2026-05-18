@@ -2121,27 +2121,64 @@ app.put('/api/goods-received-notes/:id', async (req, res) => {
   console.log(`>>> [GRN PUT] UPDATING ID: ${id}`);
   const { supplierId, reference, items, description, inventoryLocation, receivedDate, purchaseOrderId, status } = req.body;
   try {
-    const result = await prisma.goodsReceivedNote.update({
-      where: { id },
-      data: {
-        supplierId,
-        reference,
-        description,
-        inventoryLocation,
-        receivedDate: receivedDate ? parseDate(receivedDate) : undefined,
-        purchaseOrderId,
-        status: status || 'Received',
-        items: {
-          deleteMany: {},
-          create: (items || []).map((item: any) => ({
-            itemId: item.itemId,
-            description: item.description,
-            qty: Number(item.qty)
-          }))
+    try {
+      const result = await prisma.goodsReceivedNote.update({
+        where: { id },
+        data: {
+          supplierId,
+          reference,
+          description,
+          inventoryLocation,
+          receivedDate: receivedDate ? parseDate(receivedDate) : undefined,
+          purchaseOrderId,
+          status: status || 'Received',
+          items: {
+            deleteMany: {},
+            create: (items || []).map((item: any) => ({
+              itemId: item.itemId,
+              description: item.description,
+              qty: Number(item.qty)
+            }))
+          }
+        }
+      });
+      return res.json(result);
+    } catch (err: any) {
+      if (err.code === 'P2025') {
+        const inv = await prisma.invoices.findUnique({
+          where: { id },
+          include: { items: true }
+        });
+        if (inv && (inv.docOptions as any)?.actAsGoodReceipt === true) {
+          const existingOptions = (inv.docOptions as any) || {};
+          const updatedOptions = {
+            ...existingOptions,
+            inventoryLocation: inventoryLocation || 'Main Warehouse'
+          };
+          const result = await prisma.invoices.update({
+            where: { id },
+            data: {
+              supplier_id: supplierId,
+              reference,
+              description,
+              docOptions: updatedOptions,
+              items: {
+                deleteMany: {},
+                create: (items || []).map((item: any) => ({
+                  itemId: item.itemId,
+                  description: item.description,
+                  qty: Number(item.qty),
+                  unitPrice: item.unitPrice || 0,
+                  totalAmount: item.totalAmount || 0
+                }))
+              }
+            }
+          });
+          return res.json(result);
         }
       }
-    });
-    res.json(result);
+      throw err;
+    }
   } catch (err: any) {
     console.error('[GRN UPDATE ERROR]:', err);
     res.status(500).json({ error: err.message });

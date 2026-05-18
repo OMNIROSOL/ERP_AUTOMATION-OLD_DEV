@@ -1,6 +1,63 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import apiService from '../services/apiService';
+import {
+    FileText,
+    ChevronRight,
+    CheckCircle2,
+    Plus,
+    Trash2,
+    Copy,
+    User,
+    X,
+    Search,
+    AlertTriangle,
+    Package,
+    Calendar,
+    Save,
+    ChevronDown,
+    ChevronUp,
+    Hash,
+    Briefcase,
+    Settings,
+    MapPin
+} from 'lucide-react';
+import { cn } from '../utils/cn';
+
+const InputField = ({ label, value, onChange, placeholder, type = "text", Icon, error, readOnly }: any) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <div className="relative group">
+            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
+            <input
+                type={type}
+                value={value}
+                onChange={onChange}
+                placeholder={placeholder}
+                readOnly={readOnly}
+                className={`w-full bg-slate-50 border ${error ? 'border-rose-500 ring-4 ring-rose-500/10' : 'border-slate-200'} rounded-2xl ${Icon ? 'pl-11' : 'px-5'} py-3 text-[13px] font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-4 ${error ? 'focus:ring-rose-500/10 focus:border-rose-500' : 'focus:ring-indigo-500/10 focus:border-indigo-500'} transition-all ${readOnly ? 'opacity-60 cursor-not-allowed bg-slate-100' : ''}`}
+            />
+        </div>
+        {error && <p className="text-[10px] font-bold text-rose-500 ml-1 mt-1 uppercase tracking-wider animate-in fade-in slide-in-from-top-1 duration-300">{error}</p>}
+    </div>
+);
+
+const SelectField = ({ label, value, onChange, Icon, children }: any) => (
+    <div className="space-y-2">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">{label}</label>
+        <div className="relative group">
+            {Icon && <Icon size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-indigo-500" />}
+            <select
+                value={value}
+                onChange={onChange}
+                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
+            >
+                {children}
+            </select>
+            <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
+    </div>
+);
 
 const NewGoodsReceiptView = () => {
     const { id } = useParams();
@@ -8,7 +65,6 @@ const NewGoodsReceiptView = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const dateInputRef = useRef<HTMLInputElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [supplier, setSupplier] = useState('');
@@ -16,27 +72,33 @@ const NewGoodsReceiptView = () => {
     const [description, setDescription] = useState('');
     const [reference, setReference] = useState('');
     const [useManualRef, setUseManualRef] = useState(false);
-    const [fileName, setFileName] = useState('No file chosen');
     const [items, setItems] = useState([{ id: Date.now(), item: '', description: '', qty: '1' }]);
     
     const [dbSuppliers, setDbSuppliers] = useState<any[]>([]);
     const [dbItems, setDbItems] = useState<any[]>([]);
+    const [dbFooters, setDbFooters] = useState<any[]>([]);
+    const [showOptionsArea, setShowOptionsArea] = useState(false);
 
     const [options, setOptions] = useState({
         lineNumber: false,
         customTitle: false,
-        footers: false
+        customTitleValue: 'Goods Received Note',
+        footers: false,
+        footerValue: 'Received in good condition.',
+        attachments: [] as any[]
     });
 
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [sups, itemsData] = await Promise.all([
+                const [sups, itemsData, footersData] = await Promise.all([
                     apiService.getSuppliers(),
-                    apiService.getItems()
+                    apiService.getItems(),
+                    apiService.getFooters().catch(() => [])
                 ]);
                 setDbSuppliers(sups);
                 setDbItems(itemsData);
+                setDbFooters(footersData);
 
                 if (!id && !location.search.includes('copyFrom')) {
                     const nextRef = await apiService.getNextReference('goods-received-note');
@@ -144,21 +206,13 @@ const NewGoodsReceiptView = () => {
     const addLine = () => setItems([...items, { id: Date.now(), item: '', description: '', qty: '1' }]);
     const copyLine = (itemId: number) => {
         const item = items.find(i => i.id === itemId);
-        if (item) setItems([...items, { ...item, id: Date.now() }]);
+        if (item) setItems([...items, { ...item, id: Date.now() + Math.random() }]);
     };
-    const deleteLine = (itemId: number) => items.length > 1 && setItems(items.filter(item => item.id !== itemId));
-
-    const toggleOption = (key: keyof typeof options) => {
-        setOptions(prev => ({ ...prev, [key]: !prev[key] }));
+    const deleteLine = (itemId: number) => {
+        if (items.length > 1) {
+            setItems(items.filter(i => i.id !== itemId));
+        }
     };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) setFileName(file.name);
-        else setFileName('No file chosen');
-    };
-
-    const triggerFileSelect = () => fileInputRef.current?.click();
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const handleSubmit = async () => {
@@ -215,228 +269,351 @@ const NewGoodsReceiptView = () => {
     };
 
     return (
-        <div className="bg-[#f9fafb] min-h-full pb-20">
-            <div className="bg-white px-4 py-2 border-b border-gray-200 flex items-center text-[12px] text-[#78909c] space-x-1.5 select-none">
-                <i className="fas fa-folder-open text-[#90a4ae]"></i>
-                <i className="fas fa-caret-right text-[#cfd8dc] scale-75"></i>
-                <Link to="/goods-received-notes" className="hover:text-[#2196f3]">Goods Received Notes</Link>
-                <i className="fas fa-caret-right text-[#cfd8dc] scale-75"></i>
-                <span>{isEditing ? 'Modify' : 'New'}</span>
+        <div className="p-10 max-w-[1400px] mx-auto space-y-6 selection:bg-indigo-100 selection:text-indigo-900 font-sans">
+            <div className="flex justify-between items-center">
+                <div>
+                    <div className="flex items-center space-x-2 text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-2">
+                        <span className="cursor-pointer hover:underline" onClick={() => navigate('/goods-received-notes')}>Goods Received Notes</span>
+                        <ChevronRight size={10} className="opacity-50" />
+                        <span className="text-slate-400">{isEditing ? 'Edit Existing' : 'Configure New'}</span>
+                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">{isEditing ? 'Modify Goods Receipt' : 'New Goods Receipt'}</h1>
+                </div>
+                <div className="flex items-center space-x-4">
+                    <button onClick={() => navigate('/goods-received-notes')} className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-full hover:bg-slate-50 transition-colors shadow-sm text-slate-400">
+                        <X size={20} />
+                    </button>
+                </div>
             </div>
 
-            <div className="p-6">
-                <div className="bg-white border border-[#cfd8dc] shadow-sm rounded-sm max-w-[1200px] mx-auto p-10">
-                    <div className="flex items-center space-x-2 mb-8 select-none">
-                        <h2 className="text-[#cfd8dc] text-[18px] font-medium">{isEditing ? 'Modify Goods Receipt' : 'Goods Receipt'}</h2>
-                        <i className="far fa-question-circle text-[#cfd8dc] text-[14px] cursor-help"></i>
-                    </div>
-
-                    <div className="space-y-6 mb-8">
-                        <div className="flex space-x-12">
-                            <div className="w-48 space-y-1.5">
-                                <label className="block text-[13px] font-medium text-[#455a64]">Date</label>
-                                <div className="relative">
-                                    <input
-                                        ref={dateInputRef}
-                                        type="date"
-                                        value={date}
-                                        onChange={(e) => setDate(e.target.value)}
-                                        className="w-full border border-[#cfd8dc] px-2 py-1.5 text-[14px] text-[#263238] rounded-md focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
-                                    />
+            <div className="bg-white rounded-[40px] shadow-2xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
+                <div className="p-10 space-y-8">
+                    <div className="space-y-8 animate-in fade-in duration-700">
+                        
+                        {/* Basic Information */}
+                        <div className="space-y-8">
+                            <div className="flex items-center space-x-4">
+                                <div className="w-10 h-10 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-500">
+                                    <FileText size={20} />
                                 </div>
+                                <h2 className="text-lg font-black text-slate-800 tracking-tight">Basic Information</h2>
                             </div>
-
-                            <div className="w-48 space-y-1.5">
-                                <label className="block text-[13px] font-medium text-[#455a64]">Reference</label>
-                                <div className="flex items-center">
-                                    <div className="border border-[#cfd8dc] border-r-0 bg-white px-2 py-1.5 rounded-l-md h-[36px] flex items-center">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                                <InputField label="Received Date" type="date" value={date} onChange={(e: any) => setDate(e.target.value)} Icon={Calendar} />
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1">Reference</label>
+                                    <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:border-indigo-500 transition-all">
+                                        <div className="h-full px-4 border-r border-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => { setUseManualRef(!useManualRef); if (!useManualRef) setReference(''); }}>
+                                            <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${!useManualRef ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 border-2'}`}>
+                                                {!useManualRef && <CheckCircle2 size={12} className="text-white" strokeWidth={3} />}
+                                            </div>
+                                        </div>
                                         <input
-                                            type="checkbox"
-                                            checked={useManualRef}
-                                            onChange={() => setUseManualRef(!useManualRef)}
-                                            className="w-4 h-4 rounded border-[#cfd8dc] text-[#2196f3] focus:ring-0"
+                                            type="text"
+                                            value={reference}
+                                            onChange={(e) => useManualRef && setReference(e.target.value)}
+                                            readOnly={!useManualRef}
+                                            placeholder={useManualRef ? "Enter custom ref..." : ""}
+                                            className={cn(
+                                                "w-full bg-transparent border-none px-4 py-3 text-[13px] font-semibold outline-none transition-colors",
+                                                !useManualRef ? "text-indigo-600 font-black" : "text-slate-700"
+                                            )}
                                         />
                                     </div>
-                                    <input
-                                        type="text"
-                                        value={useManualRef ? reference : ''}
-                                        placeholder={useManualRef ? "Optional" : "Automatic"}
-                                        disabled={!useManualRef}
-                                        onChange={(e) => setReference(e.target.value)}
-                                        className={`flex-1 border border-[#cfd8dc] px-3 py-1.5 text-[14px] text-[#263238] rounded-r-md focus:outline-none focus:border-[#2196f3] h-[36px] ${!useManualRef ? 'bg-[#f5f5f5] cursor-not-allowed text-[#90a4ae]' : ''}`}
-                                    />
                                 </div>
+                                <SelectField label="Inventory Location" value={inventoryLocation} onChange={(e: any) => setInventoryLocation(e.target.value)} Icon={MapPin}>
+                                    <option value="Default Inventory Location">Default Inventory Location</option>
+                                    <option value="Main Warehouse">Main Warehouse</option>
+                                    <option value="Showroom">Showroom</option>
+                                    <option value="Secondary Store">Secondary Store</option>
+                                    <option value="Retail Branch">Retail Branch</option>
+                                </SelectField>
+                                <InputField label="Description / Memo" value={description} onChange={(e: any) => setDescription(e.target.value)} placeholder="Memo or remarks..." Icon={Briefcase} />
                             </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="block text-[13px] font-medium text-[#455a64]">Supplier</label>
-                            <div className="flex items-center space-x-2">
-                                <div className="bg-[#f5f5f5] border border-[#cfd8dc] px-3 py-1.5 text-[13px] text-[#455a64] rounded-l-md h-[36px] flex items-center">
-                                    From
-                                </div>
-                                <div className="relative flex-1 max-w-xs">
-                                    <select
-                                        value={supplier}
-                                        onChange={(e) => setSupplier(e.target.value)}
-                                        className="w-full border border-[#cfd8dc] border-l-0 px-3 py-1.5 text-[14px] text-[#263238] rounded-r-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
-                                    >
-                                        <option value=""></option>
-                                        {dbSuppliers.filter(s => (!s.inactive && s.status !== 'Inactive') || s.name === supplier).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                                    </select>
-                                    <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[10px] pointer-events-none"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <label className="block text-[13px] font-medium text-[#455a64]">Inventory Location</label>
-                            <div className="flex items-center space-x-2">
-                                <div className="bg-[#f5f5f5] border border-[#cfd8dc] px-3 py-1.5 text-[13px] text-[#455a64] rounded-l-md h-[36px] flex items-center">
-                                    To
-                                </div>
-                                <div className="relative flex-1 max-w-xs">
-                                    <select
-                                        value={inventoryLocation}
-                                        onChange={(e) => setInventoryLocation(e.target.value)}
-                                        className="w-full border border-[#cfd8dc] border-l-0 px-3 py-1.5 text-[14px] text-[#263238] rounded-r-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
-                                    >
-                                        <option value="Default Inventory Location">Default Inventory Location</option>
-                                    </select>
-                                    <i className="fas fa-caret-down absolute right-3 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[10px] pointer-events-none"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                            <label className="block text-[13px] font-medium text-[#455a64]">Description</label>
-                            <input
-                                type="text"
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="w-full border border-[#cfd8dc] px-3 py-1.5 text-[14px] text-[#263238] rounded-md focus:outline-none focus:border-[#2196f3] bg-white h-[36px]"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="mt-10 overflow-x-auto">
-                        <table className="w-full border-collapse">
-                            <thead>
-                                <tr className="text-[13px] text-[#455a64] font-medium">
-                                    <th className="text-left pb-2 pr-4 font-medium">Item</th>
-                                    <th className="text-left pb-2 pr-4 font-medium">Description</th>
-                                    <th className="text-right pb-2 pr-4 font-medium w-24">Qty</th>
-                                    <th className="pb-2 w-10"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="border-t border-[#cfd8dc]">
-                                {items.map((item, idx) => (
-                                    <tr key={item.id} className="group">
-                                        <td className="py-2 pr-4 align-top w-1/3">
-                                            <div className="relative">
-                                                <select
-                                                    value={item.item}
-                                                    onChange={(e) => updateItem(item.id, 'item', e.target.value)}
-                                                    className="w-full border border-[#cfd8dc] px-2 py-1.5 text-[13px] text-[#263238] rounded-md appearance-none focus:outline-none focus:border-[#2196f3] bg-white h-[34px]"
-                                                >
-                                                    <option value=""></option>
-                                                    {dbItems.map(it => (
-                                                        <option key={it.id} value={it.itemName}>{it.itemName}</option>
-                                                    ))}
-                                                </select>
-                                                <i className="fas fa-caret-down absolute right-2 top-1/2 -translate-y-1/2 text-[#90a4ae] text-[9px] pointer-events-none"></i>
-                                            </div>
-                                        </td>
-                                        <td className="py-2 pr-4 align-top">
-                                            <textarea
-                                                value={item.description}
-                                                onChange={(e) => updateItem(item.id, 'description', e.target.value)}
-                                                className="w-full border border-[#cfd8dc] px-2 py-1 text-[13px] text-[#263238] rounded-md focus:outline-none focus:border-[#2196f3] bg-white min-h-[34px] resize-none"
-                                            />
-                                        </td>
-                                        <td className="py-2 pr-4 align-top w-32">
-                                            <div className="flex items-center">
-                                                <input
-                                                    type="text"
-                                                    value={item.qty}
-                                                    onChange={(e) => updateItem(item.id, 'qty', e.target.value)}
-                                                    className="w-full border border-[#cfd8dc] px-2 py-1.5 text-[13px] text-[#263238] rounded-l-md focus:outline-none focus:border-[#2196f3] text-center h-[34px]"
-                                                />
-                                                <div className="bg-[#f5f5f5] border border-[#cfd8dc] border-l-0 px-2 py-1.5 text-[11px] text-[#90a4ae] rounded-r-md h-[34px] flex items-center">PCS</div>
-                                            </div>
-                                        </td>
-                                        <td className="py-2 pl-2 align-top">
-                                            <div className="flex items-center space-x-1">
-                                                <button onClick={() => copyLine(item.id)} className="text-[#90a4ae] hover:text-[#2196f3] p-1"><i className="fas fa-copy text-[12px]"></i></button>
-                                                <button onClick={() => deleteLine(item.id)} className="text-[#90a4ae] hover:text-red-500 p-1"><i className="fas fa-times text-[12px]"></i></button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        <div className="mt-4">
-                            <button
-                                onClick={addLine}
-                                className="bg-white border border-[#cfd8dc] px-4 py-1.5 rounded-md text-[13px] text-[#455a64] hover:bg-[#f5f5f5] transition flex items-center shadow-sm"
-                            >
-                                <i className="fas fa-caret-right mr-2 text-[10px] text-[#90a4ae]"></i>
-                                Add line
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="mt-12 space-y-4 select-none">
-                        {Object.entries(options).map(([key, value]) => (
-                            <div key={key} className="space-y-2">
-                                <label className="flex items-center space-x-3 cursor-pointer group">
-                                    <input
-                                        type="checkbox"
-                                        checked={value}
-                                        onChange={() => toggleOption(key as keyof typeof options)}
-                                        className="w-4 h-4 rounded border-[#cfd8dc] text-[#2196f3] focus:ring-0 cursor-pointer"
-                                    />
-                                    <span className="text-[14px] text-[#455a64] font-normal group-hover:text-[#2196f3] capitalize transition-colors">
-                                        {key === 'lineNumber' ? 'Column — Line number' :
-                                            key === 'customTitle' ? 'Custom title' :
-                                                key === 'footers' ? 'Footers' :
-                                                    key.replace(/([A-Z])/g, ' $1')}
-                                    </span>
-                                </label>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="mt-16 border-t border-[#f0f0f0] pt-10">
-                        <div className="relative inline-block border border-[#cfd8dc] rounded-sm p-8 min-w-[400px]">
-                            <div className="absolute -top-3 left-4 bg-white px-2 text-[#90a4ae] text-[13px]">Image</div>
+                        {/* Supplier Selection */}
+                        <div className="space-y-6 pt-0 border-t border-slate-50">
                             <div className="flex items-center space-x-4">
-                                <input
-                                    type="file"
-                                    ref={fileInputRef}
-                                    onChange={handleFileChange}
-                                    className="hidden"
-                                    accept="image/*"
-                                />
-                                <button
-                                    onClick={triggerFileSelect}
-                                    className="border border-[#cfd8dc] bg-white px-5 py-2.5 rounded-[4px] text-[14px] text-[#455a64] hover:bg-[#f5f5f5] transition shadow-sm"
-                                >
-                                    Choose File
-                                </button>
-                                <span className="text-[14px] text-[#90a4ae]">{fileName}</span>
+                                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-500">
+                                    <User size={20} />
+                                </div>
+                                <h2 className="text-lg font-black text-slate-800 tracking-tight">Supplier Selection</h2>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <SelectField label="Selected Supplier" value={supplier} onChange={(e: any) => setSupplier(e.target.value)} Icon={User}>
+                                    <option value="">Select Target Supplier...</option>
+                                    {dbSuppliers.filter(s => (!s.inactive && s.status !== 'Inactive') || s.name === supplier).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                </SelectField>
                             </div>
                         </div>
-                    </div>
 
-                    <div className="mt-16 pt-10 border-t border-[#f0f0f0]">
-                        <div className="flex items-center space-x-4">
+                        {/* Received Items */}
+                        <div className="space-y-6 pt-0 border-t border-slate-50">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center space-x-4">
+                                    <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center text-blue-500">
+                                        <Package size={20} />
+                                    </div>
+                                    <h2 className="text-lg font-black text-slate-800 tracking-tight">Received Line Items</h2>
+                                </div>
+                                <button onClick={addLine} className="flex items-center space-x-2 px-6 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-widest hover:bg-indigo-100 transition-all">
+                                    <Plus size={14} /> <span>Add Row</span>
+                                </button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200">
+                                            {options.lineNumber && <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-12 text-center">#</th>}
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider min-w-[200px]">ITEM</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">DESCRIPTION</th>
+                                            <th className="px-4 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider w-36 text-right">QTY RECEIVED</th>
+                                            <th className="px-4 py-3 w-10"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {items.map((item, index) => (
+                                            <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
+                                                {options.lineNumber && <td className="px-4 py-4 text-xs font-bold text-slate-400 text-center">{index + 1}</td>}
+                                                <td className="px-4 py-4">
+                                                    <select
+                                                        value={item.item}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setItems(prev => prev.map(i => i.id === item.id ? { ...i, item: val, description: val } : i));
+                                                        }}
+                                                        className="w-full bg-transparent border-none p-0 text-sm font-bold text-[#2563eb] outline-none appearance-none cursor-pointer"
+                                                    >
+                                                        <option value="">Select Item</option>
+                                                        {dbItems.map(it => (
+                                                            <option key={it.id} value={it.itemName}>{it.itemName}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <input
+                                                        type="text"
+                                                        value={item.description}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setItems(prev => prev.map(i => i.id === item.id ? { ...i, description: val } : i));
+                                                        }}
+                                                        className="w-full bg-transparent border-none p-0 text-sm text-slate-600 outline-none placeholder:text-slate-300"
+                                                        placeholder="Add description..."
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-4 text-right">
+                                                    <div className="flex flex-col items-end">
+                                                        <input
+                                                            type="text"
+                                                            value={item.qty}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setItems(prev => prev.map(i => i.id === item.id ? { ...i, qty: val } : i));
+                                                            }}
+                                                            className="w-full bg-transparent border-none p-0 text-sm font-bold text-right outline-none text-slate-700"
+                                                        />
+                                                        <div className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter flex items-center justify-end w-full">
+                                                            <span className="text-indigo-500 font-black">{dbItems.find(it => it.itemName === item.item)?.unit || 'PCS'}</span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                        <button
+                                                            onClick={() => copyLine(item.id)}
+                                                            className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-all"
+                                                            title="Duplicate Row"
+                                                        >
+                                                            <Copy size={13} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => deleteLine(item.id)}
+                                                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition-all"
+                                                            title="Delete Row"
+                                                        >
+                                                            <Trash2 size={13} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* Collapsible Options Drawer */}
+                        <div className="space-y-6 pt-6 border-t border-slate-50 text-left">
+                            <div
+                                onClick={() => setShowOptionsArea(!showOptionsArea)}
+                                className="flex items-center justify-between group cursor-pointer hover:bg-slate-50/50 p-2 -m-2 rounded-2xl transition-all"
+                            >
+                                <div className="flex items-center space-x-4">
+                                    <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center text-amber-500 group-hover:bg-amber-100 transition-colors">
+                                        <Settings size={20} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-black text-slate-800 tracking-tight">Document Options</h2>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{showOptionsArea ? 'Hide configuration' : 'Configure layout settings'}</p>
+                                    </div>
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-amber-600 group-hover:bg-amber-100/50 transition-all">
+                                    <ChevronDown size={20} className={cn("transition-transform duration-300", showOptionsArea ? "rotate-180" : "")} />
+                                </div>
+                            </div>
+
+                            {showOptionsArea && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-4 duration-500">
+                                    {([
+                                        ['Line Numbers', 'lineNumber'],
+                                        ['Custom Title', 'customTitle'],
+                                        ['Footers', 'footers']
+                                    ] as const).map(([label, key]) => (
+                                        <div key={key} className="space-y-3">
+                                            <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
+                                                <div className="relative flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={(options as any)[key]}
+                                                        onChange={(e) => setOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/20 transition-all cursor-pointer"
+                                                    />
+                                                </div>
+                                                <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight">{label}</span>
+                                            </label>
+                                            {key === 'customTitle' && options.customTitle && (
+                                                <div className="flex items-center space-x-2 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                    <input
+                                                        type="text"
+                                                        value={options.customTitleValue}
+                                                        onChange={(e) => setOptions(prev => ({ ...prev, customTitleValue: e.target.value }))}
+                                                        placeholder="e.g. Goods Received Note"
+                                                        className="w-full bg-indigo-50/50 border border-indigo-100/50 rounded-xl px-4 py-2 text-[11px] font-bold text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 placeholder:text-indigo-300/50"
+                                                    />
+                                                </div>
+                                            )}
+                                            {key === 'footers' && options.footers && (
+                                                <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
+                                                    <select
+                                                        onChange={(e) => {
+                                                            const footer = dbFooters.find(f => f.id === e.target.value);
+                                                            if (footer) setOptions(prev => ({ ...prev, footerValue: footer.content }));
+                                                        }}
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer appearance-none animate-in fade-in"
+                                                    >
+                                                        <option value="">-- Choose template --</option>
+                                                        {dbFooters.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Drag and Drop Attachments */}
+                        <div className="pt-8 border-t border-slate-50">
+                            <div className="space-y-3 max-w-md">
+                                <div className="flex items-center space-x-2.5 mb-1 opacity-60">
+                                    <FileText size={14} className="text-slate-400" />
+                                    <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Documentation Attachments</h3>
+                                </div>
+                                <div className="relative group">
+                                    <input
+                                        type="file"
+                                        multiple
+                                        onChange={async (e) => {
+                                            const files = Array.from(e.target.files || []);
+                                            const newAttachments = await Promise.all(files.map(file => {
+                                                return new Promise((resolve) => {
+                                                    const reader = new FileReader();
+                                                    reader.onloadend = () => {
+                                                        resolve({
+                                                            name: file.name,
+                                                            type: file.type,
+                                                            size: file.size,
+                                                            data: reader.result
+                                                        });
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                });
+                                            }));
+                                            setOptions(prev => ({
+                                                ...prev,
+                                                attachments: [...(prev.attachments || []), ...newAttachments]
+                                            }));
+                                        }}
+                                        className="hidden"
+                                        id="file-upload"
+                                    />
+                                    <label
+                                        htmlFor="file-upload"
+                                        className="group relative flex items-center bg-slate-50 border border-slate-200 border-dashed rounded-xl px-4 py-2 cursor-pointer hover:bg-white hover:border-indigo-300 transition-all duration-300 w-full"
+                                    >
+                                        <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-slate-400 mr-3 group-hover:text-indigo-500 transition-colors shadow-sm">
+                                            <Plus size={16} className={cn("transition-transform duration-300", (options.attachments || []).length > 0 ? "rotate-45" : "")} />
+                                        </div>
+                                        <div className="flex-1 min-w-0 text-left">
+                                            <p className="text-[12px] font-bold text-slate-700 truncate leading-tight">
+                                                {(options.attachments || []).length === 0 ? 'Attach Delivery Docket' : `${(options.attachments || []).length} Files Attached`}
+                                            </p>
+                                            <p className="text-[9px] font-medium text-slate-400 uppercase tracking-wider leading-tight">
+                                                Dockets, images or scans
+                                            </p>
+                                        </div>
+                                    </label>
+                                </div>
+                                
+                                {/* File list */}
+                                {(options.attachments || []).length > 0 && (
+                                    <div className="space-y-2 mt-3 animate-in fade-in slide-in-from-top-4 duration-500">
+                                        {(options.attachments || []).map((file: any, idx: number) => (
+                                            <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl shadow-sm group hover:border-indigo-100 transition-all">
+                                                <div className="flex items-center space-x-3">
+                                                    <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600">
+                                                        <FileText size={14} />
+                                                    </div>
+                                                    <div className="max-w-[200px]">
+                                                        <p className="text-[11px] font-bold text-slate-700 truncate">{file.name}</p>
+                                                        <p className="text-[9px] text-slate-400 font-medium uppercase tracking-tighter">{(file.size / 1024).toFixed(1)} KB</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        setOptions(prev => ({
+                                                            ...prev,
+                                                            attachments: prev.attachments.filter((_: any, i: number) => i !== idx)
+                                                        }));
+                                                    }}
+                                                    className="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Submit Buttons */}
+                        <div className="flex justify-end space-x-4 pt-8 border-t border-slate-50">
+                            <button
+                                onClick={() => navigate('/goods-received-notes')}
+                                className="bg-white border border-slate-200 rounded-2xl px-8 py-3 text-xs font-black uppercase tracking-wider text-slate-600 hover:bg-slate-50 transition-all active:scale-95 shadow-sm cursor-pointer"
+                            >
+                                Cancel
+                            </button>
                             <button
                                 onClick={handleSubmit}
                                 disabled={isSubmitting}
-                                className={`bg-blue-600 text-white px-6 py-2 rounded-[4px] text-[14px] font-medium shadow-md transition-all ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700 active:scale-95'}`}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl px-12 py-3 text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-lg shadow-indigo-200 flex items-center gap-2 cursor-pointer"
                             >
-                                {isSubmitting ? 'Creating...' : 'Create'}
+                                <Save size={14} />
+                                {isSubmitting ? 'Saving...' : isEditing ? 'Update GRN' : 'Save GRN'}
                             </button>
                         </div>
                     </div>

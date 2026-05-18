@@ -126,7 +126,7 @@ const ViewGoodsReceiptView = () => {
                     </button>
 
                     <button 
-                        onClick={() => navigate(note.isPurchaseInvoice ? `/purchase-invoices/edit/${note.id}` : `/goods-received-notes/edit/${note.id}`)}
+                        onClick={() => navigate(`/goods-received-notes/edit/${note.id}`)}
                         className="bg-white border border-gray-300 px-4 py-1.5 text-[12px] font-bold text-gray-700 rounded shadow-sm hover:bg-gray-50 flex items-center gap-2 transition-colors"
                     >
                         <Edit size={14} className="text-blue-600" /> Edit

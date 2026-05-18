@@ -86,8 +86,8 @@ const GoodsReceivedNotesView = () => {
             header: 'Actions',
             accessor: (grn: any) => (
                 <div className="flex items-center gap-2">
-                    <button onClick={() => navigate(grn.isPurchaseInvoice ? `/purchase-invoices/view/${grn.id}` : `/goods-received-notes/view/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Eye size={14} /></button>
-                    <button onClick={() => navigate(grn.isPurchaseInvoice ? `/purchase-invoices/edit/${grn.id}` : `/goods-received-notes/edit/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                    <button onClick={() => navigate(`/goods-received-notes/view/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Eye size={14} /></button>
+                    <button onClick={() => navigate(`/goods-received-notes/edit/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
                 </div>
             )
         },
