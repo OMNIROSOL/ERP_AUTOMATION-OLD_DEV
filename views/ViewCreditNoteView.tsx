@@ -151,7 +151,7 @@ const ViewCreditNoteView = () => {
                         <button
                             onClick={async () => {
                                 if (!pdfRef.current) return;
-                                const html2canvas = (await import('html2canvas')).default;
+                                const html2canvas = (await import('html2canvas-pro')).default;
                                 const jsPDF = (await import('jspdf')).jsPDF;
 
                                 const element = pdfRef.current;

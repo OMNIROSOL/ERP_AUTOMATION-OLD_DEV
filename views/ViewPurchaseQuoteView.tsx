@@ -230,7 +230,7 @@ const ViewPurchaseQuoteView = () => {
                                         alert('Error: Content to capture not found.');
                                         return;
                                     }
-                                    const html2canvas = (await import('html2canvas')).default;
+                                    const html2canvas = (await import('html2canvas-pro')).default;
                                     const jsPDF = (await import('jspdf')).jsPDF;
 
                                     const element = pdfRef.current;

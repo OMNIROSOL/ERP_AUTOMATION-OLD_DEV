@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, useParams } from 'react-router-dom';
 import apiService from '../services/apiService';
 
 const NewGoodsReceiptView = () => {
+    const { id } = useParams();
+    const isEditing = Boolean(id);
     const navigate = useNavigate();
     const location = useLocation();
     const dateInputRef = useRef<HTMLInputElement>(null);
@@ -29,20 +31,65 @@ const NewGoodsReceiptView = () => {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [sups, itemsData, nextRef] = await Promise.all([
+                const [sups, itemsData] = await Promise.all([
                     apiService.getSuppliers(),
-                    apiService.getItems(),
-                    apiService.getNextReference('goods-received-note')
+                    apiService.getItems()
                 ]);
                 setDbSuppliers(sups);
                 setDbItems(itemsData);
-                setReference(nextRef);
+
+                if (!id && !location.search.includes('copyFrom')) {
+                    const nextRef = await apiService.getNextReference('goods-received-note');
+                    setReference(nextRef);
+                }
             } catch (err) {
                 console.error('Failed to load goods receipt data:', err);
             }
         };
         loadData();
-    }, []);
+    }, [id]);
+
+    useEffect(() => {
+        if (id) {
+            const fetchGrn = async () => {
+                try {
+                    const grn = await apiService.getGoodsReceivedNote(id);
+                    if (grn) {
+                        let initialDate = new Date().toISOString().split('T')[0];
+                        if (grn.receivedDate) {
+                            const dottedPattern = /^\d{1,2}\.\d{1,2}\.\d{4}$/;
+                            if (dottedPattern.test(grn.receivedDate)) {
+                                const [day, month, year] = grn.receivedDate.split('.');
+                                initialDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                            } else {
+                                const d = new Date(grn.receivedDate);
+                                if (!isNaN(d.getTime())) {
+                                    initialDate = d.toISOString().split('T')[0];
+                                }
+                            }
+                        }
+                        setDate(initialDate);
+                        setSupplier(grn.supplierName || grn.supplier || '');
+                        setInventoryLocation(grn.inventoryLocation || 'Default Inventory Location');
+                        setDescription(grn.description || '');
+                        setReference(grn.reference || '');
+                        setUseManualRef(true);
+                        if (grn.items) {
+                            setItems(grn.items.map((i: any) => ({
+                                id: i.id || (Date.now() + Math.random()),
+                                item: i.item?.itemName || i.itemName || i.item || '',
+                                description: i.description || '',
+                                qty: (i.qty || '1').toString()
+                            })));
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch Goods Received Note:', err);
+                }
+            };
+            fetchGrn();
+        }
+    }, [id]);
 
     useEffect(() => {
         const searchParams = new URLSearchParams(location.search);
@@ -142,7 +189,7 @@ const NewGoodsReceiptView = () => {
 
         setIsSubmitting(true);
         try {
-            await apiService.createGoodsReceivedNote({
+            const grnData = {
                 supplierId: selectedSupplier.id,
                 reference: reference,
                 receivedDate: date,
@@ -150,11 +197,17 @@ const NewGoodsReceiptView = () => {
                 inventoryLocation: inventoryLocation,
                 items: grnItems,
                 status: 'Received'
-            });
+            };
+
+            if (isEditing && id) {
+                await apiService.updateGoodsReceivedNote(id, grnData);
+            } else {
+                await apiService.createGoodsReceivedNote(grnData);
+            }
             window.dispatchEvent(new Event('grn_updated'));
             navigate('/goods-received-notes');
         } catch (err: any) {
-            console.error('Failed to create GRN:', err);
+            console.error('Failed to save GRN:', err);
             alert('Error: ' + (err.response?.data?.error || err.message));
         } finally {
             setIsSubmitting(false);
@@ -166,17 +219,15 @@ const NewGoodsReceiptView = () => {
             <div className="bg-white px-4 py-2 border-b border-gray-200 flex items-center text-[12px] text-[#78909c] space-x-1.5 select-none">
                 <i className="fas fa-folder-open text-[#90a4ae]"></i>
                 <i className="fas fa-caret-right text-[#cfd8dc] scale-75"></i>
-                <Link to="/sales-quotes" className="hover:text-[#2196f3]">Sales Quotes</Link>
+                <Link to="/goods-received-notes" className="hover:text-[#2196f3]">Goods Received Notes</Link>
                 <i className="fas fa-caret-right text-[#cfd8dc] scale-75"></i>
-                <Link to="#" className="hover:text-[#2196f3]">View</Link>
-                <i className="fas fa-caret-right text-[#cfd8dc] scale-75"></i>
-                <span>Edit</span>
+                <span>{isEditing ? 'Modify' : 'New'}</span>
             </div>
 
             <div className="p-6">
                 <div className="bg-white border border-[#cfd8dc] shadow-sm rounded-sm max-w-[1200px] mx-auto p-10">
                     <div className="flex items-center space-x-2 mb-8 select-none">
-                        <h2 className="text-[#cfd8dc] text-[18px] font-medium">Goods Receipt</h2>
+                        <h2 className="text-[#cfd8dc] text-[18px] font-medium">{isEditing ? 'Modify Goods Receipt' : 'Goods Receipt'}</h2>
                         <i className="far fa-question-circle text-[#cfd8dc] text-[14px] cursor-help"></i>
                     </div>
 

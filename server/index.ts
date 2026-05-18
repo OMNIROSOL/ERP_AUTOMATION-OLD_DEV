@@ -1727,9 +1727,11 @@ app.get('/api/purchase-invoices', async (req, res) => {
         return sum + itemTotal;
       }, 0);
       const totalDiscount = (inv.items || []).reduce((sum, item) => {
+        if (!(inv.docOptions as any)?.columnDiscount) return sum;
         const lineExTax = (Number(item.qty) * Number(item.unitPrice)) || 0;
         const discountVal = parseFloat(item.discount as string) || 0;
-        const discountAmount = lineExTax * (discountVal / 100);
+        const isExact = (inv.docOptions as any)?.columnDiscountType === 'Exact';
+        const discountAmount = isExact ? discountVal : (lineExTax * (discountVal / 100));
         return sum + discountAmount;
       }, 0);
       return {
@@ -1737,8 +1739,8 @@ app.get('/api/purchase-invoices', async (req, res) => {
         description: inv.description || '',
         dueDate: inv.due_date ? formatDate(inv.due_date) : null,
         timestamp: inv.created_at ? formatDateTime(inv.created_at) : null,
-        invoiceAmount: itemsTotal,
-        balanceDue: itemsTotal,
+        invoiceAmount: inv.grand_total || itemsTotal,
+        balanceDue: inv.grand_total || itemsTotal,
         supplier: inv.suppliers?.name || 'Unknown',
         supplierId: inv.supplier_id,
         currency: (inv.docOptions as any)?.currency || (inv.suppliers as any)?.currency?.split(' - ')[0] || 'ZMW',
@@ -1771,7 +1773,13 @@ app.get('/api/purchase-invoices/:id', async (req, res) => {
     console.log(`[PI GET /:id] description: ${inv.description}`);
     console.log(`[PI GET /:id] items count: ${inv.items?.length}`);
 
-    const totalDiscount = (inv.items || []).reduce((sum, item) => sum + (parseFloat(item.discount as string) || 0), 0);
+    const totalDiscount = (inv.items || []).reduce((sum, item) => {
+      if (!(inv.docOptions as any)?.columnDiscount) return sum;
+      const lineExTax = (Number(item.qty) * Number(item.unitPrice)) || 0;
+      const discountVal = parseFloat(item.discount as string) || 0;
+      const isExact = (inv.docOptions as any)?.columnDiscountType === 'Exact';
+      return sum + (isExact ? discountVal : (lineExTax * (discountVal / 100)));
+    }, 0);
     const itemsTotal = (inv.items || []).reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
     const mapped = {
       ...inv,
@@ -1786,8 +1794,8 @@ app.get('/api/purchase-invoices/:id', async (req, res) => {
       })),
       dueDate: inv.due_date ? formatDate(inv.due_date) : null,
       issueDate: inv.created_at ? inv.created_at.toISOString().split('T')[0] : null,
-      grandTotal: itemsTotal,
-      invoiceAmount: itemsTotal,
+      grandTotal: inv.grand_total || itemsTotal,
+      invoiceAmount: inv.grand_total || itemsTotal,
       currency: (inv.docOptions as any)?.currency || (inv.suppliers as any)?.currency?.split(' - ')[0] || 'ZMW',
       supplier: inv.suppliers?.name || 'Unknown',
       supplierId: inv.supplier_id
@@ -1969,13 +1977,56 @@ app.get('/api/goods-received-notes', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    const mapped = grns.map(grn => ({
+    const mappedGrns = grns.map(grn => ({
       ...grn,
       supplier: grn.supplier?.name || 'Unknown',
       purchaseOrder: grn.purchaseOrder?.reference || '—',
-      receivedDate: formatDate(grn.receivedDate)
+      receivedDate: formatDate(grn.receivedDate),
+      isPurchaseInvoice: false
     }));
-    res.json(mapped);
+
+    const invs = await prisma.invoices.findMany({
+      include: {
+        suppliers: true,
+        items: { include: { item: true } }
+      },
+      orderBy: { created_at: 'desc' }
+    });
+
+    const activeInvs = invs.filter(inv => {
+      const opts = inv.docOptions as any;
+      return opts && opts.actAsGoodReceipt === true;
+    });
+
+    const mappedInvs = activeInvs.map(inv => ({
+      id: inv.id,
+      reference: inv.reference,
+      supplierId: inv.supplier_id,
+      supplier: inv.suppliers?.name || 'Unknown',
+      purchaseOrder: '—',
+      receivedDate: formatDate(inv.created_at || new Date()),
+      description: inv.description || '',
+      status: 'Received',
+      inventoryLocation: (inv.docOptions as any)?.inventoryLocation || 'Main Warehouse',
+      createdAt: inv.created_at,
+      isPurchaseInvoice: true,
+      items: inv.items.map(item => ({
+        id: item.id,
+        goodsReceivedNoteId: inv.id,
+        itemId: item.itemId,
+        description: item.description,
+        qty: item.qty,
+        item: item.item
+      }))
+    }));
+
+    const combined = [...mappedGrns, ...mappedInvs].sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    res.json(combined);
   } catch (err: any) {
     console.error('Fetch GRNs error:', err);
     res.status(500).json({ error: err.message });
@@ -1993,12 +2044,44 @@ app.get('/api/goods-received-notes/:id', async (req, res) => {
         items: { include: { item: true } }
       }
     });
-    if (!grn) return res.status(404).json({ error: 'GRN not found' });
+    if (!grn) {
+      const inv = await prisma.invoices.findUnique({
+        where: { id },
+        include: {
+          suppliers: true,
+          items: { include: { item: true } }
+        }
+      });
+      if (inv && (inv.docOptions as any)?.actAsGoodReceipt === true) {
+        return res.json({
+          id: inv.id,
+          reference: inv.reference,
+          supplierId: inv.supplier_id,
+          supplier: inv.suppliers?.name || 'Unknown',
+          purchaseOrder: '—',
+          receivedDate: formatDate(inv.created_at || new Date()),
+          description: inv.description || '',
+          status: 'Received',
+          inventoryLocation: (inv.docOptions as any)?.inventoryLocation || 'Main Warehouse',
+          isPurchaseInvoice: true,
+          items: inv.items.map(item => ({
+            id: item.id,
+            goodsReceivedNoteId: inv.id,
+            itemId: item.itemId,
+            description: item.description,
+            qty: item.qty,
+            item: item.item
+          }))
+        });
+      }
+      return res.status(404).json({ error: 'GRN not found' });
+    }
     res.json({
       ...grn,
       supplier: grn.supplier?.name || 'Unknown',
       purchaseOrder: grn.purchaseOrder?.reference || '—',
-      receivedDate: formatDate(grn.receivedDate)
+      receivedDate: formatDate(grn.receivedDate),
+      isPurchaseInvoice: false
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -2029,6 +2112,38 @@ app.post('/api/goods-received-notes', async (req, res) => {
     res.json(result);
   } catch (err: any) {
     console.error('CREATE GRN ERROR:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/goods-received-notes/:id', async (req, res) => {
+  const { id } = req.params;
+  console.log(`>>> [GRN PUT] UPDATING ID: ${id}`);
+  const { supplierId, reference, items, description, inventoryLocation, receivedDate, purchaseOrderId, status } = req.body;
+  try {
+    const result = await prisma.goodsReceivedNote.update({
+      where: { id },
+      data: {
+        supplierId,
+        reference,
+        description,
+        inventoryLocation,
+        receivedDate: receivedDate ? parseDate(receivedDate) : undefined,
+        purchaseOrderId,
+        status: status || 'Received',
+        items: {
+          deleteMany: {},
+          create: (items || []).map((item: any) => ({
+            itemId: item.itemId,
+            description: item.description,
+            qty: Number(item.qty)
+          }))
+        }
+      }
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.error('[GRN UPDATE ERROR]:', err);
     res.status(500).json({ error: err.message });
   }
 });

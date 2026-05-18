@@ -18,6 +18,7 @@ import ViewPurchaseInvoiceView from './views/ViewPurchaseInvoiceView';
 import NewPurchaseOrderView from './views/NewPurchaseOrderView';
 import ViewPurchaseOrderView from './views/ViewPurchaseOrderView';
 import NewGoodsReceiptView from './views/NewGoodsReceiptView';
+import ViewGoodsReceiptView from './views/ViewGoodsReceiptView';
 import NewDebitNoteView from './views/NewDebitNoteView';
 import EditSalesQuoteView from './views/EditSalesQuoteView';
 import EditColumnsView from './views/EditColumnsView';
@@ -311,6 +312,9 @@ const App = () => {
           <Route path="/goods-received-notes" element={<GoodsReceivedNotesView />} />
           <Route path="/goods-received-notes/supplier/:supplierName" element={<GoodsReceivedNotesView />} />
           <Route path="/goods-receipts/new" element={<NewGoodsReceiptView />} />
+          <Route path="/goods-received-notes/new" element={<NewGoodsReceiptView />} />
+          <Route path="/goods-received-notes/edit/:id" element={<NewGoodsReceiptView />} />
+          <Route path="/goods-received-notes/view/:id" element={<ViewGoodsReceiptView />} />
 
           {/* Debit Notes Routes */}
           <Route path="/debit-notes" element={<DebitNotesView />} />

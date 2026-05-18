@@ -51,8 +51,26 @@ const GoodsReceivedNotesView = () => {
         }
 
         return result.sort((a, b) => {
-            let valA: any = (a as any)[sortColumn] || '';
-            let valB: any = (b as any)[sortColumn] || '';
+            let valA: any;
+            let valB: any;
+
+            if (sortColumn === 'Qty received') {
+                valA = a.items?.reduce((sum: number, it: any) => sum + parseFloat(it.qty || '0'), 0) || 0;
+                valB = b.items?.reduce((sum: number, it: any) => sum + parseFloat(it.qty || '0'), 0) || 0;
+            } else if (sortColumn === 'Timestamp') {
+                valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            } else if (sortColumn === 'Inventory location') {
+                valA = a.inventoryLocation || '';
+                valB = b.inventoryLocation || '';
+            } else if (sortColumn === 'Description') {
+                valA = a.description || '';
+                valB = b.description || '';
+            } else {
+                valA = (a as any)[sortColumn] || '';
+                valB = (b as any)[sortColumn] || '';
+            }
+
             if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
             if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
             return 0;
@@ -68,8 +86,8 @@ const GoodsReceivedNotesView = () => {
             header: 'Actions',
             accessor: (grn: any) => (
                 <div className="flex items-center gap-2">
-                    <button onClick={() => navigate(`/goods-received-notes/view/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Eye size={14} /></button>
-                    <button onClick={() => navigate(`/goods-received-notes/edit/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
+                    <button onClick={() => navigate(grn.isPurchaseInvoice ? `/purchase-invoices/view/${grn.id}` : `/goods-received-notes/view/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"><Eye size={14} /></button>
+                    <button onClick={() => navigate(grn.isPurchaseInvoice ? `/purchase-invoices/edit/${grn.id}` : `/goods-received-notes/edit/${grn.id}`)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={14} /></button>
                 </div>
             )
         },
@@ -82,32 +100,65 @@ const GoodsReceivedNotesView = () => {
             id: 'Reference',
             header: 'Reference',
             accessor: (grn: any) => (
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100/50">
+                <div className="flex items-center gap-3 whitespace-nowrap">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100/50 flex-shrink-0">
                         <Truck size={14} />
                     </div>
-                    <span className="font-bold text-slate-900">{grn.reference}</span>
+                    <span className="font-bold text-slate-900 whitespace-nowrap">{grn.reference}</span>
                 </div>
             )
         },
         {
             id: 'Supplier',
             header: 'Supplier',
-            accessor: (grn: any) => <span className="font-medium text-slate-600">{grn.supplier}</span>
+            accessor: (grn: any) => <span className="font-medium text-slate-600 whitespace-nowrap">{grn.supplier}</span>
         },
         {
-            id: 'PO Reference',
-            header: 'PO Reference',
-            accessor: (grn: any) => <span className="text-slate-500 font-medium">{grn.purchaseOrder || '—'}</span>
+            id: 'Inventory location',
+            header: 'Inventory Location',
+            accessor: (grn: any) => <span className="text-slate-500 font-medium">{grn.inventoryLocation || '—'}</span>
         },
         {
-            id: 'Status',
-            header: 'Status',
-            accessor: (grn: any) => (
-                <Badge variant={grn.status === 'Received' ? 'success' : 'warning'} className="text-[9px] uppercase tracking-widest font-black">
-                    {grn.status}
-                </Badge>
-            )
+            id: 'Description',
+            header: 'Description',
+            accessor: (grn: any) => <span className="text-slate-500 font-medium max-w-xs truncate block" title={grn.description || ''}>{grn.description || '—'}</span>
+        },
+        {
+            id: 'Qty received',
+            header: <div className="text-right">Qty Received</div>,
+            accessor: (grn: any) => {
+                const qty = grn.items?.reduce((sum: number, it: any) => sum + parseFloat(it.qty || '0'), 0) || 0;
+                return <span className="font-medium text-slate-600 tabular-nums block text-right">{qty.toLocaleString()}</span>;
+            }
+        },
+        {
+            id: 'Timestamp',
+            header: 'Timestamp',
+            accessor: (grn: any) => {
+                if (!grn.createdAt) return <span className="text-slate-400 font-medium">—</span>;
+                try {
+                    const d = new Date(grn.createdAt);
+                    if (isNaN(d.getTime())) return <span className="text-slate-400 font-medium">—</span>;
+
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const year = d.getFullYear();
+
+                    let hours = d.getHours();
+                    const minutes = String(d.getMinutes()).padStart(2, '0');
+                    const seconds = String(d.getSeconds()).padStart(2, '0');
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    const hoursStr = String(hours).padStart(2, '0');
+
+                    const formatted = `${day}.${month}.${year} ${hoursStr}:${minutes}:${seconds} ${ampm}`;
+                    return <span className="text-slate-500 font-medium tabular-nums whitespace-nowrap">{formatted}</span>;
+                } catch (e) {
+                    return <span className="text-slate-400 font-medium">—</span>;
+                }
+            }
         }
     ];
 
@@ -172,7 +223,7 @@ const GoodsReceivedNotesView = () => {
             </div>
 
             <div className="flex items-center justify-between bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                 <div className="flex gap-4 items-center text-sm font-medium text-slate-500">
+                <div className="flex gap-4 items-center text-sm font-medium text-slate-500">
                     <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="disabled:opacity-30"><ChevronLeft size={20} /></button>
                     <span>Page {currentPage} of {totalPages}</span>
                     <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="disabled:opacity-30"><ChevronRight size={20} /></button>

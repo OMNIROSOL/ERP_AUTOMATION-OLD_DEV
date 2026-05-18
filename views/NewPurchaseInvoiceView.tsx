@@ -183,7 +183,11 @@ const NewPurchaseInvoiceView = () => {
                             
                             // Replicate Document Options
                             if (sourceDoc.docOptions || sourceDoc.options) {
-                                setOptions(prev => ({ ...prev, ...(sourceDoc.docOptions || sourceDoc.options) }));
+                                const loadedOptions = sourceDoc.docOptions || sourceDoc.options;
+                                setOptions(prev => ({ ...prev, ...loadedOptions }));
+                                if (loadedOptions.freightItems && Array.isArray(loadedOptions.freightItems)) {
+                                    setFreightItems(loadedOptions.freightItems);
+                                }
                             }
 
                             const docDate = copyFromId ? '' : (sourceDoc.issueDate || sourceDoc.orderDate || '');
@@ -337,6 +341,7 @@ const NewPurchaseInvoiceView = () => {
             balanceDue: calculations.grandTotal,
             description: description,
             currency: currency,
+            docOptions: { ...options, freightItems },
             items: validItems.map(i => {
                 const dbItem = dbItems.find(it => it.itemName === i.item);
                 return {
@@ -346,7 +351,7 @@ const NewPurchaseInvoiceView = () => {
                     unitPrice: parseFloat(i.unitPrice),
                     totalAmount: parseFloat(i.qty) * parseFloat(i.unitPrice),
                     taxCode: i.taxCode || 'VAT 16%',
-                    discount: i.discount || '',
+                    discount: options.columnDiscount ? (i.discount || '') : '',
                     account: i.account || 'Inventory'
                 };
             })
@@ -694,11 +699,11 @@ const NewPurchaseInvoiceView = () => {
                                         {([
                                             ['Tax Inclusive', 'amountsAreTaxInclusive'],
                                             ['Description', 'columnDescription'],
-                                            ['Freight-in', 'freightIn'],
-                                            ['Act as Good Receipt', 'actAsGoodReceipt'],
+                                            ['Discount', 'columnDiscount'],
+                                            ['Freight-in', 'freightIn']
                                         ] as const).map(([label, key]) => (
-                                            <div key={key} className="space-y-3 h-full">
-                                                <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all h-full">
+                                            <div key={key} className="space-y-3 h-full flex flex-col justify-start">
+                                                <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
                                                     <div className="relative flex items-center">
                                                         <input
                                                             type="checkbox"
@@ -710,12 +715,24 @@ const NewPurchaseInvoiceView = () => {
                                                     </div>
                                                     <span className="text-[11px] font-black text-slate-600 uppercase tracking-tight">{label}</span>
                                                 </label>
+                                                {key === 'columnDiscount' && options.columnDiscount && (
+                                                    <div className="ml-4 animate-in slide-in-from-top-2">
+                                                        <select
+                                                            value={options.columnDiscountType}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, columnDiscountType: e.target.value }))}
+                                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-indigo-600 uppercase focus:outline-none focus:ring-4 focus:ring-indigo-500/10 cursor-pointer"
+                                                        >
+                                                            <option value="Percentage">Percentage (%)</option>
+                                                            <option value="Exact">Exact Amount</option>
+                                                        </select>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
 
-                                    {/* Inline Details (Freight & Inventory) */}
-                                    {(options.freightIn || options.actAsGoodReceipt) && (
+                                    {/* Inline Details (Freight) */}
+                                    {(options.freightIn) && (
                                         <div className="space-y-4">
                                             {options.freightIn && (
                                                 <div className="animate-in slide-in-from-top-2 duration-300">
@@ -793,32 +810,6 @@ const NewPurchaseInvoiceView = () => {
                                                     </div>
                                                 </div>
                                             )}
-                                            {options.actAsGoodReceipt && (
-                                                <div className="bg-slate-50/50 rounded-3xl border border-slate-100 p-4 flex items-center justify-between group hover:border-indigo-100 transition-all animate-in slide-in-from-top-2 duration-300">
-                                                    <div className="flex items-center space-x-3">
-                                                        <div className="w-8 h-8 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-                                                            <Package size={14} />
-                                                        </div>
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Store Location</span>
-                                                    </div>
-                                                    <div className="relative w-48">
-                                                        <select
-                                                            value={options.inventoryLocation}
-                                                            onMouseDown={(e) => e.stopPropagation()}
-                                                            onChange={(e) => setOptions(prev => ({ ...prev, inventoryLocation: e.target.value }))}
-                                                            className="w-full appearance-none bg-emerald-50 border border-emerald-100 rounded-full px-5 py-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest focus:outline-none focus:ring-4 focus:ring-emerald-500/10 cursor-pointer transition-all hover:bg-emerald-100/50 pr-10"
-                                                        >
-                                                            <option value="Main Warehouse">MAIN WAREHOUSE</option>
-                                                            <option value="Showroom">SHOWROOM</option>
-                                                            <option value="Secondary Store">SECONDARY STORE</option>
-                                                            <option value="Retail Branch">RETAIL BRANCH</option>
-                                                        </select>
-                                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-500">
-                                                            <ChevronDown size={12} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
                                     )}
 
@@ -827,10 +818,11 @@ const NewPurchaseInvoiceView = () => {
                                         {([
                                             ['Line Numbers', 'columnLineNumber'],
                                             ['Custom Title', 'customTitle'],
-                                            ['Footers', 'footers']
+                                            ['Footers', 'footers'],
+                                            ['Act as Good Receipt', 'actAsGoodReceipt']
                                         ] as const).map(([label, key]) => (
-                                            <div key={key} className="space-y-3 h-full">
-                                                <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all h-full">
+                                            <div key={key} className="space-y-3 h-full flex flex-col justify-start">
+                                                <label className="flex items-center space-x-3 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-indigo-100 transition-all">
                                                     <div className="relative flex items-center">
                                                         <input
                                                             type="checkbox"
@@ -878,6 +870,20 @@ const NewPurchaseInvoiceView = () => {
                                                                 {options.footerValue || <span className="opacity-40 italic">Select a template...</span>}
                                                             </p>
                                                         </div>
+                                                    </div>
+                                                )}
+                                                {key === 'actAsGoodReceipt' && options.actAsGoodReceipt && (
+                                                    <div className="ml-4 animate-in slide-in-from-top-2">
+                                                        <select
+                                                            value={options.inventoryLocation}
+                                                            onChange={(e) => setOptions(prev => ({ ...prev, inventoryLocation: e.target.value }))}
+                                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black text-emerald-600 uppercase focus:outline-none focus:ring-4 focus:ring-emerald-500/10 cursor-pointer"
+                                                        >
+                                                            <option value="Main Warehouse">Main Warehouse</option>
+                                                            <option value="Showroom">Showroom</option>
+                                                            <option value="Secondary Store">Secondary Store</option>
+                                                            <option value="Retail Branch">Retail Branch</option>
+                                                        </select>
                                                     </div>
                                                 )}
                                             </div>

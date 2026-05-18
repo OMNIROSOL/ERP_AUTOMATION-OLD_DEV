@@ -127,7 +127,6 @@ export const apiService = {
   getPurchaseOrder: (id: string) => api.get(`/purchase-orders/${id}`).then(res => res.data),
   createPurchaseOrder: (data: any) => api.post('/purchase-orders', data).then(res => res.data),
   updatePurchaseOrder: (id: string, data: any) => api.put(`/purchase-orders/${id}`, data).then(res => res.data),
-  updatePurchaseOrder: (id: string, data: any) => api.put(`/purchase-orders/${id}`, data).then(res => res.data),
   updatePurchaseOrderStatus: (id: string, status: string) => api.patch(`/purchase-orders/${id}`, { status }).then(res => res.data),
 
   getPurchaseInvoices: () => api.get('/purchase-invoices').then(res => res.data),
@@ -136,9 +135,8 @@ export const apiService = {
   updatePurchaseInvoice: (id: string, data: any) => api.put(`/purchase-invoices/${id}`, data).then(res => res.data),
 
   // Goods Received Notes
-  getGoodsReceivedNotes: () => api.get('/goods-received-notes').then(res => res.data),
   getGoodsReceivedNote: (id: string) => api.get(`/goods-received-notes/${id}`).then(res => res.data),
-  createGoodsReceivedNote: (data: any) => api.post('/goods-received-notes', data).then(res => res.data),
+  updateGoodsReceivedNote: (id: string, data: any) => api.put(`/goods-received-notes/${id}`, data).then(res => res.data),
   getFooters: () => api.get('/footers').then(res => res.data),
   createFooter: (data: any) => api.post('/footers', data).then(res => res.data),
   updateFooter: (id: string, data: any) => api.put(`/footers/${id}`, data).then(res => res.data),

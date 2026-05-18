@@ -225,7 +225,7 @@ const ViewPurchaseInvoiceView = () => {
                         <button
                             onClick={async () => {
                                 if (!pdfRef.current) return;
-                                const html2canvas = (await import('html2canvas')).default;
+                                const html2canvas = (await import('html2canvas-pro')).default;
                                 const jsPDF = (await import('jspdf')).jsPDF;
 
                                 const element = pdfRef.current;
@@ -473,6 +473,9 @@ const ViewPurchaseInvoiceView = () => {
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-left">Description</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Qty</th>
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unit Price</th>
+                                    {(invoice as any).docOptions?.columnDiscount && (
+                                        <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Discount</th>
+                                    )}
                                     <th className="px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
                                 </tr>
                             </thead>
@@ -488,6 +491,12 @@ const ViewPurchaseInvoiceView = () => {
                                         </td>
                                         <td className="px-4 py-4 text-right font-medium">{item.qty} <span className="text-[10px] text-slate-400 font-bold ml-1 uppercase">{item.unit || ''}</span></td>
                                         <td className="px-4 py-4 text-right font-medium">{(parseFloat(item.unitPrice as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        {(invoice as any).docOptions?.columnDiscount && (
+                                            <td className="px-4 py-4 text-right font-medium" style={{ color: '#f43f5e' }}>
+                                                {parseFloat(item.discount as any) ? parseFloat(item.discount as any).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'} 
+                                                {parseFloat(item.discount as any) && (invoice as any).docOptions?.columnDiscountType === 'Percentage' ? '%' : ''}
+                                            </td>
+                                        )}
                                         <td className="px-4 py-4 text-right font-semibold">{((parseFloat(item.qty as any) || 0) * (parseFloat(item.unitPrice as any) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     </tr>
                                 )) : (
@@ -497,6 +506,9 @@ const ViewPurchaseInvoiceView = () => {
                                         <td className="px-4 py-5 font-medium text-slate-500">{invoice.description || '-'}</td>
                                         <td className="px-4 py-5 text-right font-medium">1</td>
                                         <td className="px-4 py-5 text-right font-medium">{(parseFloat(invoice.invoiceAmount as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        {(invoice as any).docOptions?.columnDiscount && (
+                                            <td className="px-4 py-5 text-right font-medium" style={{ color: '#f43f5e' }}>-</td>
+                                        )}
                                         <td className="px-4 py-5 text-right font-semibold">{(parseFloat(invoice.invoiceAmount as any) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     </tr>
                                 )}
@@ -516,6 +528,12 @@ const ViewPurchaseInvoiceView = () => {
                                 <span className="text-[11px] font-bold uppercase tracking-widest">Tax Component</span>
                                 <span className="font-semibold">{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             </div>
+                            {((invoice as any).discount > 0) && (
+                                <div className="flex justify-between items-center" style={{ color: '#f43f5e' }}>
+                                    <span className="text-[11px] font-bold uppercase tracking-widest">Total Discount</span>
+                                    <span className="font-semibold">-{(invoice as any).discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center bg-slate-50 p-4 border-t-2 border-slate-900 mt-2 print-bg-slate-50">
                                 <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-slate-900">Total</span>
                                 <div className="text-right">
