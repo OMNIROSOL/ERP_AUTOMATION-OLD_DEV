@@ -19,6 +19,7 @@ import NewPurchaseOrderView from './views/NewPurchaseOrderView';
 import ViewPurchaseOrderView from './views/ViewPurchaseOrderView';
 import NewGoodsReceiptView from './views/NewGoodsReceiptView';
 import ViewGoodsReceiptView from './views/ViewGoodsReceiptView';
+import EditGoodsReceivedNoteColumnsView from './views/EditGoodsReceivedNoteColumnsView';
 import NewDebitNoteView from './views/NewDebitNoteView';
 import EditSalesQuoteView from './views/EditSalesQuoteView';
 import EditColumnsView from './views/EditColumnsView';
@@ -118,6 +119,7 @@ import EditSupplierColumnsView from './views/EditSupplierColumnsView';
 import NewSupplierView from './views/NewSupplierView';
 import EditSupplierView from './views/EditSupplierView';
 import ViewSupplierView from './views/ViewSupplierView';
+import SettingsCurrenciesView from './views/SettingsCurrenciesView';
 
 
 
@@ -188,6 +190,7 @@ const App = () => {
           <Route path="/settings/role-management" element={<RoleManagementView />} />
           <Route path="/settings/footers" element={<SettingsFootersView />} />
           <Route path="/settings/divisions" element={<DivisionsView />} />
+          <Route path="/settings/currencies" element={<SettingsCurrenciesView />} />
 
           {/* Inventory Routes */}
           <Route path="/inventory-items" element={<InventoryItemsView />} />
@@ -315,6 +318,7 @@ const App = () => {
           <Route path="/goods-received-notes/new" element={<NewGoodsReceiptView />} />
           <Route path="/goods-received-notes/edit/:id" element={<NewGoodsReceiptView />} />
           <Route path="/goods-received-notes/view/:id" element={<ViewGoodsReceiptView />} />
+          <Route path="/goods-received-notes/edit-columns" element={<EditGoodsReceivedNoteColumnsView />} />
 
           {/* Debit Notes Routes */}
           <Route path="/debit-notes" element={<DebitNotesView />} />

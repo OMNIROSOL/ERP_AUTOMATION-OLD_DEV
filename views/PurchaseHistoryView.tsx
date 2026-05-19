@@ -129,6 +129,17 @@ const PurchaseHistoryView = () => {
         return item.status || 'Unpaid';
     };
 
+    const uniqueStatuses = useMemo(() => {
+        const statuses = new Set<string>();
+        allHistory.forEach(item => {
+            const status = getComputedStatus(item);
+            if (status && status !== '—') {
+                statuses.add(status);
+            }
+        });
+        return Array.from(statuses).sort();
+    }, [allHistory]);
+
     const filteredHistory = useMemo(() => {
         const result = allHistory.filter(item => {
             const itemStatus = getComputedStatus(item);
@@ -235,7 +246,7 @@ const PurchaseHistoryView = () => {
                         <select
                             value={typeFilter}
                             onChange={(e) => setTypeFilter(e.target.value)}
-                            className="bg-white border border-gray-300 text-[11px] font-black uppercase tracking-wider rounded-md px-4 py-2 shadow-sm"
+                            className="bg-white border border-gray-300 text-[11px] font-black uppercase tracking-wider rounded-md px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                         >
                              <option value="All">All Types</option>
                             <option value="Enquiry">Purchase Enquiry</option>
@@ -244,7 +255,17 @@ const PurchaseHistoryView = () => {
                             <option value="GRN">GRN</option>
                             <option value="Debit Note">Debit Note</option>
                         </select>
-                        <button onClick={() => { setSearchQuery(''); setTypeFilter('All'); setStatusFilter('All'); }} className="p-2 border border-gray-300 rounded-md text-gray-400 hover:text-red-500 bg-white shadow-sm">
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="bg-white border border-gray-300 text-[11px] font-black uppercase tracking-wider rounded-md px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                        >
+                            <option value="All">All Statuses</option>
+                            {uniqueStatuses.map(status => (
+                                <option key={status} value={status}>{status}</option>
+                            ))}
+                        </select>
+                        <button onClick={() => { setSearchQuery(''); setTypeFilter('All'); setStatusFilter('All'); }} className="p-2 border border-gray-300 rounded-md text-gray-400 hover:text-red-500 bg-white shadow-sm transition-colors" title="Clear Filters">
                             <X size={16} />
                         </button>
                     </div>
@@ -256,26 +277,26 @@ const PurchaseHistoryView = () => {
                 </div>
             </div>
 
-            <div className="w-full mb-8 overflow-visible rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="w-full mb-8 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-24">Actions</th>
-                            <th onClick={() => handleSort('date')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
+                            <th className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center w-24">Actions</th>
+                            <th onClick={() => handleSort('date')} className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
                                 Date
                             </th>
-                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
-                            <th onClick={() => handleSort('reference')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
+                            <th className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</th>
+                            <th onClick={() => handleSort('reference')} className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
                                 Reference
                             </th>
-                            <th onClick={() => handleSort('supplier')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
+                            <th onClick={() => handleSort('supplier')} className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
                                 Supplier
                             </th>
-                            <th onClick={() => handleSort('amount')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right cursor-pointer hover:bg-slate-100">
+                            <th onClick={() => handleSort('amount')} className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right cursor-pointer hover:bg-slate-100">
                                 Amount
                             </th>
-                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
-                            <th onClick={() => handleSort('timestamp')} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
+                            <th className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
+                            <th onClick={() => handleSort('timestamp')} className="sticky top-0 lg:top-[-2rem] z-30 bg-slate-50/95 backdrop-blur-md shadow-sm px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100">
                                 Timestamp
                             </th>
                         </tr>
@@ -289,9 +310,9 @@ const PurchaseHistoryView = () => {
                                             onClick={() => {
                                                 const sName = encodeURIComponent(item.supplier || '');
                                                 if (item.type === 'Enquiry') navigate(`/purchase-quotes/view/${item.id}`);
-                                                else if (item.type === 'Order') navigate(`/purchase-orders/supplier/${sName}`);
-                                                else if (item.type === 'Invoice') navigate(`/purchase-invoices/supplier/${sName}`);
-                                                else if (item.type === 'GRN') navigate(`/goods-received-notes/supplier/${sName}`);
+                                                else if (item.type === 'Order') navigate(`/purchase-orders/view/${item.id}`);
+                                                else if (item.type === 'Invoice') navigate(`/purchase-invoices/view/${item.id}`);
+                                                else if (item.type === 'GRN') navigate(`/goods-received-notes/view/${item.id}`);
                                                 else if (item.type === 'Debit Note') navigate(`/debit-notes/supplier/${sName}`);
                                             }}
                                             className="text-slate-400 hover:text-indigo-600 transition-colors"

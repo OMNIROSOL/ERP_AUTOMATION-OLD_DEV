@@ -497,6 +497,7 @@ const NewGoodsReceiptView = () => {
                                             {key === 'footers' && options.footers && (
                                                 <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
                                                     <select
+                                                        value={dbFooters.find(f => f.content === options.footerValue)?.id || ''}
                                                         onChange={(e) => {
                                                             const footer = dbFooters.find(f => f.id === e.target.value);
                                                             if (footer) setOptions(prev => ({ ...prev, footerValue: footer.content }));

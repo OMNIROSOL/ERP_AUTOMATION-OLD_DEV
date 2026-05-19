@@ -1142,6 +1142,7 @@ const NewSalesInvoiceView = () => {
                                                 <div className="space-y-2">
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Select Footer Template</label>
                                                     <select
+                                                        value={dbFooters.find(f => f.content === options.footerValue)?.id || ''}
                                                         onChange={(e) => {
                                                             const footer = dbFooters.find(f => f.id === e.target.value);
                                                             if (footer) {

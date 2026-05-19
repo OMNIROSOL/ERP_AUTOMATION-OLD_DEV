@@ -488,7 +488,7 @@ const PurchaseQuotesView = () => {
                 </div>
             )}
 
-            <div className="w-fit min-w-full overflow-visible mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50">
+            <div className="w-fit min-w-full overflow-hidden mb-8 custom-scrollbar rounded-2xl border border-slate-100 shadow-sm shadow-indigo-50/50">
                 <DataTable
                     data={isLoading ? [] : paginatedData}
                     columns={columns as any}
@@ -496,7 +496,7 @@ const PurchaseQuotesView = () => {
                     className="border-none shadow-none bg-transparent"
                     hideDefaultPagination={true}
                     stickyHeader={true}
-                    disableInternalScroll={true}
+                    disableInternalScroll={false}
                     emptyState={
                         isLoading ? (
                             <div className="flex flex-col items-center justify-center py-20 space-y-4">

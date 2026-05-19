@@ -180,7 +180,7 @@ const NewPurchaseInvoiceView = () => {
                                 supplierId: sourceDoc.supplierId || sourceDoc.supplier_id,
                                 reference: sourceDoc.reference
                             });
-                            
+
                             // Replicate Document Options
                             if (sourceDoc.docOptions || sourceDoc.options) {
                                 const loadedOptions = sourceDoc.docOptions || sourceDoc.options;
@@ -216,7 +216,7 @@ const NewPurchaseInvoiceView = () => {
                                 }
                             }
                             setDueDate(parsedDueDate);
-                            
+
                             const sup = sups.find((s: any) => s.id === sourceDoc.supplierId || s.id === sourceDoc.supplier_id || s.name === (sourceDoc.supplier?.name || sourceDoc.supplier));
                             if (sup) {
                                 setSupplier(sup.name);
@@ -239,7 +239,7 @@ const NewPurchaseInvoiceView = () => {
 
                             setDescription(sourceDoc.description || '');
                             console.log('[PI COPY] setDescription called with:', sourceDoc.description || '(empty)');
-                            
+
                             if (sourceDoc.items && sourceDoc.items.length > 0) {
                                 const mappedItems = sourceDoc.items.map((i: any) => ({
                                     id: Date.now() + Math.random(),
@@ -851,6 +851,7 @@ const NewPurchaseInvoiceView = () => {
                                                     <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
                                                         <div className="relative group/foot">
                                                             <select
+                                                                value={dbFooters.find(f => f.content === options.footerValue)?.id || ''}
                                                                 onMouseDown={(e) => e.stopPropagation()}
                                                                 onChange={(e) => {
                                                                     const footer = dbFooters.find(f => f.id === e.target.value);

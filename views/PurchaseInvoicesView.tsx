@@ -333,12 +333,6 @@ const PurchaseInvoicesView = () => {
 
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => setRefreshTrigger(prev => prev + 1)}
-                        className="bg-white text-slate-700 px-4 py-2 border border-slate-200 rounded-md text-sm font-bold hover:bg-slate-50 transition-all flex items-center"
-                    >
-                        <Clock size={16} className="mr-2" /> REFRESH
-                    </button>
-                    <button
                         onClick={() => navigate('/purchase-invoices/new')}
                         className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 flex items-center"
                     >
@@ -380,7 +374,8 @@ const PurchaseInvoicesView = () => {
                             <p className="text-xs mt-2 text-slate-400 font-normal">Check if the backend is connected and data exists in the database.</p>
                         </div>
                     }
-                    disableInternalScroll={true}
+                    disableInternalScroll={false}
+                    stickyHeader={true}
                     tableFooter={
                         <tr className="bg-slate-50/50 font-black">
                             {columns.map(col => {

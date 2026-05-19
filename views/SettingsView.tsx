@@ -56,6 +56,15 @@ const SettingsView = () => {
           color: 'text-rose-600',
           bgColor: 'bg-rose-50'
         },
+        { 
+          id: 'currencies', 
+          label: 'Currencies', 
+          description: 'Manage display and base currencies for transactions',
+          icon: Globe, 
+          path: '/settings/currencies',
+          color: 'text-teal-600',
+          bgColor: 'bg-teal-50'
+        },
         ...(isAdmin ? [{ 
           id: 'inventory-unit-costs', 
           label: 'Inventory Unit Costs', 

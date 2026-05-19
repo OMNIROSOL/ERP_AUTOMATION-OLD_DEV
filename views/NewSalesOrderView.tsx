@@ -1097,6 +1097,7 @@ const NewSalesOrderView = ({ setApprovalRequests }: { setApprovalRequests?: Reac
                                             {key === 'footers' && options.footers && (
                                                 <div className="space-y-4 ml-4 animate-in slide-in-from-top-2 duration-300">
                                                     <select
+                                                        value={footers.find((f: any) => f.content === options.footerValue)?.id || ''}
                                                         onChange={(e) => {
                                                             const footer = footers.find((f: any) => f.id === e.target.value);
                                                             if (footer) {

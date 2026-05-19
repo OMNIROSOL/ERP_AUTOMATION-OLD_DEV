@@ -61,21 +61,29 @@ const SuppliersView = () => {
     }, [isBatchViewMode]);
 
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+    const [goodsReceivedNotes, setGoodsReceivedNotes] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const fetchSuppliers = async () => {
+        const fetchData = async () => {
             setIsLoading(true);
             try {
-                const data = await apiService.getSuppliers();
-                setSuppliers(data);
+                const [suppData, poData, grnData] = await Promise.all([
+                    apiService.getSuppliers(),
+                    apiService.getPurchaseOrders(),
+                    apiService.getGoodsReceivedNotes()
+                ]);
+                setSuppliers(suppData);
+                setPurchaseOrders(poData);
+                setGoodsReceivedNotes(grnData);
             } catch (err) {
-                console.error('Failed to fetch suppliers:', err);
+                console.error('Failed to fetch data:', err);
             } finally {
                 setIsLoading(false);
             }
         };
-        fetchSuppliers();
+        fetchData();
     }, [refreshTrigger]);
 
     const defaultColumns = [
@@ -125,9 +133,43 @@ const SuppliersView = () => {
         setSortConfig({ key, direction });
     };
 
+    const enrichedSuppliers = useMemo(() => {
+        return suppliers.map(supplier => {
+            const supplierPOs = purchaseOrders.filter(po => 
+                (po.supplierId === supplier.id || po.supplier?.name === supplier.name) && 
+                po.status !== 'Closed' && po.status !== 'Rejected'
+            );
+            
+            const supplierGRNs = goodsReceivedNotes.filter(grn => 
+                grn.supplierId === supplier.id || grn.supplier === supplier.name
+            );
+
+            let qtyOrdered = 0;
+            supplierPOs.forEach(po => {
+                po.items?.forEach((it: any) => {
+                    qtyOrdered += Number(it.qty || 0);
+                });
+            });
+
+            let qtyReceived = 0;
+            supplierGRNs.forEach(grn => {
+                grn.items?.forEach((it: any) => {
+                    qtyReceived += Number(it.qty || 0);
+                });
+            });
+
+            const qtyToReceive = Math.max(0, qtyOrdered - qtyReceived);
+
+            return {
+                ...supplier,
+                qtyToReceive
+            };
+        });
+    }, [suppliers, purchaseOrders, goodsReceivedNotes]);
+
     const sortedSuppliers = useMemo(() => {
         const query = searchQuery.toLowerCase();
-        let result = suppliers.filter(s => {
+        let result = enrichedSuppliers.filter(s => {
             if (showInactive) {
                 if (!s.inactive && s.status !== 'Inactive') return false;
             } else {
@@ -154,7 +196,7 @@ const SuppliersView = () => {
             });
         }
         return result;
-    }, [suppliers, searchQuery, sortConfig, showInactive]);
+    }, [enrichedSuppliers, searchQuery, sortConfig, showInactive]);
 
     const currentSlice = sortedSuppliers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
     const totalPages = Math.ceil(sortedSuppliers.length / pageSize) || 1;
@@ -258,7 +300,7 @@ const SuppliersView = () => {
                 <div className="flex space-x-4 items-center mb-1">
                     <button
                         onClick={() => navigate('/suppliers/new')}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition-all shadow-sm flex items-center"
+                        className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-[12px] font-black hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-500/20 flex items-center uppercase tracking-widest"
                     >
                         <UserPlus size={16} className="mr-2" /> REGISTER SUPPLIER
                     </button>
@@ -337,12 +379,12 @@ const SuppliersView = () => {
             )}
 
             {/* Table Area */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm w-fit min-w-full mb-8">
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm w-fit min-w-full mb-8 overflow-x-auto custom-scrollbar">
                 <table className="w-full text-left border-collapse min-w-[1600px]">
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
                             {isBatchViewMode && (
-                                <th className="sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-center">
+                                <th className="sticky top-0 lg:top-[-2rem] z-30 bg-gray-50/95 backdrop-blur-md px-6 py-3 border-b border-gray-200 text-center shadow-sm">
                                     <input
                                         type="checkbox"
                                         checked={selectedSupplierIds.size === currentSlice.length && currentSlice.length > 0}
@@ -351,11 +393,11 @@ const SuppliersView = () => {
                                     />
                                 </th>
                             )}
-                            <th className="sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
+                            <th className="sticky top-0 lg:top-[-2rem] z-30 bg-gray-50/95 backdrop-blur-md px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center whitespace-nowrap shadow-sm">Actions</th>
                             {columns.filter((c: any) => c.visible || c.id === 'name' || c.id === 'division' || c.id === 'controlAccount').map((col: any) => (
                                 <th
                                     key={col.id}
-                                    className={`sticky top-0 z-20 bg-gray-50 px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[280px]' : ''} shadow-sm`}
+                                    className={`sticky top-0 lg:top-[-2rem] z-30 bg-gray-50/95 backdrop-blur-md px-6 py-3 border-b border-gray-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors ${col.id === 'name' ? 'w-[280px]' : ''} shadow-sm`}
                                     onClick={() => handleSort(col.id)}
                                 >
                                     <div className="flex items-center">
@@ -423,7 +465,7 @@ const SuppliersView = () => {
                                             const cleanVal = typeof val === 'number' ? val : parseFloat(String(val || 0).replace(/[^-0-9.]/g, '')) || 0;
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span className={`text-[12px] font-medium ${col.id === 'balance' ? 'text-slate-900 underline cursor-pointer hover:text-indigo-600' : 'text-slate-600'}`}>
+                                                    <span className={`text-[12px] font-medium ${col.id === 'balance' ? 'text-slate-900 cursor-pointer hover:text-indigo-600' : 'text-slate-600'}`}>
                                                         {symbol} {cleanVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                     </span>
                                                 </td>
@@ -433,7 +475,7 @@ const SuppliersView = () => {
                                         if (col.id === 'qtyToReceive') {
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
-                                                    <span className={`text-sm font-bold ${val > 0 ? 'text-indigo-600 underline cursor-pointer' : 'text-slate-400'}`}>
+                                                    <span className={`text-sm font-bold ${val > 0 ? 'text-indigo-600 cursor-pointer' : 'text-slate-400'}`}>
                                                         {val || '0'}
                                                     </span>
                                                 </td>
@@ -442,6 +484,10 @@ const SuppliersView = () => {
 
                                         if (col.id === 'status') {
                                             const isPaid = val === 'Paid';
+                                            const isOverpaid = val === 'Overpaid';
+                                            let badgeClass = 'bg-amber-50 text-amber-600 border-amber-100'; // Unpaid / default
+                                            if (isPaid) badgeClass = 'bg-emerald-50 text-emerald-600 border-emerald-100';
+                                            if (isOverpaid) badgeClass = 'bg-blue-50 text-blue-600 border-blue-100';
                                             return (
                                                 <td key={col.id} className="px-6 py-4">
                                                     <div className="flex gap-2 items-center">
@@ -450,7 +496,7 @@ const SuppliersView = () => {
                                                                 Inactive
                                                             </span>
                                                         )}
-                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${isPaid ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
+                                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${badgeClass}`}>
                                                             {val || 'Unpaid'}
                                                         </span>
                                                     </div>
@@ -477,7 +523,7 @@ const SuppliersView = () => {
                                                 <td key={col.id} className="px-6 py-4">
                                                     <span
                                                         onClick={() => count > 0 && navigate(`${getRoute(col.id)}/supplier/${supplier.name}`)}
-                                                        className={`text-sm font-bold ${count > 0 ? 'text-indigo-600 underline cursor-pointer hover:text-indigo-800' : 'text-slate-400'}`}
+                                                        className={`text-sm font-bold ${count > 0 ? 'text-indigo-600 cursor-pointer hover:text-indigo-800' : 'text-slate-400'}`}
                                                     >
                                                         {count}
                                                     </span>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Eye, Edit, Search, Plus, Package, Check, Copy,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
@@ -6,8 +6,9 @@ import {
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { InventoryItem, ScreenPermission } from '../types';
-import { useEffect } from 'react';
 import apiService from '../services/apiService';
+import { cn } from '../utils/cn';
+import { motion } from 'framer-motion';
 
 const InventoryItemsView = () => {
   const navigate = useNavigate();
@@ -303,48 +304,71 @@ const InventoryItemsView = () => {
 
 
       {/* Pagination & Export */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => setCurrentPage(1)}
-            disabled={currentPage === 1}
-            className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30"
-          >
-            <ChevronsLeft size={16} />
-          </button>
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="text-sm font-medium">Page {currentPage} of {totalPages}</span>
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30"
-          >
-            <ChevronRight size={16} />
-          </button>
-          <button
-            onClick={() => setCurrentPage(totalPages)}
-            disabled={currentPage === totalPages}
-            className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30"
-          >
-            <ChevronsRight size={16} />
-          </button>
+      <div className="flex flex-col md:flex-row items-center justify-between bg-white px-6 py-4 rounded-[24px] border border-slate-100 shadow-sm gap-8 mt-4">
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex items-center gap-2 text-slate-400">
+            <button
+              onClick={() => { setCurrentPage(1); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={currentPage === 1}
+              className="p-1 hover:text-blue-600 disabled:opacity-20 transition-all"
+            >
+              <ChevronsLeft size={18} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={() => { setCurrentPage(prev => Math.max(1, prev - 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={currentPage === 1}
+              className="p-1 hover:text-blue-600 disabled:opacity-20 transition-all mr-2"
+            >
+              <ChevronLeft size={18} strokeWidth={1.5} />
+            </button>
+            <span className="text-[13px] font-semibold text-slate-600 tracking-tight">Page {currentPage} of {totalPages || 1}</span>
+            <button
+              onClick={() => { setCurrentPage(prev => Math.min(totalPages, prev + 1)); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1 hover:text-blue-600 disabled:opacity-20 transition-all ml-2"
+            >
+              <ChevronRight size={18} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={() => { setCurrentPage(totalPages); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="p-1 hover:text-blue-600 disabled:opacity-20 transition-all"
+            >
+              <ChevronsRight size={18} strokeWidth={1.5} />
+            </button>
+          </div>
+          <div className="flex items-center gap-4 mt-0.5">
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">SHOW PER PAGE:</span>
+            <div className="flex items-center gap-4">
+              {[50, 100, 250, 500].map(size => (
+                <button
+                  key={size}
+                  onClick={() => { setPageSize(size); setCurrentPage(1); document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className={cn(
+                    "text-[11px] font-black transition-all relative py-1",
+                    pageSize === size ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {size}
+                  {pageSize === size && <motion.div layoutId="activeInventoryPageSize" className="absolute -bottom-1 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button onClick={handleCopyToClipboard} className="px-4 py-2 bg-gray-50 text-[11px] font-bold text-gray-500 rounded-md hover:bg-gray-100 transition-all border border-gray-200 uppercase tracking-wider flex items-center gap-2">
-            <Copy size={12} /> Export Data
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleCopyToClipboard}
+            className="px-8 py-3.5 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-3 shadow-sm"
+          >
+            <Copy size={16} className="text-slate-400" /> EXPORT DATA
           </button>
           <button
             onClick={() => setShowEditColumns(true)}
-            className="px-4 py-2 bg-gray-50 text-[11px] font-bold text-gray-500 rounded-md hover:bg-gray-100 transition-all border border-gray-200 uppercase tracking-wider"
+            className="px-8 py-3.5 bg-white border border-slate-200 rounded-full text-[11px] font-black text-slate-500 uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
           >
-            Columns
+            COLUMNS
           </button>
         </div>
       </div>

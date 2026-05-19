@@ -370,7 +370,7 @@ const ViewPurchaseInvoiceView = () => {
                 </div>
             </div>
 
-            <div className="flex-1 p-6 flex justify-start overflow-auto print:p-0">
+            <div className="flex-1 p-6 flex justify-start overflow-visible print:p-0">
                 <div className="print-container bg-white shadow-xl p-12 w-[850px] max-w-full text-[13px] text-gray-800 relative" ref={pdfRef}>
                     <style>{`
                         @media print {

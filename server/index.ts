@@ -1007,7 +1007,7 @@ app.get('/api/suppliers', async (req, res) => {
           select: { status: true }
         },
         invoices: {
-          select: { id: true }
+          select: { id: true, grand_total: true, status: true, docOptions: true }
         },
         goodsReceivedNotes: {
           select: { id: true }
@@ -1026,14 +1026,28 @@ app.get('/api/suppliers', async (req, res) => {
         return status !== 'invoiced' && status !== 'rejected' && status !== 'closed';
       }).length;
 
+      const balance = (supplier.invoices || []).reduce((sum: number, inv: any) => {
+        if (inv.status !== 'Paid') {
+          return sum + (parseFloat(inv.grand_total || '0') || 0);
+        }
+        return sum;
+      }, 0);
+
+      const grnsCount = (supplier.goodsReceivedNotes || []).length;
+      const piGrnsCount = (supplier.invoices || []).filter((inv: any) => {
+        const opts = inv.docOptions as any;
+        return opts && opts.actAsGoodReceipt === true;
+      }).length;
+
       return {
         ...supplier,
+        balance,
         purchaseEnquiries: activeEnquiries,
         purchaseOrders: activeOrders,
         purchaseInvoices: (supplier.invoices || []).length,
-        goodsReceipts: (supplier.goodsReceivedNotes || []).length,
+        goodsReceipts: grnsCount + piGrnsCount,
         debitNotes: 0, // Debit Notes model is currently missing from schema
-        status: supplier.inactive ? 'Inactive' : supplier.status
+        status: supplier.inactive ? 'Inactive' : (balance < 0 ? 'Overpaid' : (balance === 0 ? 'Paid' : 'Unpaid'))
       };
     });
     res.json(suppliersWithCounts);

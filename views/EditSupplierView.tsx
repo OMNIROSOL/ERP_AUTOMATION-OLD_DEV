@@ -64,6 +64,10 @@ const EditSupplierView = () => {
 
     const [name, setName] = useState('');
     const [currency, setCurrency] = useState('ZMW');
+    const [availableCurrencies, setAvailableCurrencies] = useState<any[]>([
+        { code: 'ZMW', name: 'Zambian Kwacha' },
+        { code: 'USD', name: 'US Dollar' }
+    ]);
     const [address, setAddress] = useState('');
     const [email, setEmail] = useState('');
     const [division, setDivision] = useState('General');
@@ -109,8 +113,20 @@ const EditSupplierView = () => {
             }
         };
 
+        const loadCurrencies = () => {
+            const saved = localStorage.getItem('erp_currencies');
+            if (saved) {
+                try {
+                    setAvailableCurrencies(JSON.parse(saved));
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+        };
+
         loadSupplier();
         loadDivisions();
+        loadCurrencies();
     }, [id]);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,8 +179,11 @@ const EditSupplierView = () => {
                                         onChange={(e) => setCurrency(e.target.value)}
                                         className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-5 py-3 text-[13px] font-semibold text-slate-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all cursor-pointer"
                                     >
-                                        <option value="ZMW">ZMW - Zambian Kwacha</option>
-                                        <option value="USD">USD - US Dollar</option>
+                                        {availableCurrencies.map(c => (
+                                            <option key={c.code} value={c.code}>
+                                                {c.code} - {c.name}
+                                            </option>
+                                        ))}
                                     </select>
                                     <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                 </div>

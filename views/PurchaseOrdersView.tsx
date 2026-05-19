@@ -347,12 +347,6 @@ const PurchaseOrdersView = () => {
 
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => setRefreshTrigger(prev => prev + 1)}
-                        className="bg-white text-slate-700 px-4 py-2 border border-slate-200 rounded-md text-sm font-bold hover:bg-slate-50 transition-all flex items-center"
-                    >
-                        <Calendar size={16} className="mr-2" /> REFRESH
-                    </button>
-                    <button
                         onClick={() => navigate('/purchase-orders/new')}
                         className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-500/20 flex items-center"
                     >
@@ -388,6 +382,7 @@ const PurchaseOrdersView = () => {
                     tableClassName="min-w-[1440px]"
                     hideDefaultPagination={true}
                     disableInternalScroll={true}
+                    stickyHeader={true}
                     emptyMessage={
                         isLoading ? (
                             <div className="flex flex-col items-center justify-center py-20 space-y-4">
